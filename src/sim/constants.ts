@@ -68,3 +68,15 @@ export const SPECIAL_LOB_FALL_GRAVITY_MULT = 3;
 export const SPECIAL_PIERCE_SPEED = 460;
 export const SPECIAL_HIT_STAMINA = 20;
 export const SPECIAL_FLAT_Z = 10;
+
+export const KICKOFF_TICKS = 60;
+export const GOAL_CELEBRATE_TICKS = 150;
+export const HALFTIME_TICKS = 120;
+export const GK_AREA_DEPTH = 140;
+export const GK_EXTRA_REACH = 6;
+export const GK_PICKUP_MAX_Z = 40;
+export const GK_DIVE_TICKS = 20;
+export const GK_DIVE_SPEED = 220;
+export const GK_DIVE_EXTRA_REACH = 10;
+export const GK_DIVE_RECOVER_TICKS = 20;
+export const GK_FAST_SHOT_SPEED = 300;

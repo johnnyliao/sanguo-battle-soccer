@@ -5,5 +5,6 @@ export * from './rng';
 export * from './hash';
 export * from './field';
 export * from './state';
+export * from './match';
 export * from './step';
 export * from './actions';

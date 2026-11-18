@@ -8,6 +8,10 @@ import {
   DT,
   FIELD_D,
   FIELD_W,
+  GK_DIVE_EXTRA_REACH,
+  GK_EXTRA_REACH,
+  GK_FAST_SHOT_SPEED,
+  GK_PICKUP_MAX_Z,
   GOAL_DEPTH,
   GRAVITY,
   PICKUP_MAX_Z,
@@ -20,7 +24,9 @@ import {
   WALL_BOUNCE,
 } from './constants';
 import { applySpecialHit, clampPlayerToField, specialSpeed, updateAction } from './actions';
-import { goalMouth, isInGoalMouth } from './field';
+import { inOwnArea, goalMouth, isInGoalMouth } from './field';
+import { updateMatch } from './match';
+import { rngNext } from './rng';
 import {
   EMPTY_INPUT,
   type Ball,
@@ -36,22 +42,32 @@ const BOUNCE_EVENT_MIN_SPEED = 40;
 const SPECIAL_CONTACT_PAD = 2;
 /** Maximum height difference for a special ball to hit a player. */
 const SPECIAL_CONTACT_Z = 30;
+/** A parried fast shot cannot be picked up by the parrying keeper for this many ticks. */
+const GK_PARRY_NO_TOUCH = 20;
+const GK_PARRY_DAMP = 0.4;
+const GK_PARRY_VZ = 120;
+const GK_PARRY_SPREAD = 60;
 
 /** Advances the simulation by one tick. Mutates and returns the same state. */
 export function step(state: GameState, inputs: InputFrame[]): GameState {
   state.events = [];
 
+  // Outside live play (kickoff, goal, halftime, full time, PK) every player gets an empty frame.
+  const live = state.match.phase === 'play';
+  const frames = state.players.map((_, i) => (live ? (inputs[i] ?? EMPTY_INPUT) : EMPTY_INPUT));
+
   for (let i = 0; i < state.players.length; i++) {
-    updateAction(state, state.players[i], inputs[i] ?? EMPTY_INPUT);
+    updateAction(state, state.players[i], frames[i]);
   }
 
   resolvePlayerCollisions(state.players);
   updatePossession(state);
   updateBall(state);
   updatePickup(state);
+  updateMatch(state);
 
   for (let i = 0; i < state.players.length; i++) {
-    state.players[i].prevInput = { ...(inputs[i] ?? EMPTY_INPUT) };
+    state.players[i].prevInput = { ...frames[i] };
   }
 
   state.tick++;
@@ -212,7 +228,7 @@ function advanceSpecial(state: GameState): boolean {
   b.y += b.vy * DT;
   if (sp.kind === 'lob') b.z += b.vz * DT;
 
-  resolveSpecialContacts(state, sp);
+  if (resolveSpecialContacts(state, sp)) return false;
 
   const landed = sp.kind === 'lob' && b.z <= 0;
   const outOfPlay = b.x < 0 || b.x > FIELD_W || b.y < 0 || b.y > FIELD_D;
@@ -225,43 +241,122 @@ function advanceSpecial(state: GameState): boolean {
   return true;
 }
 
-/** Opponents of the shooter that the special ball passes over are hit once each (idx order). */
-function resolveSpecialContacts(state: GameState, sp: SpecialShot): void {
+/**
+ * Opponents of the shooter that the special ball passes over are hit once each (idx order).
+ * A defending goalkeeper in its own area first gets one save roll per special, when the ball is in its pickup reach.
+ * Returns true if the special ended on a save (the keeper now owns the ball).
+ */
+function resolveSpecialContacts(state: GameState, sp: SpecialShot): boolean {
   const b = state.ball;
   for (const p of state.players) {
-    if (p.team === sp.team || p.action === 'down' || sp.hit.includes(p.idx)) continue;
+    if (p.team === sp.team || p.action === 'down') continue;
     const dx = b.x - p.x;
     const dy = b.y - p.y;
-    if (Math.sqrt(dx * dx + dy * dy) >= p.radius + BALL_RADIUS + SPECIAL_CONTACT_PAD) continue;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (p.role === 'GK' && inOwnArea(state, p) && !sp.rolled.includes(p.idx)) {
+      const reach = pickupReach(state, p);
+      if (reach >= 0 && dist < reach) {
+        sp.rolled.push(p.idx);
+        const shooter = state.players[sp.shooterIdx];
+        if (rngNext(state) < specialSaveChance(p, shooter)) {
+          b.special = null;
+          b.ownerIdx = p.idx;
+          b.lastTouchIdx = p.idx;
+          state.events.push({ type: 'specialEnd' });
+          state.events.push({ type: 'save', playerIdx: p.idx, caught: true });
+          return true;
+        }
+      }
+    }
+
+    if (sp.hit.includes(p.idx)) continue;
+    if (dist >= p.radius + BALL_RADIUS + SPECIAL_CONTACT_PAD) continue;
     if (Math.abs(b.z - p.z) >= SPECIAL_CONTACT_Z) continue;
     sp.hit.push(p.idx);
     applySpecialHit(state, state.players[sp.shooterIdx], p, sp.kind, sp.dirX, sp.dirY);
   }
+  return false;
 }
 
-/** Unowned ball within reach of a free player is picked up by the nearest one (ties: lowest idx). */
+/** Save chance of a goalkeeper against a special shot. */
+function specialSaveChance(gk: Player, shooter: Player): number {
+  return clamp(0.3 + (gk.stats.defense - shooter.stats.power) * 0.08, 0.05, 0.6);
+}
+
+/** Catch chance of a goalkeeper against a fast ball. */
+function gkCatchChance(gk: Player): number {
+  return clamp(0.55 + (gk.stats.defense - 5) * 0.08, 0.2, 0.95);
+}
+
+function clamp(v: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, v));
+}
+
+/**
+ * Pickup reach for a player this tick, or -1 if it cannot pick up the ball now.
+ * Goalkeepers in their own area reach further and higher; a diving goalkeeper reaches further still.
+ */
+function pickupReach(state: GameState, p: Player): number {
+  if (p.noTouchTicks !== 0) return -1;
+  const ball = state.ball;
+  const gk = p.role === 'GK';
+  const inArea = gk && inOwnArea(state, p);
+  let reach = p.radius + BALL_RADIUS + PICKUP_REACH;
+  if (inArea) reach += GK_EXTRA_REACH;
+  if (p.action === 'normal') {
+    if (ball.z >= (inArea ? GK_PICKUP_MAX_Z : PICKUP_MAX_Z)) return -1;
+  } else if (p.action === 'jump') {
+    if (Math.abs(ball.z - p.z) >= PICKUP_MAX_Z) return -1;
+  } else if (p.action === 'dive') {
+    if (!gk || Math.abs(ball.z - p.z) >= GK_PICKUP_MAX_Z) return -1;
+    reach += GK_DIVE_EXTRA_REACH;
+  } else {
+    return -1;
+  }
+  return reach;
+}
+
+/** Deflects a fast ball the keeper failed to catch, and keeps the keeper from grabbing it again for a while. */
+function parryFastBall(state: GameState, gk: Player): void {
+  const ball = state.ball;
+  ball.vx = -ball.vx * GK_PARRY_DAMP;
+  ball.vy = ball.vy * GK_PARRY_DAMP + (rngNext(state) * 2 - 1) * GK_PARRY_SPREAD;
+  ball.vz = GK_PARRY_VZ;
+  ball.lastTouchIdx = gk.idx;
+  gk.noTouchTicks = GK_PARRY_NO_TOUCH;
+}
+
+/**
+ * Unowned ball within reach of a free player is picked up by the nearest one (ties: lowest idx).
+ * Pickups only happen in live play. A goalkeeper taking a fast ball first rolls a catch; a miss is a parry.
+ */
 function updatePickup(state: GameState): void {
   const ball = state.ball;
-  if (ball.ownerIdx === -1 && ball.special === null) {
+  if (state.match.phase === 'play' && ball.ownerIdx === -1 && ball.special === null) {
     let best = -1;
     let bestDist = Infinity;
     for (let i = 0; i < state.players.length; i++) {
       const p = state.players[i];
-      if (p.noTouchTicks !== 0) continue;
-      if (p.action === 'normal') {
-        if (ball.z >= PICKUP_MAX_Z) continue;
-      } else if (p.action === 'jump') {
-        if (Math.abs(ball.z - p.z) >= PICKUP_MAX_Z) continue;
-      } else {
-        continue;
-      }
+      const reach = pickupReach(state, p);
+      if (reach < 0) continue;
       const dx = ball.x - p.x;
       const dy = ball.y - p.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      const reach = p.radius + BALL_RADIUS + PICKUP_REACH;
       if (dist < reach && dist < bestDist) {
         best = i;
         bestDist = dist;
+      }
+    }
+    if (best !== -1) {
+      const gk = state.players[best];
+      if (gk.role === 'GK' && Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy) > GK_FAST_SHOT_SPEED) {
+        const caught = rngNext(state) < gkCatchChance(gk);
+        state.events.push({ type: 'save', playerIdx: best, caught });
+        if (!caught) {
+          parryFastBall(state, gk);
+          best = -1;
+        }
       }
     }
     if (best !== -1) {

@@ -12,6 +12,9 @@ import {
   FIELD_W,
   FLYKICK_SPEED,
   GETUP_STAMINA_RATIO,
+  GK_DIVE_RECOVER_TICKS,
+  GK_DIVE_SPEED,
+  GK_DIVE_TICKS,
   GOAL_H,
   GRAVITY,
   HITSTUN_TICKS,
@@ -48,6 +51,7 @@ import {
   TACKLE_SPEED_MULT,
   TACKLE_TICKS,
 } from './constants';
+import { attackDir, inOwnArea, opponentGoalX } from './field';
 import { rngNext } from './rng';
 import {
   type AttackKind,
@@ -82,6 +86,8 @@ const SHOT_AIM_SPREAD = 3.5;
 const SHOT_MAX_VZ = 500;
 const CLEAR_SPEED = 300;
 const CLEAR_VZ = 150;
+const GK_DIVE_VZ = 120;
+const GK_DIVE_DAMP = 0.95;
 
 /** Runs one tick of the player's current action. Mutates the player and may mutate the ball and events. */
 export function updateAction(state: GameState, p: Player, input: InputFrame): void {
@@ -99,6 +105,9 @@ export function updateAction(state: GameState, p: Player, input: InputFrame): vo
       break;
     case 'jump':
       updateJump(state, p, input, landed);
+      break;
+    case 'dive':
+      updateDive(p);
       break;
     case 'flykick':
       updateFlykick(state, p, landed);
@@ -266,6 +275,10 @@ function updateNormal(state: GameState, p: Player, input: InputFrame): void {
   }
 
   if (input.k && !p.prevInput.k && !ownsBall && p.z === 0 && p.vz === 0) {
+    if (p.role === 'GK' && inOwnArea(state, p)) {
+      startDive(state, p, input);
+      return;
+    }
     p.action = 'jump';
     p.actionTimer = 0;
     p.vz = JUMP_VZ;
@@ -331,6 +344,34 @@ function updateJump(state: GameState, p: Player, input: InputFrame, landed: bool
   integrate(p);
 }
 
+/** Goalkeeper dive: a fast slide along the held direction (or facing) with a small hop. */
+function startDive(state: GameState, p: Player, input: InputFrame): void {
+  const dir = inputDir(input);
+  if (dir.x !== 0 || dir.y !== 0) {
+    p.facingX = dir.x;
+    p.facingY = dir.y;
+  }
+  p.action = 'dive';
+  p.actionTimer = GK_DIVE_TICKS;
+  p.vx = p.facingX * GK_DIVE_SPEED;
+  p.vy = p.facingY * GK_DIVE_SPEED;
+  p.vz = GK_DIVE_VZ;
+  state.events.push({ type: 'jump', playerIdx: p.idx });
+  integrate(p);
+}
+
+/** Dive slides, decaying each tick, then turns into a recover. */
+function updateDive(p: Player): void {
+  p.vx *= GK_DIVE_DAMP;
+  p.vy *= GK_DIVE_DAMP;
+  integrate(p);
+  p.actionTimer--;
+  if (p.actionTimer <= 0) {
+    p.action = 'recover';
+    p.actionTimer = GK_DIVE_RECOVER_TICKS;
+  }
+}
+
 function updateFlykick(state: GameState, p: Player, landed: boolean): void {
   if (landed) {
     startRecover(p);
@@ -381,7 +422,7 @@ function releaseCharge(state: GameState, p: Player, input: InputFrame): void {
   const full = p.chargeTicks >= CHARGE_FULL;
   const charge = Math.min(p.chargeTicks, CHARGE_FULL - 1);
   p.chargeTicks = 0;
-  const towardGoal = p.facingX * attackDirOf(p) > 0;
+  const towardGoal = p.facingX * attackDir(state, p.team) > 0;
   if (full && towardGoal && p.stamina >= SPECIAL_STAMINA_COST) {
     startSpecial(state, p);
   } else if (towardGoal) {
@@ -389,10 +430,6 @@ function releaseCharge(state: GameState, p: Player, input: InputFrame): void {
   } else {
     kickClear(state, p);
   }
-}
-
-function attackDirOf(p: Player): number {
-  return p.team === 0 ? 1 : -1;
 }
 
 /** Ball leaves the owner. The ball keeps its current (dribble) position. */
@@ -424,11 +461,11 @@ export function specialSpeed(kind: SpecialKind): number {
 
 function startSpecial(state: GameState, p: Player): void {
   const ball = state.ball;
-  const goalX = p.team === 0 ? FIELD_W : 0;
+  const goalX = opponentGoalX(state, p.team);
   const dx = goalX - ball.x;
   const dy = FIELD_D / 2 - ball.y;
   const len = Math.sqrt(dx * dx + dy * dy);
-  const dirX = len > 0 ? dx / len : attackDirOf(p);
+  const dirX = len > 0 ? dx / len : attackDir(state, p.team);
   const dirY = len > 0 ? dy / len : 0;
   const speed = specialSpeed(p.specialKind);
 
@@ -442,6 +479,7 @@ function startSpecial(state: GameState, p: Player): void {
     dirX,
     dirY,
     hit: [],
+    rolled: [],
   };
   ball.special = special;
   state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
@@ -449,7 +487,7 @@ function startSpecial(state: GameState, p: Player): void {
 
 function shoot(state: GameState, p: Player, input: InputFrame, charge: number): void {
   const ball = state.ball;
-  const goalX = p.team === 0 ? FIELD_W : 0;
+  const goalX = opponentGoalX(state, p.team);
   const aimY =
     FIELD_D / 2 +
     input.moveY * SHOT_AIM_OFFSET_Y +
@@ -460,7 +498,7 @@ function shoot(state: GameState, p: Player, input: InputFrame, charge: number): 
   const dx = goalX - ball.x;
   const dy = aimY - ball.y;
   const dist = Math.sqrt(dx * dx + dy * dy);
-  const ux = dist > 0 ? dx / dist : attackDirOf(p);
+  const ux = dist > 0 ? dx / dist : attackDir(state, p.team);
   const uy = dist > 0 ? dy / dist : 0;
   const t = dist / speed;
   const vz = Math.min(SHOT_MAX_VZ, targetZ / t + 0.5 * GRAVITY * t);

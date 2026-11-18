@@ -41,7 +41,7 @@ function makeTeam(prefix: string): CharacterDef[] {
 }
 
 function makeSetup(seed: number): MatchSetup {
-  return { seed, teams: [makeTeam('a'), makeTeam('b')] };
+  return { seed, teams: [makeTeam('a'), makeTeam('b')], startInPlay: true };
 }
 
 /** Test-local mulberry32 used only to generate input sequences. */

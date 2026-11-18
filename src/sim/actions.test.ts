@@ -43,7 +43,7 @@ function makeTeam(prefix: string): CharacterDef[] {
 }
 
 function makeSetup(seed: number): MatchSetup {
-  return { seed, teams: [makeTeam('a'), makeTeam('b')] };
+  return { seed, teams: [makeTeam('a'), makeTeam('b')], startInPlay: true };
 }
 
 function inputFor(idx: number, frame: Partial<InputFrame>): InputFrame[] {

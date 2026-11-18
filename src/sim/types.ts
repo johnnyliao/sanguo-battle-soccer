@@ -28,7 +28,8 @@ export type PlayerAction =
   | 'hitstun'
   | 'down'
   | 'recover'
-  | 'charge';
+  | 'charge'
+  | 'dive';
 
 export type AttackKind = 'punch' | 'tackle' | 'flykick' | 'special';
 
@@ -79,6 +80,8 @@ export interface SpecialShot {
   dirY: number;
   /** Player idxs already hit by this special. */
   hit: number[];
+  /** Goalkeeper idxs that already rolled a save on this special (separate from hit so contact still applies on a failed save). */
+  rolled: number[];
 }
 
 export interface Ball {
@@ -107,7 +110,31 @@ export type SimEvent =
   | { type: 'kick'; playerIdx: number; kind: 'pass' | 'shot' | 'clear'; targetIdx: number }
   | { type: 'chargeFull'; playerIdx: number }
   | { type: 'special'; playerIdx: number; kind: SpecialKind; name: string }
-  | { type: 'specialEnd' };
+  | { type: 'specialEnd' }
+  | { type: 'whistle'; reason: 'kickoff' | 'half' | 'full' }
+  | { type: 'goal'; team: 0 | 1; scorerIdx: number }
+  | { type: 'matchEnd'; score: [number, number] }
+  | { type: 'pkStart' }
+  | { type: 'save'; playerIdx: number; caught: boolean };
+
+export type MatchPhase = 'kickoff' | 'play' | 'goal' | 'halftime' | 'fulltime' | 'pk';
+
+export interface MatchState {
+  phase: MatchPhase;
+  /** Ticks remaining in timed phases. */
+  phaseTimer: number;
+  half: 1 | 2;
+  /** Ticks remaining in the current half (counts down only in 'play'). */
+  clockTicks: number;
+  /** Configured half length in ticks. */
+  halfTicks: number;
+  score: [number, number];
+  /** false in 1st half (team 0 attacks +x); true in 2nd half (team 0 attacks -x). */
+  swapped: boolean;
+  kickoffTeam: 0 | 1;
+  firstKickoffTeam: 0 | 1;
+  lastGoal: null | { team: 0 | 1; scorerIdx: number; tick: number };
+}
 
 export interface GameState {
   tick: number;
@@ -116,6 +143,7 @@ export interface GameState {
   /** 10 players: idx 0-4 team 0, 5-9 team 1; slot order GK,DF,MF,MF,FW. */
   players: Player[];
   ball: Ball;
+  match: MatchState;
   /** Cleared at the start of every step. */
   events: SimEvent[];
 }
@@ -124,4 +152,8 @@ export interface MatchSetup {
   seed: number;
   /** Each team is exactly 5 defs: GK, DF, MF, MF, FW. */
   teams: [CharacterDef[], CharacterDef[]];
+  /** Half length in seconds. Default 120. */
+  halfSeconds?: number;
+  /** Start in 'play' with no kickoff wait (for fixtures). */
+  startInPlay?: boolean;
 }
