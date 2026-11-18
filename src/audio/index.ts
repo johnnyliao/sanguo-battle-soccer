@@ -1,2 +1,3 @@
 // Sound effects (ZzFX-generated).
-export {};
+export { AudioPlayer, defaultZzfxPlay, type PlayFn } from './AudioPlayer';
+export { SOUNDS, soundsForEvent, type SimEvent, type SoundCue } from './sounds';

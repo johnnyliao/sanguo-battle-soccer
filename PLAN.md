@@ -17,7 +17,7 @@
 - [ ] 8. 輸入：鍵盤（WASD/J/K/L、雙擊衝刺）＋手把 → InputFrame — worker — verify: playwright 按鍵後角色移動
 - [ ] 9. 選隊畫面（不可同國）→ 選操控武將 → 比賽 → 結算 — worker — verify: playwright 走完流程截圖
 - [ ] 10. PK 大戰（6 區、時機、守門員猜方向、驟死） — worker — verify: vitest + 截圖
-- [ ] 11. ZzFX 音效 — worker — verify: 事件觸發時呼叫音效（單元測試 mock）
+- [x] 11. ZzFX 音效 — worker — verify: 事件觸發時呼叫音效（單元測試 mock）
 - [ ] 12. 整合試玩、數值調整 — me + 使用者
 - [ ] 13. GitHub Pages 上線（repo 已建、已 push） — me
 

@@ -10,7 +10,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "phaser": "3.90.0"
+    "phaser": "3.90.0",
+    "zzfx": "^1.4.0"
   },
   "devDependencies": {
     "typescript": "^7.0.2",
