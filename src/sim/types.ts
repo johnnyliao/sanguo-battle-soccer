@@ -1,4 +1,4 @@
-import type { BodySize, CharacterDef, Role, Stats } from '../data/types';
+import type { BodySize, CharacterDef, Role, SpecialKind, Stats } from '../data/types';
 
 /** Held-button state for one tick. dash = virtual dash button. */
 export interface InputFrame {
@@ -27,9 +27,10 @@ export type PlayerAction =
   | 'flykick'
   | 'hitstun'
   | 'down'
-  | 'recover';
+  | 'recover'
+  | 'charge';
 
-export type AttackKind = 'punch' | 'tackle' | 'flykick';
+export type AttackKind = 'punch' | 'tackle' | 'flykick' | 'special';
 
 export interface Player {
   idx: number;
@@ -61,7 +62,23 @@ export interface Player {
   callPassTicks: number;
   /** Ticks during which this player cannot pick up the ball. */
   noTouchTicks: number;
+  /** Ticks spent charging a shot (J held while owning the ball). */
+  chargeTicks: number;
+  specialKind: SpecialKind;
+  specialName: string;
   prevInput: InputFrame;
+}
+
+/** A special shot in flight. Only set while the ball is unowned and flying under special rules. */
+export interface SpecialShot {
+  kind: SpecialKind;
+  shooterIdx: number;
+  team: 0 | 1;
+  ticks: number;
+  dirX: number;
+  dirY: number;
+  /** Player idxs already hit by this special. */
+  hit: number[];
 }
 
 export interface Ball {
@@ -75,6 +92,7 @@ export interface Ball {
   ownerIdx: number | -1;
   /** Index of the last player who touched the ball, or -1. */
   lastTouchIdx: number | -1;
+  special: SpecialShot | null;
 }
 
 export type SimEvent =
@@ -85,7 +103,11 @@ export type SimEvent =
   | { type: 'down'; playerIdx: number }
   | { type: 'jump'; playerIdx: number }
   | { type: 'callPass'; playerIdx: number }
-  | { type: 'looseBall'; playerIdx: number };
+  | { type: 'looseBall'; playerIdx: number }
+  | { type: 'kick'; playerIdx: number; kind: 'pass' | 'shot' | 'clear'; targetIdx: number }
+  | { type: 'chargeFull'; playerIdx: number }
+  | { type: 'special'; playerIdx: number; kind: SpecialKind; name: string }
+  | { type: 'specialEnd' };
 
 export interface GameState {
   tick: number;

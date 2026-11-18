@@ -1,5 +1,8 @@
+import type { SpecialKind } from '../data/types';
 import {
   CALL_PASS_TICKS,
+  CHARGE_FULL,
+  CHARGE_MOVE_MULT,
   DASH_MULT,
   DASH_STAMINA_COST,
   DOWN_TICKS_EXHAUSTED,
@@ -9,10 +12,16 @@ import {
   FIELD_W,
   FLYKICK_SPEED,
   GETUP_STAMINA_RATIO,
+  GOAL_H,
+  GRAVITY,
   HITSTUN_TICKS,
   JUMP_VZ,
+  KICK_NO_TOUCH,
+  KICK_RECOVER_TICKS,
   KNOCKBACK_SPEED,
   LOOSE_BALL_NO_TOUCH,
+  PASS_LOB_DIST,
+  PASS_LOB_SPEED,
   PLAYER_ACCEL,
   PLAYER_BASE_SPEED,
   PLAYER_GRAVITY,
@@ -23,12 +32,30 @@ import {
   PUNCH_RANGE,
   PUNCH_TICKS,
   RECOVER_TICKS,
+  SHOT_BASE_SPEED,
+  SHOT_SPEED_PER_CHARGE,
+  SHOT_SPEED_PER_POWER,
+  SPECIAL_FLAT_Z,
+  SPECIAL_HIT_STAMINA,
+  SPECIAL_LOB_FALL_GRAVITY_MULT,
+  SPECIAL_LOB_SPEED,
+  SPECIAL_LOB_VZ,
+  SPECIAL_PIERCE_SPEED,
+  SPECIAL_STAMINA_COST,
+  SPECIAL_STRAIGHT_SPEED,
+  SPECIAL_ZIGZAG_SPEED,
   STAMINA_REGEN,
   TACKLE_SPEED_MULT,
   TACKLE_TICKS,
 } from './constants';
 import { rngNext } from './rng';
-import type { AttackKind, GameState, InputFrame, Player } from './types';
+import {
+  type AttackKind,
+  type GameState,
+  type InputFrame,
+  type Player,
+  type SpecialShot,
+} from './types';
 
 /** Vertical gap under which an airborne hit still connects. */
 const AIR_HIT_Z = 24;
@@ -46,6 +73,15 @@ const HIT_VZ = 80;
 const LOOSE_BALL_SPEED = 90;
 const LOOSE_BALL_SPREAD = 30;
 const LOOSE_BALL_VZ = 120;
+const PASS_CONE_COS = 0.3;
+const PASS_SPEED_GUESS = 300;
+const PASS_GROUND_VZ = 30;
+const PASS_LOB_MAX_VZ = 420;
+const SHOT_AIM_OFFSET_Y = 28;
+const SHOT_AIM_SPREAD = 3.5;
+const SHOT_MAX_VZ = 500;
+const CLEAR_SPEED = 300;
+const CLEAR_VZ = 150;
 
 /** Runs one tick of the player's current action. Mutates the player and may mutate the ball and events. */
 export function updateAction(state: GameState, p: Player, input: InputFrame): void {
@@ -78,6 +114,9 @@ export function updateAction(state: GameState, p: Player, input: InputFrame): vo
       break;
     case 'recover':
       if (coast(p, RECOVER_DAMP)) toNormal(p);
+      break;
+    case 'charge':
+      updateCharge(state, p, input);
       break;
   }
 }
@@ -152,7 +191,12 @@ function toNormal(p: Player): void {
   p.actionTimer = 0;
 }
 
-function startAttack(state: GameState, p: Player, kind: AttackKind, ticks: number): void {
+function startAttack(
+  state: GameState,
+  p: Player,
+  kind: Exclude<AttackKind, 'special'>,
+  ticks: number,
+): void {
   p.action = kind;
   p.actionTimer = ticks;
   p.hitDone = false;
@@ -192,6 +236,20 @@ function updateNormal(state: GameState, p: Player, input: InputFrame): void {
 
   const ownsBall = state.ball.ownerIdx === p.idx;
   const baseSpeed = maxSpeedOf(p);
+
+  if (ownsBall) {
+    if (input.k && !p.prevInput.k) {
+      passBall(state, p);
+      integrate(p);
+      return;
+    }
+    if (input.j && !p.prevInput.j) {
+      p.action = 'charge';
+      p.chargeTicks = 0;
+      moveCharging(p, input);
+      return;
+    }
+  }
 
   if (input.j && !p.prevInput.j && !ownsBall) {
     if (dashHeld) {
@@ -287,6 +345,225 @@ function updateFlykick(state: GameState, p: Player, landed: boolean): void {
   }
 }
 
+/** Ball-carrier charging a shot: slow movement, no dash, no stamina regen. Releasing J shoots. */
+function updateCharge(state: GameState, p: Player, input: InputFrame): void {
+  if (state.ball.ownerIdx !== p.idx) {
+    p.chargeTicks = 0;
+    toNormal(p);
+    return;
+  }
+  if (!input.j && p.prevInput.j) {
+    releaseCharge(state, p, input);
+    return;
+  }
+  if (p.chargeTicks < CHARGE_FULL) {
+    p.chargeTicks++;
+    if (p.chargeTicks === CHARGE_FULL) state.events.push({ type: 'chargeFull', playerIdx: p.idx });
+  }
+  moveCharging(p, input);
+}
+
+function moveCharging(p: Player, input: InputFrame): void {
+  const dir = inputDir(input);
+  if (dir.x !== 0 || dir.y !== 0) {
+    p.facingX = dir.x;
+    p.facingY = dir.y;
+  }
+  const maxSpeed = maxSpeedOf(p) * CHARGE_MOVE_MULT;
+  const k = Math.min(1, (PLAYER_ACCEL * DT) / p.mass);
+  p.vx += (dir.x * maxSpeed - p.vx) * k;
+  p.vy += (dir.y * maxSpeed - p.vy) * k;
+  integrate(p);
+}
+
+/** Picks the shot type on J release: special (full charge, stamina, toward goal), shot (toward goal), else clear. */
+function releaseCharge(state: GameState, p: Player, input: InputFrame): void {
+  const full = p.chargeTicks >= CHARGE_FULL;
+  const charge = Math.min(p.chargeTicks, CHARGE_FULL - 1);
+  p.chargeTicks = 0;
+  const towardGoal = p.facingX * attackDirOf(p) > 0;
+  if (full && towardGoal && p.stamina >= SPECIAL_STAMINA_COST) {
+    startSpecial(state, p);
+  } else if (towardGoal) {
+    shoot(state, p, input, charge);
+  } else {
+    kickClear(state, p);
+  }
+}
+
+function attackDirOf(p: Player): number {
+  return p.team === 0 ? 1 : -1;
+}
+
+/** Ball leaves the owner. The ball keeps its current (dribble) position. */
+function releaseBall(state: GameState, p: Player, vx: number, vy: number, vz: number): void {
+  const ball = state.ball;
+  ball.ownerIdx = -1;
+  ball.lastTouchIdx = p.idx;
+  ball.vx = vx;
+  ball.vy = vy;
+  ball.vz = vz;
+  p.noTouchTicks = KICK_NO_TOUCH;
+  p.action = 'recover';
+  p.actionTimer = KICK_RECOVER_TICKS;
+}
+
+/** Launch speed of a special shot's ball, per kind. */
+export function specialSpeed(kind: SpecialKind): number {
+  switch (kind) {
+    case 'straight':
+      return SPECIAL_STRAIGHT_SPEED;
+    case 'zigzag':
+      return SPECIAL_ZIGZAG_SPEED;
+    case 'lob':
+      return SPECIAL_LOB_SPEED;
+    case 'pierce':
+      return SPECIAL_PIERCE_SPEED;
+  }
+}
+
+function startSpecial(state: GameState, p: Player): void {
+  const ball = state.ball;
+  const goalX = p.team === 0 ? FIELD_W : 0;
+  const dx = goalX - ball.x;
+  const dy = FIELD_D / 2 - ball.y;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  const dirX = len > 0 ? dx / len : attackDirOf(p);
+  const dirY = len > 0 ? dy / len : 0;
+  const speed = specialSpeed(p.specialKind);
+
+  p.stamina -= SPECIAL_STAMINA_COST;
+  releaseBall(state, p, dirX * speed, dirY * speed, p.specialKind === 'lob' ? SPECIAL_LOB_VZ : 0);
+  const special: SpecialShot = {
+    kind: p.specialKind,
+    shooterIdx: p.idx,
+    team: p.team,
+    ticks: 0,
+    dirX,
+    dirY,
+    hit: [],
+  };
+  ball.special = special;
+  state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
+}
+
+function shoot(state: GameState, p: Player, input: InputFrame, charge: number): void {
+  const ball = state.ball;
+  const goalX = p.team === 0 ? FIELD_W : 0;
+  const aimY =
+    FIELD_D / 2 +
+    input.moveY * SHOT_AIM_OFFSET_Y +
+    (rngNext(state) * 2 - 1) * (11 - p.stats.technique) * SHOT_AIM_SPREAD;
+  const targetZ = 6 + rngNext(state) * (GOAL_H - 10);
+
+  const speed = SHOT_BASE_SPEED + p.stats.power * SHOT_SPEED_PER_POWER + charge * SHOT_SPEED_PER_CHARGE;
+  const dx = goalX - ball.x;
+  const dy = aimY - ball.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const ux = dist > 0 ? dx / dist : attackDirOf(p);
+  const uy = dist > 0 ? dy / dist : 0;
+  const t = dist / speed;
+  const vz = Math.min(SHOT_MAX_VZ, targetZ / t + 0.5 * GRAVITY * t);
+
+  releaseBall(state, p, ux * speed, uy * speed, vz);
+  state.events.push({ type: 'kick', playerIdx: p.idx, kind: 'shot', targetIdx: -1 });
+}
+
+function kickClear(state: GameState, p: Player): void {
+  releaseBall(state, p, p.facingX * CLEAR_SPEED, p.facingY * CLEAR_SPEED, CLEAR_VZ);
+  state.events.push({ type: 'kick', playerIdx: p.idx, kind: 'clear', targetIdx: -1 });
+}
+
+/** Teammate for a pass: prefers the nearest one in front (cos > 0.3), else nearest overall. -1 if none. */
+export function choosePassTarget(state: GameState, p: Player): number {
+  let frontIdx = -1;
+  let frontScore = Infinity;
+  let anyIdx = -1;
+  let anyScore = Infinity;
+  for (const t of state.players) {
+    if (t.team !== p.team || t.idx === p.idx || t.action === 'down') continue;
+    const dx = t.x - p.x;
+    const dy = t.y - p.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const cos = dist > 0 ? (dx * p.facingX + dy * p.facingY) / dist : 0;
+    const score = dist * (2 - cos);
+    if (cos > PASS_CONE_COS && score < frontScore) {
+      frontIdx = t.idx;
+      frontScore = score;
+    }
+    if (score < anyScore) {
+      anyIdx = t.idx;
+      anyScore = score;
+    }
+  }
+  return frontIdx !== -1 ? frontIdx : anyIdx;
+}
+
+function passBall(state: GameState, p: Player): void {
+  const idx = choosePassTarget(state, p);
+  if (idx === -1) return;
+  const target = state.players[idx];
+  const dx = target.x - p.x;
+  const dy = target.y - p.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+
+  // Lead the target: aim where it will be, assuming it keeps its current velocity.
+  const lead = (dist / PASS_SPEED_GUESS) * 0.5;
+  const aimX = target.x + target.vx * lead - p.x;
+  const aimY = target.y + target.vy * lead - p.y;
+  const aimLen = Math.sqrt(aimX * aimX + aimY * aimY);
+  const ux = aimLen > 0 ? aimX / aimLen : p.facingX;
+  const uy = aimLen > 0 ? aimY / aimLen : p.facingY;
+
+  if (dist <= PASS_LOB_DIST) {
+    const speed = Math.min(380, Math.max(160, 120 + dist * 1.2));
+    releaseBall(state, p, ux * speed, uy * speed, PASS_GROUND_VZ);
+  } else {
+    const t = dist / PASS_LOB_SPEED;
+    releaseBall(state, p, ux * PASS_LOB_SPEED, uy * PASS_LOB_SPEED, Math.min(PASS_LOB_MAX_VZ, 0.5 * GRAVITY * t));
+  }
+  state.events.push({ type: 'kick', playerIdx: p.idx, kind: 'pass', targetIdx: idx });
+}
+
+/** Special-ball hit: flat stamina cost; pierce knocks down, other kinds hitstun. Knockback follows the ball's direction. */
+export function applySpecialHit(
+  state: GameState,
+  shooter: Player,
+  victim: Player,
+  kind: SpecialKind,
+  dirX: number,
+  dirY: number,
+): void {
+  victim.stamina = Math.max(0, victim.stamina - SPECIAL_HIT_STAMINA);
+  victim.chargeTicks = 0;
+
+  const knock = (KNOCKBACK_SPEED * shooter.mass) / victim.mass;
+  victim.vx = dirX * knock;
+  victim.vy = dirY * knock;
+  victim.vz = HIT_VZ;
+
+  let down = false;
+  if (victim.stamina <= 0) {
+    setDown(victim, DOWN_TICKS_EXHAUSTED);
+    down = true;
+  } else if (kind === 'pierce') {
+    setDown(victim, DOWN_TICKS_KNOCKED);
+    down = true;
+  } else {
+    victim.action = 'hitstun';
+    victim.actionTimer = HITSTUN_TICKS;
+  }
+
+  state.events.push({
+    type: 'hit',
+    attackerIdx: shooter.idx,
+    victimIdx: victim.idx,
+    kind: 'special',
+    damage: SPECIAL_HIT_STAMINA,
+  });
+  if (down) state.events.push({ type: 'down', playerIdx: victim.idx });
+}
+
 /** First opponent in index order that is not down and satisfies the overlap test. */
 function findVictim(
   state: GameState,
@@ -302,6 +579,7 @@ function findVictim(
 
 function applyHit(state: GameState, attacker: Player, victim: Player, kind: AttackKind): void {
   attacker.hitDone = true;
+  victim.chargeTicks = 0;
 
   let damage = Math.max(3, Math.round(8 + attacker.stats.power * 1.2 - victim.stats.defense * 0.5));
   if (kind !== 'punch') damage = Math.round(damage * 1.5);

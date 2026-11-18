@@ -12,14 +12,30 @@ import {
   GRAVITY,
   PICKUP_MAX_Z,
   PICKUP_REACH,
+  SPECIAL_FLAT_Z,
+  SPECIAL_LOB_FALL_GRAVITY_MULT,
+  SPECIAL_MAX_TICKS,
+  SPECIAL_ZIGZAG_AMP,
+  SPECIAL_ZIGZAG_FREQ,
   WALL_BOUNCE,
 } from './constants';
-import { clampPlayerToField, updateAction } from './actions';
+import { applySpecialHit, clampPlayerToField, specialSpeed, updateAction } from './actions';
 import { goalMouth, isInGoalMouth } from './field';
-import { EMPTY_INPUT, type GameState, type InputFrame, type Player } from './types';
+import {
+  EMPTY_INPUT,
+  type Ball,
+  type GameState,
+  type InputFrame,
+  type Player,
+  type SpecialShot,
+} from './types';
 
 /** Impact speed above which a ground bounce is reported as an event. */
 const BOUNCE_EVENT_MIN_SPEED = 40;
+/** Extra xy reach beyond body radius + ball radius for a special ball to hit a player. */
+const SPECIAL_CONTACT_PAD = 2;
+/** Maximum height difference for a special ball to hit a player. */
+const SPECIAL_CONTACT_Z = 30;
 
 /** Advances the simulation by one tick. Mutates and returns the same state. */
 export function step(state: GameState, inputs: InputFrame[]): GameState {
@@ -94,6 +110,12 @@ function updateBall(state: GameState): void {
   const b = state.ball;
   if (b.ownerIdx !== -1) return;
 
+  if (b.special !== null) {
+    // A special ball that ends this tick still gets the wall / goal-net handling below.
+    if (!advanceSpecial(state)) bounceOffWalls(b);
+    return;
+  }
+
   b.vz -= GRAVITY * DT;
   b.x += b.vx * DT;
   b.y += b.vy * DT;
@@ -119,6 +141,11 @@ function updateBall(state: GameState): void {
     b.vy = 0;
   }
 
+  bounceOffWalls(b);
+}
+
+/** Side walls and end walls (through the goal mouth into the net, otherwise bounce off). */
+function bounceOffWalls(b: Ball): void {
   // Side walls.
   if (b.y < 0) {
     b.y = -b.y;
@@ -154,10 +181,68 @@ function updateBall(state: GameState): void {
   }
 }
 
+/**
+ * Moves a special ball one tick: flight by kind, then player contacts, then end conditions.
+ * Returns false on the tick the special ends (the ball keeps its velocity; normal physics resumes).
+ */
+function advanceSpecial(state: GameState): boolean {
+  const b = state.ball;
+  const sp = b.special;
+  if (sp === null) return false;
+  sp.ticks++;
+
+  const speed = specialSpeed(sp.kind);
+  if (sp.kind === 'zigzag') {
+    const lateral = Math.cos(sp.ticks * SPECIAL_ZIGZAG_FREQ) * SPECIAL_ZIGZAG_AMP;
+    b.vx = sp.dirX * speed - sp.dirY * lateral;
+    b.vy = sp.dirY * speed + sp.dirX * lateral;
+    b.z = SPECIAL_FLAT_Z;
+    b.vz = 0;
+  } else if (sp.kind === 'lob') {
+    b.vx = sp.dirX * speed;
+    b.vy = sp.dirY * speed;
+    b.vz -= (b.vz < 0 ? GRAVITY * SPECIAL_LOB_FALL_GRAVITY_MULT : GRAVITY) * DT;
+  } else {
+    b.vx = sp.dirX * speed;
+    b.vy = sp.dirY * speed;
+    b.z = SPECIAL_FLAT_Z;
+    b.vz = 0;
+  }
+  b.x += b.vx * DT;
+  b.y += b.vy * DT;
+  if (sp.kind === 'lob') b.z += b.vz * DT;
+
+  resolveSpecialContacts(state, sp);
+
+  const landed = sp.kind === 'lob' && b.z <= 0;
+  const outOfPlay = b.x < 0 || b.x > FIELD_W || b.y < 0 || b.y > FIELD_D;
+  if (sp.ticks > SPECIAL_MAX_TICKS || outOfPlay || landed) {
+    if (landed) b.z = 0;
+    b.special = null;
+    state.events.push({ type: 'specialEnd' });
+    return false;
+  }
+  return true;
+}
+
+/** Opponents of the shooter that the special ball passes over are hit once each (idx order). */
+function resolveSpecialContacts(state: GameState, sp: SpecialShot): void {
+  const b = state.ball;
+  for (const p of state.players) {
+    if (p.team === sp.team || p.action === 'down' || sp.hit.includes(p.idx)) continue;
+    const dx = b.x - p.x;
+    const dy = b.y - p.y;
+    if (Math.sqrt(dx * dx + dy * dy) >= p.radius + BALL_RADIUS + SPECIAL_CONTACT_PAD) continue;
+    if (Math.abs(b.z - p.z) >= SPECIAL_CONTACT_Z) continue;
+    sp.hit.push(p.idx);
+    applySpecialHit(state, state.players[sp.shooterIdx], p, sp.kind, sp.dirX, sp.dirY);
+  }
+}
+
 /** Unowned ball within reach of a free player is picked up by the nearest one (ties: lowest idx). */
 function updatePickup(state: GameState): void {
   const ball = state.ball;
-  if (ball.ownerIdx === -1) {
+  if (ball.ownerIdx === -1 && ball.special === null) {
     let best = -1;
     let bestDist = Infinity;
     for (let i = 0; i < state.players.length; i++) {

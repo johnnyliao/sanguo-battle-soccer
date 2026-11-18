@@ -10,7 +10,7 @@
 - [x] 1. 專案骨架：Vite + TS + Phaser 3.90，資料夾 src/sim、src/render、src/input、src/audio、src/data；vite base './'；空場景畫出 640×360 綠地 — worker — verify: `npm run build` 成功、`npx tsc --noEmit` 無錯
 - [x] 2. sim 核心：型別（GameState、Player、Ball、InputFrame）、種子 PRNG、60Hz step、場地與球門幾何、移動／衝刺、球物理（x,y,z、重力、彈跳、摩擦）、持球與碰撞 — worker — verify: vitest（同一輸入序列兩次 → 狀態 hash 相同；球落地會停）
 - [x] 3. 角色資料：15 武將表、每隊正規化到 150、體型參數 — worker — verify: vitest
-- [ ] 4. 動作：傳球、射門、蓄力必殺（四種行為）、攻擊／鏟球／跳躍、體力與倒地、搶球 — worker — verify: vitest 各動作情境
+- [x] 4. 動作：傳球、射門、蓄力必殺（四種行為）、攻擊／鏟球／跳躍、體力與倒地、搶球 — worker — verify: vitest 各動作情境
 - [ ] 5. 比賽流程：開球、進球判定、比分、上下半場計時、換邊、守門員撲救 — worker — verify: vitest
 - [ ] 6. AI：依位置（GK/DF/MF/FW）輸出 InputFrame；回應 L 叫傳球 — worker — verify: vitest 全 AI 對打 2 分鐘不當機、有射門
 - [ ] 7. Phaser 畫面：色塊人形＋名字、隊色、球影子與高度、鏡頭跟球、HUD（比分、時間、蓄力條、體力） — worker — verify: playwright 截圖

@@ -6,3 +6,4 @@ export * from './hash';
 export * from './field';
 export * from './state';
 export * from './step';
+export * from './actions';

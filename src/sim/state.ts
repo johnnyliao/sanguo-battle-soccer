@@ -40,6 +40,9 @@ export function createInitialState(
         hitDone: false,
         callPassTicks: 0,
         noTouchTicks: 0,
+        chargeTicks: 0,
+        specialKind: def.special.kind,
+        specialName: def.special.name,
         prevInput: { ...EMPTY_INPUT },
       });
     }
@@ -58,6 +61,7 @@ export function createInitialState(
       vz: 0,
       ownerIdx: -1,
       lastTouchIdx: -1,
+      special: null,
     },
     events: [],
   };
