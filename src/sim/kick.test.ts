@@ -166,6 +166,30 @@ describe('pass', () => {
 
     expect(choosePassTarget(state, state.players[0])).toBe(2);
   });
+
+  it('choosePassTarget picks a teammate who called for a pass, even behind, over one in front', () => {
+    const state = ownerState(300);
+    parkAway(state, [0, 1, 2]);
+    state.players[1].x = 200;
+    state.players[1].y = FIELD_D / 2;
+    state.players[1].callPassTicks = 10;
+    state.players[2].x = 400;
+    state.players[2].y = FIELD_D / 2;
+
+    expect(choosePassTarget(state, state.players[0])).toBe(1);
+  });
+
+  it('among several callers, choosePassTarget picks the highest callPassTicks, ties to the lowest idx', () => {
+    const state = ownerState(300);
+    parkAway(state, [0, 1, 2, 3]);
+    state.players[1].callPassTicks = 5;
+    state.players[2].callPassTicks = 20;
+    state.players[3].callPassTicks = 20;
+    expect(choosePassTarget(state, state.players[0])).toBe(2);
+
+    state.players[1].callPassTicks = 20;
+    expect(choosePassTarget(state, state.players[0])).toBe(1);
+  });
 });
 
 /** Steps once with `frame` and returns the events of that tick. */

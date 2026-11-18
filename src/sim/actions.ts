@@ -512,8 +512,23 @@ function kickClear(state: GameState, p: Player): void {
   state.events.push({ type: 'kick', playerIdx: p.idx, kind: 'clear', targetIdx: -1 });
 }
 
-/** Teammate for a pass: prefers the nearest one in front (cos > 0.3), else nearest overall. -1 if none. */
+/**
+ * Teammate for a pass: a teammate who called for the ball (callPassTicks > 0) wins regardless of facing
+ * (highest callPassTicks, ties: lowest idx). Otherwise prefers the nearest one in front (cos > 0.3),
+ * else nearest overall. -1 if none.
+ */
 export function choosePassTarget(state: GameState, p: Player): number {
+  let callIdx = -1;
+  let callTicks = 0;
+  for (const t of state.players) {
+    if (t.team !== p.team || t.idx === p.idx || t.action === 'down') continue;
+    if (t.callPassTicks > callTicks) {
+      callIdx = t.idx;
+      callTicks = t.callPassTicks;
+    }
+  }
+  if (callIdx !== -1) return callIdx;
+
   let frontIdx = -1;
   let frontScore = Infinity;
   let anyIdx = -1;
