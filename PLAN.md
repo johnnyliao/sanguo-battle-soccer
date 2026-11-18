@@ -7,7 +7,7 @@
 - 測試在 122 跑，headless 最多 2 個。
 
 # Steps
-- [ ] 1. 專案骨架：Vite + TS + Phaser 3.90，資料夾 src/sim、src/render、src/input、src/audio、src/data；vite base './'；空場景畫出 640×360 綠地 — worker — verify: `npm run build` 成功、`npx tsc --noEmit` 無錯
+- [x] 1. 專案骨架：Vite + TS + Phaser 3.90，資料夾 src/sim、src/render、src/input、src/audio、src/data；vite base './'；空場景畫出 640×360 綠地 — worker — verify: `npm run build` 成功、`npx tsc --noEmit` 無錯
 - [ ] 2. sim 核心：型別（GameState、Player、Ball、InputFrame）、種子 PRNG、60Hz step、場地與球門幾何、移動／衝刺、球物理（x,y,z、重力、彈跳、摩擦）、持球與碰撞 — worker — verify: vitest（同一輸入序列兩次 → 狀態 hash 相同；球落地會停）
 - [ ] 3. 角色資料：15 武將表、每隊正規化到 150、體型參數 — worker — verify: vitest
 - [ ] 4. 動作：傳球、射門、蓄力必殺（四種行為）、攻擊／鏟球／跳躍、體力與倒地、搶球 — worker — verify: vitest 各動作情境
