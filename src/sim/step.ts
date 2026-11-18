@@ -4,7 +4,6 @@ import {
   BALL_GROUND_FRICTION,
   BALL_RADIUS,
   BALL_STOP_SPEED,
-  DASH_MULT,
   DRIBBLE_OFFSET,
   DT,
   FIELD_D,
@@ -13,11 +12,9 @@ import {
   GRAVITY,
   PICKUP_MAX_Z,
   PICKUP_REACH,
-  PLAYER_ACCEL,
-  PLAYER_BASE_SPEED,
-  PLAYER_SPEED_PER_STAT,
   WALL_BOUNCE,
 } from './constants';
+import { clampPlayerToField, updateAction } from './actions';
 import { goalMouth, isInGoalMouth } from './field';
 import { EMPTY_INPUT, type GameState, type InputFrame, type Player } from './types';
 
@@ -29,7 +26,7 @@ export function step(state: GameState, inputs: InputFrame[]): GameState {
   state.events = [];
 
   for (let i = 0; i < state.players.length; i++) {
-    updatePlayer(state.players[i], inputs[i] ?? EMPTY_INPUT);
+    updateAction(state, state.players[i], inputs[i] ?? EMPTY_INPUT);
   }
 
   resolvePlayerCollisions(state.players);
@@ -45,60 +42,13 @@ export function step(state: GameState, inputs: InputFrame[]): GameState {
   return state;
 }
 
-function updatePlayer(p: Player, input: InputFrame): void {
-  switch (p.action) {
-    case 'normal':
-      moveNormal(p, input);
-      break;
-  }
-}
-
-function moveNormal(p: Player, input: InputFrame): void {
-  let dirX = 0;
-  let dirY = 0;
-  if (input.moveX !== 0 || input.moveY !== 0) {
-    const len = Math.sqrt(input.moveX * input.moveX + input.moveY * input.moveY);
-    dirX = input.moveX / len;
-    dirY = input.moveY / len;
-    p.facingX = dirX;
-    p.facingY = dirY;
-  }
-
-  let maxSpeed = PLAYER_BASE_SPEED + p.stats.speed * PLAYER_SPEED_PER_STAT;
-  if (input.dash) maxSpeed *= DASH_MULT;
-
-  const k = Math.min(1, (PLAYER_ACCEL * DT) / p.mass);
-  p.vx += (dirX * maxSpeed - p.vx) * k;
-  p.vy += (dirY * maxSpeed - p.vy) * k;
-
-  p.x += p.vx * DT;
-  p.y += p.vy * DT;
-  clampPlayerToField(p);
-}
-
-function clampPlayerToField(p: Player): void {
-  if (p.x < 0) {
-    p.x = 0;
-    p.vx = 0;
-  } else if (p.x > FIELD_W) {
-    p.x = FIELD_W;
-    p.vx = 0;
-  }
-  if (p.y < 0) {
-    p.y = 0;
-    p.vy = 0;
-  } else if (p.y > FIELD_D) {
-    p.y = FIELD_D;
-    p.vy = 0;
-  }
-}
-
-/** Pushes overlapping players apart in xy; the push is split by inverse mass (lighter moves more). */
+/** Pushes overlapping players apart in xy; the push is split by inverse mass (lighter moves more). Downed players are skipped. */
 function resolvePlayerCollisions(players: Player[]): void {
   for (let i = 0; i < players.length; i++) {
     for (let j = i + 1; j < players.length; j++) {
       const a = players[i];
       const b = players[j];
+      if (a.action === 'down' || b.action === 'down') continue;
       const dx = b.x - a.x;
       const dy = b.y - a.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -207,12 +157,19 @@ function updateBall(state: GameState): void {
 /** Unowned ball within reach of a free player is picked up by the nearest one (ties: lowest idx). */
 function updatePickup(state: GameState): void {
   const ball = state.ball;
-  if (ball.ownerIdx === -1 && ball.z < PICKUP_MAX_Z) {
+  if (ball.ownerIdx === -1) {
     let best = -1;
     let bestDist = Infinity;
     for (let i = 0; i < state.players.length; i++) {
       const p = state.players[i];
-      if (p.action !== 'normal' || p.noTouchTicks !== 0) continue;
+      if (p.noTouchTicks !== 0) continue;
+      if (p.action === 'normal') {
+        if (ball.z >= PICKUP_MAX_Z) continue;
+      } else if (p.action === 'jump') {
+        if (Math.abs(ball.z - p.z) >= PICKUP_MAX_Z) continue;
+      } else {
+        continue;
+      }
       const dx = ball.x - p.x;
       const dy = ball.y - p.y;
       const dist = Math.sqrt(dx * dx + dy * dy);

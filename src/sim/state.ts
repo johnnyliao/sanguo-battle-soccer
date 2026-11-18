@@ -1,5 +1,5 @@
 import type { BodySize, SizeParams } from '../data/types';
-import { FIELD_D, FIELD_W } from './constants';
+import { FIELD_D, FIELD_W, STAMINA_BASE, STAMINA_PER_STAT } from './constants';
 import { formationPosition } from './field';
 import { EMPTY_INPUT, type GameState, type MatchSetup, type Player } from './types';
 
@@ -14,6 +14,7 @@ export function createInitialState(
       const def = setup.teams[team][slot];
       const size = sizeParams[def.size];
       const pos = formationPosition(team, slot);
+      const maxStamina = STAMINA_BASE + def.stats.stamina * STAMINA_PER_STAT;
       players.push({
         idx: team * 5 + slot,
         charId: def.id,
@@ -32,8 +33,12 @@ export function createInitialState(
         vz: 0,
         facingX: team === 0 ? 1 : -1,
         facingY: 0,
+        stamina: maxStamina,
+        maxStamina,
         action: 'normal',
         actionTimer: 0,
+        hitDone: false,
+        callPassTicks: 0,
         noTouchTicks: 0,
         prevInput: { ...EMPTY_INPUT },
       });

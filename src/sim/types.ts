@@ -19,7 +19,17 @@ export const EMPTY_INPUT: InputFrame = {
   l: false,
 };
 
-export type PlayerAction = 'normal';
+export type PlayerAction =
+  | 'normal'
+  | 'punch'
+  | 'tackle'
+  | 'jump'
+  | 'flykick'
+  | 'hitstun'
+  | 'down'
+  | 'recover';
+
+export type AttackKind = 'punch' | 'tackle' | 'flykick';
 
 export interface Player {
   idx: number;
@@ -40,9 +50,15 @@ export interface Player {
   /** Unit vector of the last nonzero move direction. */
   facingX: number;
   facingY: number;
+  stamina: number;
+  maxStamina: number;
   action: PlayerAction;
   /** Ticks remaining in the current action. */
   actionTimer: number;
+  /** Current attack already hit someone. */
+  hitDone: boolean;
+  /** Ticks remaining for a called pass. */
+  callPassTicks: number;
   /** Ticks during which this player cannot pick up the ball. */
   noTouchTicks: number;
   prevInput: InputFrame;
@@ -63,7 +79,13 @@ export interface Ball {
 
 export type SimEvent =
   | { type: 'pickup'; playerIdx: number }
-  | { type: 'bounce'; strength: number };
+  | { type: 'bounce'; strength: number }
+  | { type: 'attack'; playerIdx: number; kind: AttackKind }
+  | { type: 'hit'; attackerIdx: number; victimIdx: number; kind: AttackKind; damage: number }
+  | { type: 'down'; playerIdx: number }
+  | { type: 'jump'; playerIdx: number }
+  | { type: 'callPass'; playerIdx: number }
+  | { type: 'looseBall'; playerIdx: number };
 
 export interface GameState {
   tick: number;
