@@ -19,6 +19,6 @@
 - [ ] 10. PK 大戰（6 區、時機、守門員猜方向、驟死） — worker — verify: vitest + 截圖
 - [ ] 11. ZzFX 音效 — worker — verify: 事件觸發時呼叫音效（單元測試 mock）
 - [ ] 12. 整合試玩、數值調整 — me + 使用者
-- [ ] 13. GitHub repo + Pages 上線 — me（待使用者同意建 repo）
+- [ ] 13. GitHub Pages 上線（repo 已建、已 push） — me
 
 # Lessons learned
