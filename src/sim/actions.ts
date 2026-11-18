@@ -88,6 +88,10 @@ const CLEAR_SPEED = 300;
 const CLEAR_VZ = 150;
 const GK_DIVE_VZ = 120;
 const GK_DIVE_DAMP = 0.95;
+const LOB_MIN_SPEED = 120;
+const LOB_MAX_SPEED = 440;
+/** A lob lands this far past the goal line along its shot direction. */
+const LOB_OVERSHOOT = 10;
 
 /** Runs one tick of the player's current action. Mutates the player and may mutate the ball and events. */
 export function updateAction(state: GameState, p: Player, input: InputFrame): void {
@@ -459,6 +463,18 @@ export function specialSpeed(kind: SpecialKind): number {
   }
 }
 
+/** Flight time of a lob from launch to landing: rising at GRAVITY, falling at GRAVITY * fall multiplier. */
+function lobFlightTime(): number {
+  const up = SPECIAL_LOB_VZ / GRAVITY;
+  const apex = (SPECIAL_LOB_VZ * SPECIAL_LOB_VZ) / (2 * GRAVITY);
+  return up + Math.sqrt((2 * apex) / (GRAVITY * SPECIAL_LOB_FALL_GRAVITY_MULT));
+}
+
+/** Horizontal speed that brings a lob down LOB_OVERSHOOT past the goal line, `dist` away along the shot. */
+function lobSpeed(dist: number): number {
+  return Math.min(LOB_MAX_SPEED, Math.max(LOB_MIN_SPEED, (dist + LOB_OVERSHOOT) / lobFlightTime()));
+}
+
 function startSpecial(state: GameState, p: Player): void {
   const ball = state.ball;
   const goalX = opponentGoalX(state, p.team);
@@ -467,7 +483,7 @@ function startSpecial(state: GameState, p: Player): void {
   const len = Math.sqrt(dx * dx + dy * dy);
   const dirX = len > 0 ? dx / len : attackDir(state, p.team);
   const dirY = len > 0 ? dy / len : 0;
-  const speed = specialSpeed(p.specialKind);
+  const speed = p.specialKind === 'lob' ? lobSpeed(len) : specialSpeed(p.specialKind);
 
   p.stamina -= SPECIAL_STAMINA_COST;
   releaseBall(state, p, dirX * speed, dirY * speed, p.specialKind === 'lob' ? SPECIAL_LOB_VZ : 0);
@@ -478,6 +494,7 @@ function startSpecial(state: GameState, p: Player): void {
     ticks: 0,
     dirX,
     dirY,
+    speed,
     hit: [],
     rolled: [],
   };
@@ -508,7 +525,10 @@ function shoot(state: GameState, p: Player, input: InputFrame, charge: number): 
 }
 
 function kickClear(state: GameState, p: Player): void {
-  releaseBall(state, p, p.facingX * CLEAR_SPEED, p.facingY * CLEAR_SPEED, CLEAR_VZ);
+  // Inside its own area a player clearing toward its own goal is mirrored up-field instead.
+  const backward = p.facingX * attackDir(state, p.team) < 0;
+  const dirX = backward && inOwnArea(state, p) ? -p.facingX : p.facingX;
+  releaseBall(state, p, dirX * CLEAR_SPEED, p.facingY * CLEAR_SPEED, CLEAR_VZ);
   state.events.push({ type: 'kick', playerIdx: p.idx, kind: 'clear', targetIdx: -1 });
 }
 
@@ -676,6 +696,8 @@ function applyHit(state: GameState, attacker: Player, victim: Player, kind: Atta
   const ball = state.ball;
   if (ball.ownerIdx === victim.idx) {
     ball.ownerIdx = -1;
+    // The attacker's hit is the last touch, so a knock-in (even into the victim's own goal) is credited to the attacker.
+    ball.lastTouchIdx = attacker.idx;
     ball.vx = dirX * LOOSE_BALL_SPEED + (rngNext(state) * 2 - 1) * LOOSE_BALL_SPREAD;
     ball.vy = dirY * LOOSE_BALL_SPEED + (rngNext(state) * 2 - 1) * LOOSE_BALL_SPREAD;
     ball.vz = LOOSE_BALL_VZ;

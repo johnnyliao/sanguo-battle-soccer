@@ -360,6 +360,22 @@ describe('special shots', () => {
     expect(state.ball.z).toBe(0);
   });
 
+  it.each([150, 250, 350, 450])('lob from %i px out in front of an empty goal ends in the net', (dist) => {
+    const state = ownerState(0);
+    const p = state.players[0];
+    p.x = FIELD_W - dist - p.radius - DRIBBLE_OFFSET;
+    p.specialKind = 'lob';
+    p.specialName = 'lob';
+    fullChargeRelease(state);
+
+    const goals: SimEvent[] = [];
+    for (let t = 0; t < 240; t++) {
+      step(state, []);
+      goals.push(...state.events.filter((e) => e.type === 'goal'));
+    }
+    expect(goals).toContainEqual({ type: 'goal', team: 0, scorerIdx: 0 });
+  });
+
   it('pierce knocks down an opponent in its path and keeps going', () => {
     const state = specialFromCentre('pierce');
     const victim = placeVictimOnPath(state);
@@ -402,6 +418,56 @@ describe('special shots', () => {
 
     expect(ended).toBe(true);
     expect(pickups).toEqual([]);
+  });
+});
+
+describe('goalkeeper owned ball', () => {
+  /** Ticks stepped with no input, collecting the goal events seen. */
+  function goalsOver(state: GameState, ticks: number): SimEvent[] {
+    const goals: SimEvent[] = [];
+    for (let t = 0; t < ticks; t++) {
+      step(state, []);
+      goals.push(...state.events.filter((e) => e.type === 'goal'));
+    }
+    return goals;
+  }
+
+  /** Team 0 keeper (idx 0) on its own goal line (x=0), facing its own goal, holding the ball. */
+  function keeperOnLine(): GameState {
+    return ownerState(0, -1);
+  }
+
+  it('K pass from the goal line, facing the own goal, does not concede within 120 ticks', () => {
+    const state = keeperOnLine();
+    step(state, inputFor(0, { k: true }));
+    const goals = goalsOver(state, 120);
+    expect(goals.filter((e) => e.type === 'goal' && e.team === 1)).toEqual([]);
+  });
+
+  it('J clear from the goal line, facing the own goal, does not concede within 120 ticks', () => {
+    const state = keeperOnLine();
+    step(state, inputFor(0, { j: true }));
+    const goals = goalsOver(state, 120);
+    expect(goals.filter((e) => e.type === 'goal' && e.team === 1)).toEqual([]);
+  });
+
+  it('a punch that knocks the keeper\'s ball into its own goal scores for the puncher', () => {
+    const state = keeperOnLine();
+    state.players[0].x = 20;
+    state.players[5].x = 36;
+    state.players[5].y = FIELD_D / 2;
+    state.players[5].facingX = -1;
+    state.players[5].facingY = 0;
+    const events = stepAndCollect(state, inputFor(5, { j: true }));
+    events.push(...goalsOver(state, 120));
+    expect(events).toContainEqual({ type: 'goal', team: 1, scorerIdx: 5 });
+  });
+
+  it('the owned ball stays inside the field while its owner stands on the goal line', () => {
+    const state = keeperOnLine();
+    step(state, []);
+    expect(state.ball.x).toBeGreaterThan(0);
+    expect(state.ball.x).toBeLessThan(FIELD_W);
   });
 });
 

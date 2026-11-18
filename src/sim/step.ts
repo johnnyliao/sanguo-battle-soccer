@@ -23,7 +23,7 @@ import {
   SPECIAL_ZIGZAG_FREQ,
   WALL_BOUNCE,
 } from './constants';
-import { applySpecialHit, clampPlayerToField, specialSpeed, updateAction } from './actions';
+import { applySpecialHit, clampPlayerToField, updateAction } from './actions';
 import { inOwnArea, goalMouth, isInGoalMouth } from './field';
 import { updateMatch } from './match';
 import { updatePk } from './pk';
@@ -121,8 +121,9 @@ function updatePossession(state: GameState): void {
 
   const p = state.players[ball.ownerIdx];
   const offset = p.radius + DRIBBLE_OFFSET;
-  ball.x = p.x + p.facingX * offset;
-  ball.y = p.y + p.facingY * offset;
+  // Kept inside the field: an owned ball behind the goal line would score for the opponent on release.
+  ball.x = clamp(p.x + p.facingX * offset, BALL_RADIUS + 1, FIELD_W - BALL_RADIUS - 1);
+  ball.y = clamp(p.y + p.facingY * offset, 0, FIELD_D);
   ball.z = 0;
   ball.vx = p.vx;
   ball.vy = p.vy;
@@ -214,7 +215,7 @@ function advanceSpecial(state: GameState): boolean {
   if (sp === null) return false;
   sp.ticks++;
 
-  const speed = specialSpeed(sp.kind);
+  const speed = sp.speed;
   if (sp.kind === 'zigzag') {
     const lateral = Math.cos(sp.ticks * SPECIAL_ZIGZAG_FREQ) * SPECIAL_ZIGZAG_AMP;
     b.vx = sp.dirX * speed - sp.dirY * lateral;

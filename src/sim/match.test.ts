@@ -5,6 +5,7 @@ import {
   FIELD_W,
   GOAL_CELEBRATE_TICKS,
   HALFTIME_TICKS,
+  SPECIAL_STRAIGHT_SPEED,
   TICK_HZ,
   createInitialState,
   hashState,
@@ -379,6 +380,7 @@ describe('goalkeeper catching', () => {
         ticks: 0,
         dirX: 1,
         dirY: 0,
+        speed: SPECIAL_STRAIGHT_SPEED,
         hit: [],
         rolled: [],
       };

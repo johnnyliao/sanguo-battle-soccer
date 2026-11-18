@@ -78,6 +78,8 @@ export interface SpecialShot {
   ticks: number;
   dirX: number;
   dirY: number;
+  /** Horizontal launch speed, set at release. */
+  speed: number;
   /** Player idxs already hit by this special. */
   hit: number[];
   /** Goalkeeper idxs that already rolled a save on this special (separate from hit so contact still applies on a failed save). */

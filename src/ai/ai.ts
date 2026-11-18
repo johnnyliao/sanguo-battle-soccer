@@ -45,9 +45,11 @@ const HEADER_MAX_Z = 55;
 
 const SHOT_RANGE_FWD = 330;
 const SHOT_RANGE_DF = 250;
-const SHOT_CLEAR_RANGE = 60;
-const SHOT_FULL_CHANCE = 0.4;
-const SHOT_MIN_STAMINA = 30;
+const SHOT_CLEAR_RANGE = 40;
+const SHOT_FULL_CHANCE = 0.6;
+const SHOT_MIN_STAMINA = 25;
+/** Lob specials are charged from this far out, whatever the role. */
+const LOB_SHOT_RANGE = 440;
 
 const PRESSURE_RANGE = 40;
 const PRESSURE_PASS_CHANCE = 0.04;
@@ -127,14 +129,20 @@ function ownerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPla
 
   if (hasCaller(state, p)) return passFrame(p, null);
 
+  const goalDist = Math.abs(goalX - p.x);
   const shotRange = p.role === 'DF' ? SHOT_RANGE_DF : SHOT_RANGE_FWD;
-  if (Math.abs(goalX - p.x) < shotRange && p.facingX * dir > 0 && !p.prevInput.j) {
+  const inShotRange = goalDist < shotRange;
+  const lobFar = p.specialKind === 'lob' && goalDist < LOB_SHOT_RANGE;
+  if ((inShotRange || lobFar) && p.facingX * dir > 0 && !p.prevInput.j) {
     const full =
       p.stamina >= SHOT_MIN_STAMINA &&
       nearestOpponent(state, team, p.x, p.y, SHOT_CLEAR_RANGE) === null &&
       nextRandom(ai) < SHOT_FULL_CHANCE;
-    s.intent = full ? 'charge' : 'tap';
-    return frame(steerTo(p, goalX, CENTER_Y), { j: true });
+    // Outside its role range a player only shoots when the charge is full (a lob special).
+    if (full || inShotRange) {
+      s.intent = full ? 'charge' : 'tap';
+      return frame(steerTo(p, goalX, CENTER_Y), { j: true });
+    }
   }
 
   if (opponentAhead(state, p, PRESSURE_RANGE, Infinity) && nextRandom(ai) < PRESSURE_PASS_CHANCE) {
@@ -161,10 +169,10 @@ function gkOwnerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perP
     s.intent = 'gkHold';
     s.holdTicks = GK_HOLD_MIN + Math.floor(nextRandom(ai) * GK_HOLD_SPAN);
   }
-  if (s.holdTicks > 0) {
-    return frame(steerTo(p, p.x + attackDir(state, p.team) * GK_FORWARD_STEP, CENTER_Y));
-  }
-  return frame(NO_MOVE, { k: !p.prevInput.k });
+  // Facing up-field both while holding and on the pass press, so the owned ball never sits behind the goal line.
+  const upField = steerTo(p, p.x + attackDir(state, p.team) * GK_FORWARD_STEP, CENTER_Y);
+  if (s.holdTicks > 0) return frame(upField);
+  return frame(upField, { k: !p.prevInput.k });
 }
 
 /** Ball is loose or the other team has it. */
