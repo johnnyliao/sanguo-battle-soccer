@@ -115,7 +115,37 @@ export type SimEvent =
   | { type: 'goal'; team: 0 | 1; scorerIdx: number }
   | { type: 'matchEnd'; score: [number, number] }
   | { type: 'pkStart' }
+  | { type: 'pkKick'; shooterIdx: number }
+  | { type: 'pkResult'; team: 0 | 1; outcome: 'goal' | 'save' | 'miss' }
+  | { type: 'pkEnd'; winner: 0 | 1; score: [number, number] }
   | { type: 'save'; playerIdx: number; caught: boolean };
+
+export type PkStage = 'order' | 'aim' | 'flight' | 'result' | 'done';
+
+/** Penalty shootout state. Set on MatchState.pk when the 2nd half ends level. */
+export interface PkState {
+  stage: PkStage;
+  stageTimer: number;
+  /** Player idxs per team (5 each), null until chosen. */
+  order: [number[] | null, number[] | null];
+  kicks: [('goal' | 'miss')[], ('goal' | 'miss')[]];
+  kickingTeam: 0 | 1;
+  firstTeam: 0 | 1;
+  shooterIdx: number;
+  keeperIdx: number;
+  /** Ticks J has been held since the press; -1 = meter not started. */
+  meterTicks: number;
+  /** 0..1, locked at release. */
+  power: number;
+  /** Locked at release. col 0 = top/far post, 1 = center, 2 = bottom/near post. */
+  aimCol: number;
+  aimHigh: boolean;
+  guessCol: number;
+  guessHigh: boolean;
+  outcome: null | 'goal' | 'save' | 'miss';
+  score: [number, number];
+  winner: -1 | 0 | 1;
+}
 
 export type MatchPhase = 'kickoff' | 'play' | 'goal' | 'halftime' | 'fulltime' | 'pk';
 
@@ -134,6 +164,8 @@ export interface MatchState {
   kickoffTeam: 0 | 1;
   firstKickoffTeam: 0 | 1;
   lastGoal: null | { team: 0 | 1; scorerIdx: number; tick: number };
+  /** null until the penalty shootout starts. */
+  pk: PkState | null;
 }
 
 export interface GameState {

@@ -26,6 +26,7 @@ import {
 import { applySpecialHit, clampPlayerToField, specialSpeed, updateAction } from './actions';
 import { inOwnArea, goalMouth, isInGoalMouth } from './field';
 import { updateMatch } from './match';
+import { updatePk } from './pk';
 import { rngNext } from './rng';
 import {
   EMPTY_INPUT,
@@ -52,19 +53,25 @@ const GK_PARRY_SPREAD = 60;
 export function step(state: GameState, inputs: InputFrame[]): GameState {
   state.events = [];
 
-  // Outside live play (kickoff, goal, halftime, full time, PK) every player gets an empty frame.
+  // Outside live play (kickoff, goal, halftime, full time) every player gets an empty frame.
+  // The PK reads inputs for its kick stages; players do not move normally during it.
   const live = state.match.phase === 'play';
-  const frames = state.players.map((_, i) => (live ? (inputs[i] ?? EMPTY_INPUT) : EMPTY_INPUT));
+  const pk = state.match.phase === 'pk';
+  const frames = state.players.map((_, i) => (live || pk ? (inputs[i] ?? EMPTY_INPUT) : EMPTY_INPUT));
 
-  for (let i = 0; i < state.players.length; i++) {
-    updateAction(state, state.players[i], frames[i]);
+  if (pk) {
+    updatePk(state, frames);
+  } else {
+    for (let i = 0; i < state.players.length; i++) {
+      updateAction(state, state.players[i], frames[i]);
+    }
+
+    resolvePlayerCollisions(state.players);
+    updatePossession(state);
+    updateBall(state);
+    updatePickup(state);
+    updateMatch(state);
   }
-
-  resolvePlayerCollisions(state.players);
-  updatePossession(state);
-  updateBall(state);
-  updatePickup(state);
-  updateMatch(state);
 
   for (let i = 0; i < state.players.length; i++) {
     state.players[i].prevInput = { ...frames[i] };

@@ -7,6 +7,7 @@ import {
   KICKOFF_TICKS,
 } from './constants';
 import { attackDir, formationPosition, goalMouth } from './field';
+import { startPk } from './pk';
 import type { GameState } from './types';
 
 /** Kicking-off forward starts this far behind the center spot, on own half. */
@@ -91,6 +92,7 @@ function endHalf(state: GameState): void {
     state.events.push({ type: 'matchEnd', score: [m.score[0], m.score[1]] });
   } else {
     m.phase = 'pk';
+    startPk(state);
     state.events.push({ type: 'pkStart' });
   }
 }

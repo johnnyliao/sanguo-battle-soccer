@@ -12,6 +12,8 @@ import {
   type InputFrame,
   type Player,
 } from '../sim';
+import { computePkAIInputs, createPkAIState, type PkAIState } from './pkAi';
+import { nextRandom } from './random';
 
 /**
  * Computer players. Each AI-controlled player gets one InputFrame per tick, built only from the
@@ -22,6 +24,8 @@ export interface AIState {
   /** mulberry32 state (uint32), private to the AI. */
   rng: number;
   perPlayer: { holdTicks: number; cooldown: number; intent: string }[];
+  /** Penalty shootout choices for the current kick. */
+  pk: PkAIState;
 }
 
 const PLAYER_COUNT = 10;
@@ -85,20 +89,13 @@ export function createAIState(seed: number): AIState {
   return {
     rng: seed >>> 0,
     perPlayer: Array.from({ length: PLAYER_COUNT }, () => ({ holdTicks: 0, cooldown: 0, intent: 'support' })),
+    pk: createPkAIState(),
   };
-}
-
-/** mulberry32 step over ai.rng. Returns a float in [0, 1) and advances ai.rng. */
-function nextRandom(ai: AIState): number {
-  ai.rng = (ai.rng + 0x6d2b79f5) >>> 0;
-  let t = ai.rng;
-  t = Math.imul(t ^ (t >>> 15), t | 1);
-  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
 
 /** One InputFrame per player. Human-controlled slots get EMPTY_INPUT; the caller overwrites them. */
 export function computeAIInputs(state: GameState, ai: AIState, humanMask: boolean[]): InputFrame[] {
+  if (state.match.phase === 'pk') return computePkAIInputs(state, ai, humanMask);
   return state.players.map((p) => (humanMask[p.idx] ? { ...EMPTY_INPUT } : decide(state, ai, p)));
 }
 

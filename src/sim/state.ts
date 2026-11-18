@@ -44,6 +44,7 @@ export function createInitialState(
       kickoffTeam: 0,
       firstKickoffTeam: 0,
       lastGoal: null,
+      pk: null,
     },
     events: [],
   };
