@@ -17,7 +17,7 @@
 - playwright＋chromium 已在 ~/mountain-race-dev/node_modules，可沿用（--use-angle=swiftshader --enable-unsafe-swiftshader）。
 - GitHub：public repo johnnyliao/sanguo-battle-soccer（branch main）。remote = git@github-sg:johnnyliao/sanguo-battle-soccer.git，
   122 用專屬可寫 deploy key ~/.ssh/sanguo_deploy（ssh config 別名 github-sg，走 ssh.github.com:443）。122 可直接 commit / push。
-  push 前先 git fetch。GitHub Pages 尚未設定（PLAN 第 13 步）。
+  push 前先 git fetch。GitHub Pages：https://johnnyliao.github.io/sanguo-battle-soccer/ ，來源是 gh-pages 分支（npm run build 後把 dist 加 .nojekyll 強推到 gh-pages）。
 
 ## 已定案的設計（2026-11-18 訪談，使用者全部同意）
 ### 技術
