@@ -15,8 +15,8 @@
 - [x] 6. AI：依位置（GK/DF/MF/FW）輸出 InputFrame；回應 L 叫傳球 — worker — verify: vitest 全 AI 對打 2 分鐘不當機、有射門
 - [x] 7. Phaser 畫面：色塊人形＋名字、隊色、球影子與高度、鏡頭跟球、HUD（比分、時間、蓄力條、體力） — worker — verify: playwright 截圖
 - [x] 8. 輸入：鍵盤（WASD/J/K/L、雙擊衝刺）＋手把 → InputFrame — worker — verify: playwright 按鍵後角色移動
-- [ ] 9. 選隊畫面（不可同國）→ 選操控武將 → 比賽 → 結算 — worker — verify: playwright 走完流程截圖
-- [ ] 10. PK 大戰（6 區、時機、守門員猜方向、驟死） — worker — verify: vitest + 截圖
+- [x] 9. 選隊畫面（不可同國）→ 選操控武將 → 比賽 → 結算 — worker — verify: playwright 走完流程截圖
+- [x] 10. PK 大戰（6 區、時機、守門員猜方向、驟死） — worker — verify: vitest + 截圖
 - [x] 11. ZzFX 音效 — worker — verify: 事件觸發時呼叫音效（單元測試 mock）
 - [ ] 12. 整合試玩、數值調整 — me + 使用者
 - [ ] 13. GitHub Pages 上線（repo 已建、已 push） — me

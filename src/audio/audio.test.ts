@@ -19,6 +19,12 @@ describe('soundsForEvent', () => {
     expect(soundsForEvent({ type: 'bounce', strength: 90 })).toEqual([{ name: 'bounce', volume: 0.9 }]);
   });
 
+  it('plays the goal sound for a scored penalty only', () => {
+    expect(soundsForEvent({ type: 'pkResult', team: 0, outcome: 'goal' })).toEqual([{ name: 'goal', volume: 1 }]);
+    expect(soundsForEvent({ type: 'pkResult', team: 1, outcome: 'miss' })).toEqual([]);
+    expect(soundsForEvent({ type: 'pkResult', team: 1, outcome: 'save' })).toEqual([]);
+  });
+
   it('returns nothing for pickup and unknown types', () => {
     expect(soundsForEvent({ type: 'pickup' })).toEqual([]);
     expect(soundsForEvent({ type: 'nope' })).toEqual([]);

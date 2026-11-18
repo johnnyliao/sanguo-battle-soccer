@@ -50,6 +50,8 @@ export function soundsForEvent(e: SimEvent): SoundCue[] {
       return [{ name: 'goal', volume: 1 }];
     case 'whistle':
       return [{ name: 'whistle', volume: 1 }];
+    case 'pkResult':
+      return e.outcome === 'goal' ? [{ name: 'goal', volume: 1 }] : [];
     case 'bounce': {
       const strength = typeof e.strength === 'number' ? e.strength : 0;
       if (!(strength > 80)) return [];

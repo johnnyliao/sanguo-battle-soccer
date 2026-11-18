@@ -13,7 +13,8 @@ export interface ResultInit {
   home: Country;
   away: Country;
   score: [number, number];
-  pk: { score: [number, number] } | null;
+  /** Penalty shootout score (goals per team), null when the match was not decided by PK. */
+  pk: [number, number] | null;
   scorers: ResultScorer[];
 }
 
@@ -25,7 +26,7 @@ function hexCss(color: number): string {
 function winnerOf(r: ResultInit): 0 | 1 | null {
   const [s0, s1] = r.score;
   if (s0 !== s1) return s0 > s1 ? 0 : 1;
-  if (r.pk && r.pk.score[0] !== r.pk.score[1]) return r.pk.score[0] > r.pk.score[1] ? 0 : 1;
+  if (r.pk && r.pk[0] !== r.pk[1]) return r.pk[0] > r.pk[1] ? 0 : 1;
   return null;
 }
 
@@ -44,6 +45,7 @@ export class ResultScene extends Phaser.Scene {
 
   create(): void {
     (window as unknown as { __sgScene: string }).__sgScene = 'ResultScene';
+    (window as unknown as { __sgResult: ResultInit }).__sgResult = this.result;
     this.started = false;
     const r = this.result;
     const homeInfo = COUNTRY_INFO[r.home];
@@ -76,7 +78,7 @@ export class ResultScene extends Phaser.Scene {
 
     if (r.pk) {
       this.add
-        .text(320, 136, `PK ${r.pk.score[0]} - ${r.pk.score[1]}`, style('18px', '#ffffff'))
+        .text(320, 136, `PK ${r.pk[0]} - ${r.pk[1]}`, style('18px', '#ffffff'))
         .setOrigin(0.5);
     }
 

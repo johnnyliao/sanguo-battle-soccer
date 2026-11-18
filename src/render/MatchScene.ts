@@ -14,11 +14,15 @@ import {
   EMPTY_INPUT,
   GOAL_HALF_W,
   TICK_HZ,
+  autoPkOrders,
   createInitialState,
+  pkMeterValue,
   step,
+  submitPkOrder,
   type GameState,
+  type InputFrame,
   type MatchPhase,
-  type MatchState,
+  type PkState,
   type Player,
   type SimEvent,
 } from '../sim';
@@ -45,6 +49,15 @@ interface TrailPoint {
   z: number;
 }
 
+interface PkOrderRow {
+  slot: Phaser.GameObjects.Text;
+  role: Phaser.GameObjects.Text;
+  name: Phaser.GameObjects.Text;
+  stats: Phaser.GameObjects.Text;
+}
+
+type HudStyle = (color: string, size: string, stroke?: boolean) => Phaser.Types.GameObjects.Text.TextStyle;
+
 const STEP_MS = 1000 / TICK_HZ;
 const MAX_STEPS_PER_FRAME = 4;
 const MAX_FRAME_MS = 100;
@@ -53,6 +66,33 @@ const TRAIL_LEN = 8;
 const PLAY_AREA_TOP = FIELD_TOP;
 const GRASS_X0 = -60;
 const GRASS_X1 = FIELD_W + 60;
+
+/** Regulation kicks per team in the shootout (sim/pk.ts uses the same count). */
+const PK_ROUNDS = 5;
+/** Shootout camera: fixed on the right goal. */
+const PK_CAMERA_X = FIELD_W + 40 - 640;
+const PK_RESULT_BANNER_MS = 1200;
+const PK_PANEL_X = 0;
+const PK_PANEL_Y = 36;
+const PK_PANEL_W = 196;
+const PK_PANEL_H = 58;
+const PK_MARK_X0 = 92;
+const PK_MARK_STEP = 18;
+const PK_AIM_X = 552;
+const PK_AIM_Y = 44;
+const PK_CELL_W = 24;
+const PK_CELL_H = 22;
+const PK_CELL_GAP = 2;
+const PK_METER_X = 468;
+const PK_METER_Y = 332;
+const PK_METER_W = 160;
+const PK_METER_H = 10;
+const ORDER_BOX_X = 130;
+const ORDER_BOX_Y = 40;
+const ORDER_BOX_W = 380;
+const ORDER_BOX_H = 276;
+const ORDER_ROW_Y0 = 98;
+const ORDER_ROW_H = 36;
 
 const FONT = '"Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif';
 const SKIN = 0xf1c27d;
@@ -95,8 +135,10 @@ export class MatchScene extends Phaser.Scene {
   private localInput!: LocalInput;
   private aiState!: AIState;
   private humanMask: boolean[] = [];
-  /** Test-only (`?ai=0`): non-human players stand still instead of running AI. */
+  /** Test-only (`?ai=0`): non-human players stand still instead of running AI (the shootout still runs AI). */
   private aiOff = false;
+  /** The human's InputFrame from the latest sim tick. */
+  private humanInput: InputFrame = { ...EMPTY_INPUT };
   private audio = new AudioPlayer();
   private accumulator = 0;
   private teamColors: [number, number] = [0, 0];
@@ -119,6 +161,22 @@ export class MatchScene extends Phaser.Scene {
   private prevPhase: MatchPhase | null = null;
   private scorers: ResultScorer[] = [];
   private resultQueued = false;
+
+  private pkObjs: Phaser.GameObjects.Components.Visible[] = [];
+  private pkHudGfx!: Phaser.GameObjects.Graphics;
+  private pkAimGfx!: Phaser.GameObjects.Graphics;
+  private pkScoreText!: Phaser.GameObjects.Text;
+  private pkHomeText!: Phaser.GameObjects.Text;
+  private pkAwayText!: Phaser.GameObjects.Text;
+  private pkMeterLabel!: Phaser.GameObjects.Text;
+  private pkOrderKeys!: Record<'W' | 'S' | 'J' | 'K', Phaser.Input.Keyboard.Key>;
+  private pkOrderObjs: Phaser.GameObjects.Components.Visible[] = [];
+  private pkOrderGfx!: Phaser.GameObjects.Graphics;
+  private pkOrderRows: PkOrderRow[] = [];
+  private pkOrderCount!: Phaser.GameObjects.Text;
+  private pkOrderOpen = false;
+  private pkOrderCursor = 0;
+  private pkOrderPicks: number[] = [];
 
   constructor() {
     super('MatchScene');
@@ -176,6 +234,7 @@ export class MatchScene extends Phaser.Scene {
   }
 
   update(time: number, delta: number): void {
+    this.updatePkOrder();
     this.accumulator += Math.min(delta, MAX_FRAME_MS);
     let steps = 0;
     while (this.accumulator >= STEP_MS && steps < MAX_STEPS_PER_FRAME) {
@@ -189,10 +248,12 @@ export class MatchScene extends Phaser.Scene {
   }
 
   private tickOnce(): void {
-    const inputs = this.aiOff
+    const inShootout = this.state.match.phase === 'pk';
+    const inputs = this.aiOff && !inShootout
       ? this.state.players.map(() => ({ ...EMPTY_INPUT }))
       : computeAIInputs(this.state, this.aiState, this.humanMask);
     inputs[this.humanIdx] = this.localInput.sample();
+    this.humanInput = inputs[this.humanIdx];
     step(this.state, inputs);
     this.audio.handleEvents(this.state.events);
     this.updateTrail();
@@ -221,6 +282,12 @@ export class MatchScene extends Phaser.Scene {
         this.showBanner(`進球！ ${players[e.scorerIdx].name}`, 2000);
       } else if (e.type === 'special') {
         this.showSpecial(`${e.name}！`, SPECIAL_COLORS[e.kind]);
+      } else if (e.type === 'pkResult') {
+        const text = e.outcome === 'goal' ? '進球！' : e.outcome === 'save' ? '撲救！' : '射偏！';
+        this.showBanner(text, PK_RESULT_BANNER_MS);
+      } else if (e.type === 'pkEnd') {
+        const winner = COUNTRY_INFO[e.winner === 0 ? this.homeCountry : this.awayCountry].name;
+        this.showBanner(`${winner} 勝利！`, Number.POSITIVE_INFINITY);
       }
     }
   }
@@ -240,6 +307,7 @@ export class MatchScene extends Phaser.Scene {
         break;
       case 'pk':
         this.showBanner('PK 大戰', 2000);
+        autoPkOrders(this.state, 0);
         break;
       default:
         break;
@@ -259,12 +327,11 @@ export class MatchScene extends Phaser.Scene {
     this.resultQueued = true;
     this.time.delayedCall(3000, () => {
       const { match } = this.state;
-      const pk = (match as MatchState & { pk?: { score: [number, number] } }).pk ?? null;
       const data: ResultInit = {
         home: this.homeCountry,
         away: this.awayCountry,
         score: [match.score[0], match.score[1]],
-        pk,
+        pk: match.pk ? [match.pk.score[0], match.pk.score[1]] : null,
         scorers: this.scorers,
       };
       this.scene.start('ResultScene', data);
@@ -285,7 +352,11 @@ export class MatchScene extends Phaser.Scene {
 
   private drawAll(time: number): void {
     const cam = this.cameras.main;
-    cam.scrollX += (cameraTargetX(this.state.ball.x) - cam.scrollX) * CAMERA_LERP;
+    if (this.state.match.phase === 'pk') {
+      cam.scrollX = PK_CAMERA_X;
+    } else {
+      cam.scrollX += (cameraTargetX(this.state.ball.x) - cam.scrollX) * CAMERA_LERP;
+    }
     cam.scrollY = 0;
 
     this.state.players.forEach((p, i) => this.drawPlayer(this.playerViews[i], p, time));
@@ -560,16 +631,109 @@ export class MatchScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(hudDepth + 2)
       .setVisible(false);
+
+    this.createPkHud(style, hudDepth);
+    this.createPkOrder(style, hudDepth);
+  }
+
+  private createPkHud(style: HudStyle, depth: number): void {
+    const add = (x: number, y: number, color: string, size: string, text = '') =>
+      this.add
+        .text(x, y, text, style(color, size))
+        .setOrigin(0, 0.5)
+        .setScrollFactor(0)
+        .setDepth(depth + 1);
+    this.pkHudGfx = this.add.graphics().setScrollFactor(0).setDepth(depth);
+    this.pkAimGfx = this.add.graphics().setScrollFactor(0).setDepth(depth + 1);
+    this.pkScoreText = add(8, 46, '#ffffff', '13px');
+    const home = COUNTRY_INFO[this.homeCountry];
+    const away = COUNTRY_INFO[this.awayCountry];
+    this.pkHomeText = add(8, 64, hexCss(home.color), '13px', home.name);
+    this.pkAwayText = add(8, 85, hexCss(away.color), '13px', away.name);
+    this.pkMeterLabel = add(PK_METER_X - 6, PK_METER_Y + PK_METER_H / 2, '#ffffff', '12px', '力量')
+      .setOrigin(1, 0.5);
+    this.pkObjs = [
+      this.pkHudGfx,
+      this.pkAimGfx,
+      this.pkScoreText,
+      this.pkHomeText,
+      this.pkAwayText,
+      this.pkMeterLabel,
+    ];
+  }
+
+  /** Kicking-order overlay for the human team (shown during stage 'order' while the order is still open). */
+  private createPkOrder(style: HudStyle, depth: number): void {
+    this.pkOrderOpen = false;
+    this.pkOrderCursor = 0;
+    this.pkOrderPicks = [];
+    this.pkOrderKeys = this.input.keyboard!.addKeys('W,S,J,K') as Record<
+      'W' | 'S' | 'J' | 'K',
+      Phaser.Input.Keyboard.Key
+    >;
+
+    const add = (
+      x: number,
+      y: number,
+      text: string,
+      color: string,
+      size: string,
+      originX: number,
+      stroke = true,
+    ) =>
+      this.add
+        .text(x, y, text, style(color, size, stroke))
+        .setOrigin(originX, 0.5)
+        .setScrollFactor(0)
+        .setDepth(depth + 1);
+
+    this.pkOrderGfx = this.add.graphics().setScrollFactor(0).setDepth(depth);
+    const title = add(320, 52, '選擇踢球順序', '#ffd98a', '18px', 0.5);
+    const hint = add(320, 74, 'W/S 移動　J 加入（依序踢）　K 取消最後一位', '#ffffff', '12px', 0.5, false);
+    this.pkOrderCount = add(320, 292, '', '#ffffff', '12px', 0.5);
+    this.pkOrderRows = Array.from({ length: PK_ROUNDS }, (_, i) => {
+      const y = ORDER_ROW_Y0 + i * ORDER_ROW_H;
+      return {
+        slot: add(166, y, '', '#ffd98a', '16px', 0.5),
+        role: add(200, y, '', '#9fd3ff', '12px', 0.5),
+        name: add(226, y, '', '#ffffff', '16px', 0),
+        stats: add(478, y, '', '#cfd8e3', '12px', 1, false),
+      };
+    });
+    this.pkOrderObjs = [
+      this.pkOrderGfx,
+      title,
+      hint,
+      this.pkOrderCount,
+      ...this.pkOrderRows.flatMap((r) => [r.slot, r.role, r.name, r.stats]),
+    ];
+    this.setPkOrderVisible(false);
   }
 
   private drawHud(): void {
-    const { match, players } = this.state;
+    const { match } = this.state;
     const [s0, s1] = match.score;
     const home = COUNTRY_INFO[this.homeCountry];
     const away = COUNTRY_INFO[this.awayCountry];
     this.homeText.setText(`${home.name} ${s0}`);
     this.awayText.setText(`${s1} ${away.name}`);
 
+    const pk = match.pk;
+    // The order overlay covers the PK panel, so the panel waits until the order is set.
+    this.pkObjs.forEach((o) => o.setVisible(pk !== null && pk.stage !== 'order'));
+    if (pk !== null) {
+      this.drawPkHud(pk);
+    } else {
+      this.drawMatchHud();
+    }
+
+    const now = this.time.now;
+    if (now > this.bannerUntil) this.bannerText.setVisible(false);
+    if (now > this.specialUntil) this.specialText.setVisible(false);
+  }
+
+  private drawMatchHud(): void {
+    const { match, players } = this.state;
     const secs = Math.ceil(match.clockTicks / TICK_HZ);
     const mm = String(Math.floor(secs / 60)).padStart(2, '0');
     const ss = String(secs % 60).padStart(2, '0');
@@ -591,9 +755,177 @@ export class MatchScene extends Phaser.Scene {
     this.hudBarsGfx.fillRect(barX, 330, barW * staminaRatio, 7);
     this.hudBarsGfx.fillStyle(chargeRatio >= 1 ? GOLD : 0x4fb3ff, 1);
     this.hudBarsGfx.fillRect(barX, 345, barW * chargeRatio, 7);
+  }
 
-    const now = this.time.now;
-    if (now > this.bannerUntil) this.bannerText.setVisible(false);
-    if (now > this.specialUntil) this.specialText.setVisible(false);
+  /** Shootout HUD: title, PK score, per-team kick markers, shooter/keeper line, aim helpers and power meter. */
+  private drawPkHud(pk: PkState): void {
+    const { players } = this.state;
+    const sudden = pk.kicks[0].length >= PK_ROUNDS && pk.kicks[1].length >= PK_ROUNDS;
+    this.clockText.setText(sudden ? 'PK 大戰　驟死' : 'PK 大戰');
+    this.pkScoreText.setText(`PK ${pk.score[0]} - ${pk.score[1]}`);
+    this.hudBarsGfx.clear();
+
+    const g = this.pkHudGfx.clear();
+    g.fillStyle(0x000000, 0.55);
+    g.fillRect(PK_PANEL_X, PK_PANEL_Y, PK_PANEL_W, PK_PANEL_H);
+    this.drawPkMarks(g, pk, 0, 64);
+    this.drawPkMarks(g, pk, 1, 85);
+
+    const live = pk.stage === 'aim' || pk.stage === 'flight' || pk.stage === 'result';
+    const shooter = live ? players[pk.shooterIdx] : undefined;
+    const keeper = live ? players[pk.keeperIdx] : undefined;
+    this.hudNameText.setText(shooter && keeper ? `射門：${shooter.name}　守門：${keeper.name}` : '');
+
+    const humanShoots = live && pk.shooterIdx === this.humanIdx;
+    const humanKeeps = live && pk.keeperIdx === this.humanIdx;
+    let hint = '';
+    if (pk.stage === 'aim' && humanShoots) {
+      hint = 'W/S 選方向（不按＝中間），按住 K 射高球；按住 J 蓄力，放開射門';
+    } else if (pk.stage === 'aim' && humanKeeps) {
+      hint = 'W/S 猜方向，按住 K 撲高球';
+    } else if (pk.stage === 'aim') {
+      hint = '觀看中…';
+    }
+    this.hudSpecialText.setText(hint);
+
+    const aiming = pk.stage === 'aim' && (humanShoots || humanKeeps);
+    const aim = this.pkAimGfx.clear();
+    if (aiming) {
+      // 3 columns (left = W / far post, right = S / near post) x 2 rows (top = K high, bottom = low).
+      const selCol = this.humanInput.moveY + 1;
+      const selHigh = this.humanInput.k;
+      const highlight = humanShoots ? HUMAN_MARK : 0x4fb3ff;
+      const boxW = 3 * PK_CELL_W + 2 * PK_CELL_GAP;
+      const boxH = 2 * PK_CELL_H + PK_CELL_GAP;
+      aim.fillStyle(0x000000, 0.55);
+      aim.fillRect(PK_AIM_X - 6, PK_AIM_Y - 6, boxW + 12, boxH + 12);
+      for (let row = 0; row < 2; row++) {
+        for (let col = 0; col < 3; col++) {
+          const on = col === selCol && (row === 0) === selHigh;
+          aim.fillStyle(on ? highlight : 0x2b333d, 1);
+          aim.fillRect(
+            PK_AIM_X + col * (PK_CELL_W + PK_CELL_GAP),
+            PK_AIM_Y + row * (PK_CELL_H + PK_CELL_GAP),
+            PK_CELL_W,
+            PK_CELL_H,
+          );
+        }
+      }
+    }
+
+    const showMeter = aiming && humanShoots;
+    this.pkMeterLabel.setVisible(showMeter);
+    if (showMeter) {
+      const value = pk.meterTicks >= 0 ? pkMeterValue(pk.meterTicks) : 0;
+      aim.fillStyle(0x333333, 1);
+      aim.fillRect(PK_METER_X, PK_METER_Y, PK_METER_W, PK_METER_H);
+      aim.fillStyle(0xffffff, 1);
+      aim.fillRect(PK_METER_X, PK_METER_Y, PK_METER_W * value, PK_METER_H);
+      // Zones are drawn over the fill so they stay visible while the bar passes them.
+      aim.fillStyle(0x6cd46c, 0.55);
+      aim.fillRect(PK_METER_X + PK_METER_W * 0.6, PK_METER_Y, PK_METER_W * 0.3, PK_METER_H);
+      aim.fillStyle(0xff3b3b, 0.75);
+      aim.fillRect(PK_METER_X + PK_METER_W * 0.92, PK_METER_Y, PK_METER_W * 0.08, PK_METER_H);
+    }
+  }
+
+  /** One team's row of 5 kick markers (pending ○, goal ●, miss ✕). Sudden death shows the last 5 kicks. */
+  private drawPkMarks(g: Phaser.GameObjects.Graphics, pk: PkState, team: 0 | 1, y: number): void {
+    const kicks = pk.kicks[team];
+    const shown = kicks.length > PK_ROUNDS ? kicks.slice(-PK_ROUNDS) : kicks;
+    for (let i = 0; i < PK_ROUNDS; i++) {
+      const x = PK_MARK_X0 + i * PK_MARK_STEP;
+      const kick = shown[i];
+      if (kick === undefined) {
+        g.lineStyle(2, 0x9aa3ad, 1);
+        g.strokeCircle(x, y, 5);
+      } else if (kick === 'goal') {
+        g.fillStyle(0x3ddc6a, 1);
+        g.fillCircle(x, y, 5);
+      } else {
+        g.lineStyle(2, 0xff4d4d, 1);
+        g.lineBetween(x - 4, y - 4, x + 4, y + 4);
+        g.lineBetween(x + 4, y - 4, x - 4, y + 4);
+      }
+    }
+  }
+
+  /** Human picks team 0's kicking order: W/S move, J appends the highlighted player, K removes the last pick. */
+  private updatePkOrder(): void {
+    const { W, S, J, K } = this.pkOrderKeys;
+    // Consume every key each frame so presses made while the overlay is closed do not fire later.
+    const up = Phaser.Input.Keyboard.JustDown(W);
+    const down = Phaser.Input.Keyboard.JustDown(S);
+    const pick = Phaser.Input.Keyboard.JustDown(J);
+    const undo = Phaser.Input.Keyboard.JustDown(K);
+
+    const pk = this.state.match.pk;
+    const open = pk !== null && pk.stage === 'order' && pk.order[0] === null;
+    if (!open) {
+      if (this.pkOrderOpen) this.setPkOrderVisible(false);
+      this.pkOrderOpen = false;
+      return;
+    }
+    if (!this.pkOrderOpen) {
+      this.pkOrderOpen = true;
+      this.pkOrderCursor = 0;
+      this.pkOrderPicks = [];
+      this.setPkOrderVisible(true);
+      this.refreshPkOrder();
+    }
+
+    const roster = this.humanRoster();
+    if (up) this.pkOrderCursor = (this.pkOrderCursor + roster.length - 1) % roster.length;
+    if (down) this.pkOrderCursor = (this.pkOrderCursor + 1) % roster.length;
+    if (pick) {
+      const idx = roster[this.pkOrderCursor];
+      if (!this.pkOrderPicks.includes(idx)) {
+        this.pkOrderPicks.push(idx);
+        // Move the cursor to the next player who is not picked yet.
+        for (let step = 1; step <= roster.length; step++) {
+          const next = (this.pkOrderCursor + step) % roster.length;
+          if (!this.pkOrderPicks.includes(roster[next])) {
+            this.pkOrderCursor = next;
+            break;
+          }
+        }
+      }
+    }
+    if (undo && this.pkOrderPicks.length > 0) {
+      const last = this.pkOrderPicks.pop() as number;
+      this.pkOrderCursor = roster.indexOf(last);
+    }
+    if (up || down || pick || undo) this.refreshPkOrder();
+
+    if (this.pkOrderPicks.length === roster.length) {
+      submitPkOrder(this.state, 0, this.pkOrderPicks);
+    }
+  }
+
+  private humanRoster(): number[] {
+    return this.state.players.filter((p) => p.team === 0).map((p) => p.idx);
+  }
+
+  private refreshPkOrder(): void {
+    const roster = this.humanRoster();
+    const g = this.pkOrderGfx.clear();
+    g.fillStyle(0x000000, 0.8);
+    g.fillRect(ORDER_BOX_X, ORDER_BOX_Y, ORDER_BOX_W, ORDER_BOX_H);
+    roster.forEach((idx, i) => {
+      const p = this.state.players[idx];
+      const pos = this.pkOrderPicks.indexOf(idx);
+      g.fillStyle(i === this.pkOrderCursor ? 0x3a5a7a : 0x1d2630, 1);
+      g.fillRect(146, ORDER_ROW_Y0 + i * ORDER_ROW_H - 15, 348, 30);
+      const row = this.pkOrderRows[i];
+      row.slot.setText(pos >= 0 ? String(pos + 1) : '-');
+      row.role.setText(p.role);
+      row.name.setText(p.name);
+      row.stats.setText(`力量 ${p.stats.power}　技巧 ${p.stats.technique}`);
+    });
+    this.pkOrderCount.setText(`已選 ${this.pkOrderPicks.length} / ${PK_ROUNDS}`);
+  }
+
+  private setPkOrderVisible(visible: boolean): void {
+    this.pkOrderObjs.forEach((o) => o.setVisible(visible));
   }
 }
