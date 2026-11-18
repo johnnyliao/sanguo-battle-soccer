@@ -11,16 +11,19 @@ import {
   GK_AREA_DEPTH,
   GOAL_DEPTH,
   GOAL_H,
+  EMPTY_INPUT,
   GOAL_HALF_W,
   TICK_HZ,
   createInitialState,
   step,
   type GameState,
   type MatchPhase,
+  type MatchState,
   type Player,
   type SimEvent,
 } from '../sim';
 import { DEPTH_SCALE, cameraTargetX, worldToScreen, FIELD_TOP } from './projection';
+import type { ResultInit, ResultScorer } from './ResultScene';
 
 export interface MatchInit {
   home?: Country;
@@ -92,6 +95,8 @@ export class MatchScene extends Phaser.Scene {
   private localInput!: LocalInput;
   private aiState!: AIState;
   private humanMask: boolean[] = [];
+  /** Test-only (`?ai=0`): non-human players stand still instead of running AI. */
+  private aiOff = false;
   private audio = new AudioPlayer();
   private accumulator = 0;
   private teamColors: [number, number] = [0, 0];
@@ -112,6 +117,8 @@ export class MatchScene extends Phaser.Scene {
   private specialText!: Phaser.GameObjects.Text;
   private specialUntil = 0;
   private prevPhase: MatchPhase | null = null;
+  private scorers: ResultScorer[] = [];
+  private resultQueued = false;
 
   constructor() {
     super('MatchScene');
@@ -135,10 +142,13 @@ export class MatchScene extends Phaser.Scene {
       SIZE_PARAMS,
     );
     this.aiState = createAIState((this.seed ^ 0x5bd1e995) >>> 0);
+    this.aiOff = new URLSearchParams(window.location.search).get('ai') === '0';
     this.humanMask = this.state.players.map((p) => p.idx === this.humanIdx);
     this.accumulator = 0;
     this.prevPhase = null;
     this.trail = [];
+    this.scorers = [];
+    this.resultQueued = false;
     this.teamColors = [COUNTRY_INFO[this.homeCountry].color, COUNTRY_INFO[this.awayCountry].color];
     this.localInput = new LocalInput(this);
     this.events.once('shutdown', () => this.localInput.destroy());
@@ -159,6 +169,7 @@ export class MatchScene extends Phaser.Scene {
       humanIdx: this.humanIdx,
       scene: this,
     };
+    (window as unknown as { __sgScene: string }).__sgScene = 'MatchScene';
 
     this.onEvents([]);
     this.drawAll(0);
@@ -178,7 +189,9 @@ export class MatchScene extends Phaser.Scene {
   }
 
   private tickOnce(): void {
-    const inputs = computeAIInputs(this.state, this.aiState, this.humanMask);
+    const inputs = this.aiOff
+      ? this.state.players.map(() => ({ ...EMPTY_INPUT }))
+      : computeAIInputs(this.state, this.aiState, this.humanMask);
     inputs[this.humanIdx] = this.localInput.sample();
     step(this.state, inputs);
     this.audio.handleEvents(this.state.events);
@@ -204,6 +217,7 @@ export class MatchScene extends Phaser.Scene {
     }
     for (const e of events) {
       if (e.type === 'goal') {
+        this.scorers.push({ team: e.team, name: players[e.scorerIdx].name, minute: this.elapsedMinute() });
         this.showBanner(`進球！ ${players[e.scorerIdx].name}`, 2000);
       } else if (e.type === 'special') {
         this.showSpecial(`${e.name}！`, SPECIAL_COLORS[e.kind]);
@@ -222,6 +236,7 @@ export class MatchScene extends Phaser.Scene {
         break;
       case 'fulltime':
         this.showBanner(`比賽結束 ${s0} - ${s1}`, Number.POSITIVE_INFINITY);
+        this.queueResult();
         break;
       case 'pk':
         this.showBanner('PK 大戰', 2000);
@@ -229,6 +244,31 @@ export class MatchScene extends Phaser.Scene {
       default:
         break;
     }
+  }
+
+  /** Match time elapsed so far, in whole minutes rounded up (second half counts from the first half's end). */
+  private elapsedMinute(): number {
+    const { match } = this.state;
+    const inHalf = match.halfTicks - match.clockTicks;
+    const elapsedTicks = match.half === 1 ? inHalf : match.halfTicks + inHalf;
+    return Math.ceil(elapsedTicks / TICK_HZ / 60);
+  }
+
+  private queueResult(): void {
+    if (this.resultQueued) return;
+    this.resultQueued = true;
+    this.time.delayedCall(3000, () => {
+      const { match } = this.state;
+      const pk = (match as MatchState & { pk?: { score: [number, number] } }).pk ?? null;
+      const data: ResultInit = {
+        home: this.homeCountry,
+        away: this.awayCountry,
+        score: [match.score[0], match.score[1]],
+        pk,
+        scorers: this.scorers,
+      };
+      this.scene.start('ResultScene', data);
+    });
   }
 
   private showBanner(text: string, ms: number): void {

@@ -7,11 +7,14 @@ import { fileURLToPath } from 'node:url';
 const require = createRequire('/home/safe3admin/mountain-race-dev/node_modules/');
 const { chromium } = require('playwright');
 
-const url = process.argv[2];
-if (!url) {
+const base = process.argv[2];
+if (!base) {
   console.error('usage: node e2e/smoke.mjs <url>');
   process.exit(2);
 }
+// Without a query, start the match directly (?quick skips the title and team select screens)
+// with AI off (ai=0) so the other players do not push the human during the move check.
+const url = base.includes('?') ? base : `${base}?quick=1&ai=0`;
 
 const outDir = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'test-results');
 mkdirSync(outDir, { recursive: true });
