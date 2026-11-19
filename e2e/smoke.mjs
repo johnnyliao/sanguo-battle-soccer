@@ -42,6 +42,7 @@ try {
   await page.waitForFunction(() => Boolean(window.__sg), null, { timeout: 15000 });
   await page.waitForTimeout(1500);
   await page.screenshot({ path: resolve(outDir, 'match-1.png') });
+  await page.screenshot({ path: resolve(outDir, 'view-desktop-match.png') });
 
   const x0 = await humanX(page);
   await page.keyboard.down('d');

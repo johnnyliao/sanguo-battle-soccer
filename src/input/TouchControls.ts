@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { textResolution, type View } from '../render/view';
 
 /** Held state of the on-screen controls. */
 export interface TouchState {
@@ -12,33 +13,33 @@ export interface TouchState {
 
 type ButtonKey = 'j' | 'k' | 'l';
 
+/** Button centre measured from the bottom-right corner of the logical view. */
 interface ButtonDef {
   key: ButtonKey;
-  x: number;
-  y: number;
+  offX: number;
+  offY: number;
   r: number;
   label: string;
   labelSize: string;
 }
 
 const BUTTONS: ButtonDef[] = [
-  { key: 'j', x: 585, y: 268, r: 28, label: '射/攻', labelSize: '14px' },
-  { key: 'k', x: 530, y: 300, r: 24, label: '傳/跳', labelSize: '11px' },
-  { key: 'l', x: 590, y: 205, r: 18, label: '叫', labelSize: '12px' },
+  { key: 'j', offX: 55, offY: 92, r: 28, label: '射/攻', labelSize: '14px' },
+  { key: 'k', offX: 110, offY: 60, r: 24, label: '傳/跳', labelSize: '11px' },
+  { key: 'l', offX: 50, offY: 155, r: 18, label: '叫', labelSize: '12px' },
 ];
 
+/** Joystick rest centre: 70 from the left edge, 90 from the bottom. */
 const STICK_REST_X = 70;
-const STICK_REST_Y = 270;
+const STICK_REST_OFF_Y = 90;
 const STICK_R = 34;
 const KNOB_R = 14;
 const STICK_DEADZONE = 10;
 const AXIS_RATIO = 0.38;
 const DASH_RATIO = 0.85;
 /** The joystick can start in the left 45% of the screen, below the top bar. */
-const STICK_ZONE_X = 640 * 0.45;
+const STICK_ZONE_RATIO = 0.45;
 const STICK_ZONE_TOP = 40;
-const SCREEN_W = 640;
-const SCREEN_H = 360;
 const POINTERS_TOTAL = 4;
 const DEPTH = 1100;
 const FONT = '"Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif';
@@ -58,18 +59,10 @@ interface ButtonClaim {
 
 type Claim = StickClaim | ButtonClaim;
 
-function inScreen(p: Phaser.Input.Pointer): boolean {
-  return p.x >= 0 && p.x <= SCREEN_W && p.y >= 0 && p.y <= SCREEN_H;
-}
-
-function inCircle(x: number, y: number, def: ButtonDef): boolean {
-  return Math.hypot(x - def.x, y - def.y) <= def.r;
-}
-
 /**
  * On-screen controls for phones: a floating virtual joystick on the left and J / K / L buttons on the right.
  * Drawn above the HUD with scroll factor 0. Only active once a touch is seen (or on touch-capable devices),
- * so mouse-only desktops never show them.
+ * so mouse-only desktops never show them. Positions are logical (view) units; pointers are converted by the zoom.
  */
 export class TouchControls {
   private scene: Phaser.Scene;
@@ -78,9 +71,11 @@ export class TouchControls {
   private claims = new Map<Phaser.Input.Pointer, Claim>();
   private gfx: Phaser.GameObjects.Graphics;
   private labels: Phaser.GameObjects.Text[];
+  private view: View;
 
-  constructor(scene: Phaser.Scene) {
+  constructor(scene: Phaser.Scene, view: View) {
     this.scene = scene;
+    this.view = view;
     this.enabled = scene.sys.game.device.input.touch;
     const pointersTotal = scene.input.manager.pointersTotal;
     if (pointersTotal < POINTERS_TOTAL) scene.input.addPointer(POINTERS_TOTAL - pointersTotal);
@@ -88,24 +83,31 @@ export class TouchControls {
     this.gfx = scene.add.graphics().setScrollFactor(0).setDepth(DEPTH);
     this.labels = BUTTONS.map((b) =>
       scene.add
-        .text(b.x, b.y, b.label, {
+        .text(0, 0, b.label, {
           fontFamily: FONT,
           fontSize: b.labelSize,
           color: '#ffffff',
           stroke: '#000000',
           strokeThickness: 3,
-          resolution: 2,
+          resolution: textResolution(),
         })
         .setOrigin(0.5)
         .setScrollFactor(0)
         .setDepth(DEPTH + 1),
     );
+    this.placeLabels();
 
     scene.input.on('pointerdown', this.onDown);
     scene.input.on('pointermove', this.onMove);
     scene.input.on('pointerup', this.onUp);
     scene.events.on(Phaser.Scenes.Events.UPDATE, this.draw);
     this.applyVisibility();
+  }
+
+  /** Re-anchors the controls to a new logical view (called on window resize). */
+  setView(view: View): void {
+    this.view = view;
+    this.placeLabels();
   }
 
   /** Current held state. All false while hidden. */
@@ -150,6 +152,35 @@ export class TouchControls {
     this.labels.forEach((t) => t.destroy());
   }
 
+  private buttonAt(def: ButtonDef): { x: number; y: number } {
+    return { x: this.view.W - def.offX, y: this.view.H - def.offY };
+  }
+
+  private stickRest(): { x: number; y: number } {
+    return { x: STICK_REST_X, y: this.view.H - STICK_REST_OFF_Y };
+  }
+
+  /** Pointer position in logical view units (canvas pixels divided by the zoom). */
+  private logical(p: Phaser.Input.Pointer): { x: number; y: number } {
+    return { x: p.x / this.view.Z, y: p.y / this.view.Z };
+  }
+
+  private inScreen(p: { x: number; y: number }): boolean {
+    return p.x >= 0 && p.x <= this.view.W && p.y >= 0 && p.y <= this.view.H;
+  }
+
+  private inCircle(x: number, y: number, def: ButtonDef): boolean {
+    const c = this.buttonAt(def);
+    return Math.hypot(x - c.x, y - c.y) <= def.r;
+  }
+
+  private placeLabels(): void {
+    BUTTONS.forEach((b, i) => {
+      const c = this.buttonAt(b);
+      this.labels[i].setPosition(c.x, c.y);
+    });
+  }
+
   private applyVisibility(): void {
     const shown = this.isShown();
     this.gfx.setVisible(shown);
@@ -161,25 +192,28 @@ export class TouchControls {
       this.enabled = true;
       this.applyVisibility();
     }
-    if (!this.isShown() || !inScreen(pointer)) return;
+    if (!this.isShown()) return;
+    const p = this.logical(pointer);
+    if (!this.inScreen(p)) return;
 
-    const button = BUTTONS.find((b) => inCircle(pointer.x, pointer.y, b));
+    const button = BUTTONS.find((b) => this.inCircle(p.x, p.y, b));
     if (button) {
       this.claims.set(pointer, { kind: 'button', def: button });
       return;
     }
-    if (pointer.x < STICK_ZONE_X && pointer.y > STICK_ZONE_TOP && !this.findStick()) {
-      this.claims.set(pointer, { kind: 'stick', ox: pointer.x, oy: pointer.y, x: pointer.x, y: pointer.y });
+    if (p.x < this.view.W * STICK_ZONE_RATIO && p.y > STICK_ZONE_TOP && !this.findStick()) {
+      this.claims.set(pointer, { kind: 'stick', ox: p.x, oy: p.y, x: p.x, y: p.y });
     }
   };
 
   private onMove = (pointer: Phaser.Input.Pointer): void => {
     const claim = this.claims.get(pointer);
     if (!claim) return;
+    const p = this.logical(pointer);
     if (claim.kind === 'stick') {
-      claim.x = pointer.x;
-      claim.y = pointer.y;
-    } else if (!inCircle(pointer.x, pointer.y, claim.def)) {
+      claim.x = p.x;
+      claim.y = p.y;
+    } else if (!this.inCircle(p.x, p.y, claim.def)) {
       // Sliding off a button releases it.
       this.claims.delete(pointer);
     }
@@ -208,8 +242,9 @@ export class TouchControls {
     if (!this.isShown()) return;
 
     const stick = this.findStick();
-    const ox = stick ? stick.ox : STICK_REST_X;
-    const oy = stick ? stick.oy : STICK_REST_Y;
+    const rest = this.stickRest();
+    const ox = stick ? stick.ox : rest.x;
+    const oy = stick ? stick.oy : rest.y;
     const dx = stick ? stick.x - stick.ox : 0;
     const dy = stick ? stick.y - stick.oy : 0;
     const len = Math.hypot(dx, dy);
@@ -224,10 +259,11 @@ export class TouchControls {
 
     for (const b of BUTTONS) {
       const pressed = this.isPressed(b.key);
+      const c = this.buttonAt(b);
       g.fillStyle(pressed ? 0xffd98a : 0xffffff, pressed ? 0.6 : 0.25);
-      g.fillCircle(b.x, b.y, b.r);
+      g.fillCircle(c.x, c.y, b.r);
       g.lineStyle(2, 0xffffff, pressed ? 0.9 : 0.5);
-      g.strokeCircle(b.x, b.y, b.r);
+      g.strokeCircle(c.x, c.y, b.r);
     }
   };
 }

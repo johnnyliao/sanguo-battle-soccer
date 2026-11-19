@@ -9,6 +9,7 @@ import {
   type SpecialKind,
   type Stats,
 } from '../data';
+import { applyView, textResolution, type View } from './view';
 
 const FONT = '"Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif';
 const GOLD = 0xffd700;
@@ -26,7 +27,6 @@ const ROW_Y0 = 58;
 const ROW_STEP = 50;
 const ROW_H = 46;
 const ROW_X = 10;
-const ROW_W = 620;
 
 interface Rect {
   x: number;
@@ -36,15 +36,24 @@ interface Rect {
 }
 
 /** On-screen buttons (touch): 返回 bottom-left, 確定 bottom-right. */
-const BACK_BTN: Rect = { x: 60, y: 318, w: 120, h: 34 };
-const CONFIRM_BTN: Rect = { x: 460, y: 318, w: 120, h: 34 };
+function buttonRects(v: View): { back: Rect; confirm: Rect } {
+  return {
+    back: { x: 60, y: v.H - 42, w: 120, h: 34 },
+    confirm: { x: v.W - 180, y: v.H - 42, w: 120, h: 34 },
+  };
+}
 
 function hitRect(x: number, y: number, r: Rect): boolean {
   return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
 }
 
-function panelRect(index: number): Rect {
-  return { x: 130 + index * 190 - PANEL_W / 2, y: PANEL_Y, w: PANEL_W, h: PANEL_H };
+/** Panels sit in a row centred on the view: 190 apart, the middle one on W / 2. */
+function panelCenterX(index: number, v: View): number {
+  return v.W / 2 + (index - 1) * 190;
+}
+
+function panelRect(index: number, v: View): Rect {
+  return { x: panelCenterX(index, v) - PANEL_W / 2, y: PANEL_Y, w: PANEL_W, h: PANEL_H };
 }
 
 const ROLE_LABEL: Record<Role, string> = { GK: '守門員', DF: '後衛', MF: '中場', FW: '前鋒' };
@@ -84,6 +93,7 @@ export class TeamSelectScene extends Phaser.Scene {
   private headerText!: Phaser.GameObjects.Text;
   private hintText!: Phaser.GameObjects.Text;
   private listGroup!: Phaser.GameObjects.Container;
+  private view!: View;
 
   constructor() {
     super('TeamSelectScene');
@@ -91,6 +101,11 @@ export class TeamSelectScene extends Phaser.Scene {
 
   create(): void {
     (window as unknown as { __sgScene: string }).__sgScene = 'TeamSelectScene';
+    this.view = applyView(this, (v) => {
+      this.view = v;
+      this.buildObjects();
+      this.refreshStage();
+    });
     (window as unknown as { __sgMenu: () => unknown }).__sgMenu = () => ({
       stage: this.stage,
       cursor: this.stage === 'general' ? this.generalCursor : this.cursor,
@@ -107,13 +122,7 @@ export class TeamSelectScene extends Phaser.Scene {
     const keyboard = this.input.keyboard!;
     this.keys = keyboard.addKeys('A,D,W,S,J,K,ENTER,ESC,LEFT,RIGHT,UP,DOWN') as typeof this.keys;
 
-    this.add.graphics().fillStyle(0x0b0f14, 1).fillRect(0, 0, 640, 360);
-    this.createPanels();
-    this.listGroup = this.add.container(0, 0);
-    this.headerText = this.add.text(320, 26, '', this.textStyle('22px', '#ffffff')).setOrigin(0.5);
-    this.hintText = this.add.text(320, 340, '', this.textStyle('12px', '#d0d8e0', false)).setOrigin(0.5);
-
-    this.drawButtons();
+    this.buildObjects();
     this.input.on('pointerdown', this.onPointer);
 
     this.enterStage('own');
@@ -168,12 +177,15 @@ export class TeamSelectScene extends Phaser.Scene {
    * General: tap a row to select it, tap the selected row again to confirm. 確定 / 返回 always work.
    */
   private onPointer = (pointer: Phaser.Input.Pointer): void => {
-    const { x, y } = pointer;
-    if (hitRect(x, y, CONFIRM_BTN)) {
+    // Canvas pixels to logical view units.
+    const x = pointer.x / this.view.Z;
+    const y = pointer.y / this.view.Z;
+    const { back, confirm } = buttonRects(this.view);
+    if (hitRect(x, y, confirm)) {
       this.onConfirm();
       return;
     }
-    if (hitRect(x, y, BACK_BTN)) {
+    if (hitRect(x, y, back)) {
       this.onBack();
       return;
     }
@@ -181,7 +193,7 @@ export class TeamSelectScene extends Phaser.Scene {
     if (this.stage === 'general') {
       const slot = Math.floor((y - ROW_Y0) / ROW_STEP);
       const inRow =
-        x >= ROW_X && x < ROW_X + ROW_W && slot >= GK_SLOT && slot <= FW_SLOT && y - ROW_Y0 - slot * ROW_STEP < ROW_H;
+        x >= ROW_X && x < this.view.W - ROW_X && slot >= GK_SLOT && slot <= FW_SLOT && y - ROW_Y0 - slot * ROW_STEP < ROW_H;
       if (!inRow) return;
       if (slot === this.generalCursor) {
         this.startMatch();
@@ -192,7 +204,7 @@ export class TeamSelectScene extends Phaser.Scene {
       return;
     }
 
-    const index = COUNTRIES.findIndex((_, i) => hitRect(x, y, panelRect(i)));
+    const index = COUNTRIES.findIndex((_, i) => hitRect(x, y, panelRect(i, this.view)));
     if (index < 0 || this.isDisabled(index)) return;
     if (index === this.cursor) {
       this.onConfirm();
@@ -202,6 +214,21 @@ export class TeamSelectScene extends Phaser.Scene {
     }
   };
 
+  /** Creates the screen objects for the current view. Runs on create and on every resize. */
+  private buildObjects(): void {
+    this.children.removeAll(true);
+    this.panelTexts = [];
+    this.panelTags = [];
+    const { W, H } = this.view;
+    this.add.graphics().fillStyle(0x0b0f14, 1).fillRect(0, 0, W, H);
+    this.createPanels();
+    this.listGroup = this.add.container(0, 0);
+    this.headerText = this.add.text(W / 2, 26, '', this.textStyle('22px', '#ffffff')).setOrigin(0.5);
+    this.hintText = this.add.text(W / 2, H - 20, '', this.textStyle('12px', '#d0d8e0', false)).setOrigin(0.5);
+
+    this.drawButtons();
+  }
+
   private textStyle(size: string, color: string, stroke = true): Phaser.Types.GameObjects.Text.TextStyle {
     return {
       fontFamily: FONT,
@@ -209,7 +236,7 @@ export class TeamSelectScene extends Phaser.Scene {
       color,
       stroke: stroke ? '#000000' : undefined,
       strokeThickness: stroke ? 3 : 0,
-      resolution: 2,
+      resolution: textResolution(),
     };
   }
 
@@ -223,6 +250,12 @@ export class TeamSelectScene extends Phaser.Scene {
       this.roster = getTeam(this.ownCountry);
       this.generalCursor = FW_SLOT;
     }
+    this.refreshStage();
+  }
+
+  /** Header, hints, panels or list for the current stage. Does not change the cursors. */
+  private refreshStage(): void {
+    const stage = this.stage;
     this.headerText.setText(
       stage === 'own' ? '選擇你的國家' : stage === 'opp' ? '選擇對手' : '選擇操控的武將',
     );
@@ -265,14 +298,15 @@ export class TeamSelectScene extends Phaser.Scene {
       g.strokeRect(r.x, r.y, r.w, r.h);
       this.add.text(r.x + r.w / 2, r.y + r.h / 2, label, this.textStyle('16px', '#ffffff')).setOrigin(0.5);
     };
-    button(BACK_BTN, '返回');
-    button(CONFIRM_BTN, '確定');
+    const { back, confirm } = buttonRects(this.view);
+    button(back, '返回');
+    button(confirm, '確定');
   }
 
   private createPanels(): void {
     this.panelGfx = this.add.graphics();
     COUNTRIES.forEach((country, i) => {
-      const cx = 130 + i * 190;
+      const cx = panelCenterX(i, this.view);
       const name = this.add.text(cx, 190, COUNTRY_INFO[country].name, this.textStyle('56px', '#ffffff')).setOrigin(0.5);
       const sub = this.add.text(cx, 262, '5 人隊', this.textStyle('14px', '#ffffff')).setOrigin(0.5);
       this.panelTexts.push([name, sub]);
@@ -285,7 +319,7 @@ export class TeamSelectScene extends Phaser.Scene {
     const g = this.panelGfx;
     g.clear();
     COUNTRIES.forEach((country, i) => {
-      const cx = 130 + i * 190;
+      const cx = panelCenterX(i, this.view);
       const x = cx - 85;
       const y = PANEL_Y;
       const w = PANEL_W;
@@ -321,10 +355,10 @@ export class TeamSelectScene extends Phaser.Scene {
       const selected = slot === this.generalCursor;
       const bg = this.add.graphics();
       bg.fillStyle(selected ? teamColor : 0x000000, selected ? 0.35 : 0.45);
-      bg.fillRect(10, y0, 620, 46);
+      bg.fillRect(ROW_X, y0, this.view.W - ROW_X * 2, 46);
       if (selected) {
         bg.lineStyle(2, GOLD, 1);
-        bg.strokeRect(10, y0, 620, 46);
+        bg.strokeRect(ROW_X, y0, this.view.W - ROW_X * 2, 46);
       }
       add(bg);
 
@@ -345,8 +379,9 @@ export class TeamSelectScene extends Phaser.Scene {
         add(this.add.text(x + 38, y0 + 20, String(value), this.textStyle('11px', '#ffffff', false)));
       });
 
-      add(this.add.text(462, y0 + 8, c.special.name, this.textStyle('13px', '#ffd98a')));
-      add(this.add.text(462, y0 + 26, `必殺・${KIND_LABEL[c.special.kind]}`, this.textStyle('11px', '#d0d8e0', false)));
+      const specialX = this.view.W - 178;
+      add(this.add.text(specialX, y0 + 8, c.special.name, this.textStyle('13px', '#ffd98a')));
+      add(this.add.text(specialX, y0 + 26, `必殺・${KIND_LABEL[c.special.kind]}`, this.textStyle('11px', '#d0d8e0', false)));
     });
   }
 

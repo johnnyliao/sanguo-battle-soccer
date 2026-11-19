@@ -26,8 +26,9 @@ import {
   type Player,
   type SimEvent,
 } from '../sim';
-import { DEPTH_SCALE, cameraTargetX, worldToScreen, FIELD_TOP } from './projection';
+import { DEPTH_SCALE, cameraTargetX, pkCameraX, worldToScreen, FIELD_TOP } from './projection';
 import type { ResultInit, ResultScorer } from './ResultScene';
+import { applyView, BASE_H, textResolution, type View } from './view';
 
 export interface MatchInit {
   home?: Country;
@@ -69,8 +70,6 @@ const GRASS_X1 = FIELD_W + 60;
 
 /** Regulation kicks per team in the shootout (sim/pk.ts uses the same count). */
 const PK_ROUNDS = 5;
-/** Shootout camera: fixed on the right goal. */
-const PK_CAMERA_X = FIELD_W + 40 - 640;
 const PK_RESULT_BANNER_MS = 1200;
 const PK_PANEL_X = 0;
 const PK_PANEL_Y = 36;
@@ -78,28 +77,41 @@ const PK_PANEL_W = 196;
 const PK_PANEL_H = 58;
 const PK_MARK_X0 = 92;
 const PK_MARK_STEP = 18;
-const PK_AIM_X = 552;
+/** Aim box and power meter are anchored to the right / bottom edges of the view. */
+const PK_AIM_RIGHT = 88;
 const PK_AIM_Y = 44;
 const PK_CELL_W = 24;
 const PK_CELL_H = 22;
 const PK_CELL_GAP = 2;
-const PK_METER_X = 468;
-const PK_METER_Y = 332;
+const PK_METER_RIGHT = 172;
+const PK_METER_BOTTOM = 28;
 const PK_METER_W = 160;
 const PK_METER_H = 10;
-const ORDER_BOX_X = 130;
 const ORDER_BOX_Y = 40;
 const ORDER_BOX_W = 380;
 const ORDER_BOX_H = 276;
 const ORDER_ROW_Y0 = 98;
 const ORDER_ROW_H = 36;
-const ORDER_ROW_X = 146;
+/** Order overlay x offsets are measured from the box's left edge (the box is centred on the view). */
+const ORDER_ROW_X = 16;
 const ORDER_ROW_W = 348;
 const ORDER_ROW_BOX_H = 30;
-const ORDER_UNDO_X = 380;
+const ORDER_UNDO_X = 250;
 const ORDER_UNDO_Y = 280;
 const ORDER_UNDO_W = 120;
 const ORDER_UNDO_H = 26;
+/** Minimap in the top-left band under the top bar: world units scaled to pixels. */
+const MINIMAP_X = 8;
+const MINIMAP_Y = 40;
+const MINIMAP_SCALE = 0.15;
+/** Off-screen arrow: shown when the human is closer than ARROW_MARGIN to a view edge. The arrow is clamped to
+ * the band between the top bar / minimap and the bottom HUD (or the touch buttons). */
+const ARROW_MARGIN = 10;
+const ARROW_SIZE = 12;
+const ARROW_EDGE_X = 16;
+const ARROW_EDGE_TOP = 104;
+const ARROW_EDGE_BOTTOM = 62;
+const ARROW_EDGE_BOTTOM_TOUCH = 142;
 
 const FONT = '"Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif';
 const SKIN = 0xf1c27d;
@@ -115,6 +127,11 @@ const SPECIAL_COLORS: Record<SpecialKind, number> = {
 
 function hexCss(color: number): string {
   return `#${color.toString(16).padStart(6, '0')}`;
+}
+
+/** Left edge of the centred PK order box for a view of width W. */
+function orderLeft(W: number): number {
+  return (W - ORDER_BOX_W) / 2;
 }
 
 function mix(a: number, b: number, t: number): number {
@@ -158,6 +175,15 @@ export class MatchScene extends Phaser.Scene {
 
   private homeText!: Phaser.GameObjects.Text;
   private awayText!: Phaser.GameObjects.Text;
+  private dashText!: Phaser.GameObjects.Text;
+  private topBarGfx!: Phaser.GameObjects.Graphics;
+  private bottomBarGfx!: Phaser.GameObjects.Graphics;
+  private minimapGfx!: Phaser.GameObjects.Graphics;
+  private minimapFrames = 0;
+  private arrowGfx!: Phaser.GameObjects.Graphics;
+  private arrowText!: Phaser.GameObjects.Text;
+  private arrowShown = false;
+  private view!: View;
   private clockText!: Phaser.GameObjects.Text;
   private hudNameText!: Phaser.GameObjects.Text;
   private hudSpecialText!: Phaser.GameObjects.Text;
@@ -182,6 +208,9 @@ export class MatchScene extends Phaser.Scene {
   private pkOrderGfx!: Phaser.GameObjects.Graphics;
   private pkOrderRows: PkOrderRow[] = [];
   private pkOrderCount!: Phaser.GameObjects.Text;
+  private pkOrderTitle!: Phaser.GameObjects.Text;
+  private pkOrderHint!: Phaser.GameObjects.Text;
+  private pkOrderUndo!: Phaser.GameObjects.Text;
   private pkOrderOpen = false;
   private pkOrderCursor = 0;
   private pkOrderPicks: number[] = [];
@@ -201,6 +230,7 @@ export class MatchScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.view = applyView(this, (v) => this.layoutHud(v));
     this.state = createInitialState(
       {
         seed: this.seed,
@@ -218,7 +248,7 @@ export class MatchScene extends Phaser.Scene {
     this.scorers = [];
     this.resultQueued = false;
     this.teamColors = [COUNTRY_INFO[this.homeCountry].color, COUNTRY_INFO[this.awayCountry].color];
-    this.touch = new TouchControls(this);
+    this.touch = new TouchControls(this, this.view);
     this.localInput = new LocalInput(this, this.touch);
     this.events.once('shutdown', () => {
       this.localInput.destroy();
@@ -231,15 +261,18 @@ export class MatchScene extends Phaser.Scene {
     this.trailGfx = this.add.graphics();
     this.ballGfx = this.add.graphics();
     this.createHud();
+    this.layoutHud(this.view);
 
     const cam = this.cameras.main;
-    cam.scrollX = cameraTargetX(this.state.ball.x);
-    cam.scrollY = 0;
+    cam.scrollX = cameraTargetX(this.state.ball.x, this.view.W);
+    cam.scrollY = (BASE_H - this.view.H) / 2;
 
     (window as unknown as { __sg: unknown }).__sg = {
       state: () => this.state,
       humanIdx: this.humanIdx,
       scene: this,
+      minimap: () => this.minimapFrames,
+      arrowVisible: () => this.arrowShown,
     };
     (window as unknown as { __sgScene: string }).__sgScene = 'MatchScene';
 
@@ -366,16 +399,127 @@ export class MatchScene extends Phaser.Scene {
 
   private drawAll(time: number): void {
     const cam = this.cameras.main;
+    const { W, H } = this.view;
     if (this.state.match.phase === 'pk') {
-      cam.scrollX = PK_CAMERA_X;
+      cam.scrollX = pkCameraX(W);
     } else {
-      cam.scrollX += (cameraTargetX(this.state.ball.x) - cam.scrollX) * CAMERA_LERP;
+      cam.scrollX += (cameraTargetX(this.state.ball.x, W) - cam.scrollX) * CAMERA_LERP;
     }
-    cam.scrollY = 0;
+    // Centre the field band vertically when the window is taller than the 360 base height.
+    cam.scrollY = (BASE_H - H) / 2;
 
     this.state.players.forEach((p, i) => this.drawPlayer(this.playerViews[i], p, time));
     this.drawBall();
     this.drawHud();
+    this.drawMinimap();
+    this.drawArrow();
+  }
+
+  /** Field overview in the top-left: players, ball, goals and the camera's x range. Hidden during the shootout. */
+  private drawMinimap(): void {
+    const visible = this.state.match.pk === null;
+    this.minimapGfx.setVisible(visible);
+    if (!visible) return;
+    this.minimapFrames++;
+
+    const g = this.minimapGfx.clear();
+    const s = MINIMAP_SCALE;
+    const mx = (x: number) => MINIMAP_X + x * s;
+    const my = (y: number) => MINIMAP_Y + y * s;
+    const w = FIELD_W * s;
+    const h = FIELD_D * s;
+    const { players, ball } = this.state;
+
+    g.fillStyle(0x0b3d1e, 0.6);
+    g.fillRect(MINIMAP_X, MINIMAP_Y, w, h);
+    g.lineStyle(1, 0xffffff, 0.9);
+    g.strokeRect(MINIMAP_X, MINIMAP_Y, w, h);
+    g.lineBetween(mx(FIELD_W / 2), my(0), mx(FIELD_W / 2), my(FIELD_D));
+
+    // Goals: a white bar across each goal mouth.
+    g.lineStyle(2, 0xffffff, 1);
+    for (const x of [0, FIELD_W]) {
+      g.lineBetween(mx(x), my(FIELD_D / 2 - GOAL_HALF_W), mx(x), my(FIELD_D / 2 + GOAL_HALF_W));
+    }
+
+    for (const p of players) {
+      const base = this.teamColors[p.team];
+      const color = p.role === 'GK' ? mix(base, 0xffffff, 0.35) : base;
+      g.fillStyle(color, p.action === 'down' ? 0.35 : 1);
+      g.fillCircle(mx(p.x), my(p.y), 1.5);
+    }
+    const human = players[this.humanIdx];
+    g.lineStyle(1, HUMAN_MARK, 1);
+    g.strokeCircle(mx(human.x), my(human.y), 3.5);
+
+    const kind = ball.special?.kind;
+    g.fillStyle(0xffffff, 1);
+    g.fillCircle(mx(ball.x), my(ball.y), kind ? 3 : 2);
+    if (kind) {
+      g.lineStyle(1, SPECIAL_COLORS[kind], 1);
+      g.strokeCircle(mx(ball.x), my(ball.y), 3);
+    }
+
+    const cam = this.cameras.main;
+    const x0 = Math.max(MINIMAP_X, mx(cam.scrollX));
+    const x1 = Math.min(MINIMAP_X + w, mx(cam.scrollX + this.view.W));
+    if (x1 > x0) {
+      g.lineStyle(1, 0xffffff, 1);
+      g.strokeRect(x0, MINIMAP_Y, x1 - x0, h);
+    }
+  }
+
+  /**
+   * Yellow arrow at the screen edge pointing at the human when the human is outside the camera view.
+   * Play phase only (not during the shootout or the order overlay).
+   */
+  private drawArrow(): void {
+    const g = this.arrowGfx.clear();
+    const { W, H } = this.view;
+    const cam = this.cameras.main;
+    const human = this.state.players[this.humanIdx];
+    const { sx, sy } = worldToScreen(human.x, human.y, human.z);
+    const px = sx - cam.scrollX;
+    const py = sy - cam.scrollY;
+    const outside = px < ARROW_MARGIN || px > W - ARROW_MARGIN || py < ARROW_MARGIN || py > H - ARROW_MARGIN;
+    const show = this.state.match.phase === 'play' && this.state.match.pk === null && outside;
+    this.arrowShown = show;
+    this.arrowText.setVisible(show);
+    if (!show) return;
+
+    // Ray from the view centre to the human, clamped to the band that keeps the arrow off the HUD.
+    const cx = W / 2;
+    const cy = H / 2;
+    const minX = ARROW_EDGE_X;
+    const maxX = W - ARROW_EDGE_X;
+    const minY = ARROW_EDGE_TOP;
+    const maxY = H - (this.touch.isShown() ? ARROW_EDGE_BOTTOM_TOUCH : ARROW_EDGE_BOTTOM);
+    const dx = px - cx;
+    const dy = py - cy;
+    let t = Number.POSITIVE_INFINITY;
+    if (dx > 0) t = Math.min(t, (maxX - cx) / dx);
+    else if (dx < 0) t = Math.min(t, (minX - cx) / dx);
+    if (dy > 0) t = Math.min(t, (maxY - cy) / dy);
+    else if (dy < 0) t = Math.min(t, (minY - cy) / dy);
+    const ex = cx + dx * t;
+    const ey = cy + dy * t;
+    const len = Math.hypot(dx, dy);
+    const ux = dx / len;
+    const uy = dy / len;
+    const nx = -uy;
+    const ny = ux;
+    const tipX = ex + ux * ARROW_SIZE;
+    const tipY = ey + uy * ARROW_SIZE;
+    const baseX = ex - ux * ARROW_SIZE * 0.5;
+    const baseY = ey - uy * ARROW_SIZE * 0.5;
+    const half = ARROW_SIZE * 0.6;
+    const ax = [tipX, baseX + nx * half, baseX - nx * half];
+    const ay = [tipY, baseY + ny * half, baseY - ny * half];
+    g.fillStyle(HUMAN_MARK, 1);
+    g.fillTriangle(ax[0], ay[0], ax[1], ay[1], ax[2], ay[2]);
+    g.lineStyle(1, 0x000000, 0.8);
+    g.strokeTriangle(ax[0], ay[0], ax[1], ay[1], ax[2], ay[2]);
+    this.arrowText.setPosition(ex - ux * 18, ey - uy * 18);
   }
 
   private drawField(): void {
@@ -385,7 +529,7 @@ export class MatchScene extends Phaser.Scene {
 
     const g = this.add.graphics().setDepth(-20);
     g.fillStyle(0x12161d, 1);
-    g.fillRect(-200, 0, FIELD_W + 400, 360);
+    g.fillRect(-400, -1000, FIELD_W + 800, 3000);
 
     for (let x = GRASS_X0, i = 0; x < GRASS_X1; x += 100, i++) {
       g.fillStyle(i % 2 === 0 ? 0x2e8b3a : 0x2a8035, 1);
@@ -445,7 +589,7 @@ export class MatchScene extends Phaser.Scene {
       color: '#ffffff',
       stroke: '#000000',
       strokeThickness: 2,
-      resolution: 2,
+      resolution: textResolution(),
     };
     this.playerViews = this.state.players.map((p) => {
       const gfx = this.add.graphics();
@@ -591,56 +735,60 @@ export class MatchScene extends Phaser.Scene {
       color,
       stroke: stroke ? '#000000' : undefined,
       strokeThickness: stroke ? 3 : 0,
-      resolution: 2,
+      resolution: textResolution(),
     });
 
-    const topBar = this.add.graphics().setScrollFactor(0).setDepth(hudDepth);
-    topBar.fillStyle(0x000000, 0.55);
-    topBar.fillRect(0, 0, 640, 34);
-
+    // Positions are set by layoutHud (objects start at the origin).
+    this.topBarGfx = this.add.graphics().setScrollFactor(0).setDepth(hudDepth);
     this.homeText = this.add
-      .text(312, 17, '', style(hexCss(home.color), '16px'))
+      .text(0, 0, '', style(hexCss(home.color), '16px'))
       .setOrigin(1, 0.5)
       .setScrollFactor(0)
       .setDepth(hudDepth + 1);
-    this.add
-      .text(320, 17, '-', style('#ffffff', '16px'))
+    this.dashText = this.add
+      .text(0, 0, '-', style('#ffffff', '16px'))
       .setOrigin(0.5, 0.5)
       .setScrollFactor(0)
       .setDepth(hudDepth + 1);
     this.awayText = this.add
-      .text(328, 17, '', style(hexCss(away.color), '16px'))
+      .text(0, 0, '', style(hexCss(away.color), '16px'))
       .setOrigin(0, 0.5)
       .setScrollFactor(0)
       .setDepth(hudDepth + 1);
     this.clockText = this.add
-      .text(630, 17, '', style('#ffffff', '14px'))
+      .text(0, 0, '', style('#ffffff', '14px'))
       .setOrigin(1, 0.5)
       .setScrollFactor(0)
       .setDepth(hudDepth + 1);
 
-    const panel = this.add.graphics().setScrollFactor(0).setDepth(hudDepth);
-    panel.fillStyle(0x000000, 0.55);
-    panel.fillRect(0, 322, 640, 38);
-
+    this.bottomBarGfx = this.add.graphics().setScrollFactor(0).setDepth(hudDepth);
     this.hudNameText = this.add
-      .text(8, 325, '', style('#ffffff', '14px'))
+      .text(0, 0, '', style('#ffffff', '14px'))
       .setScrollFactor(0)
       .setDepth(hudDepth + 1);
     this.hudSpecialText = this.add
-      .text(8, 343, '', style('#ffd98a', '12px', false))
+      .text(0, 0, '', style('#ffd98a', '12px', false))
       .setScrollFactor(0)
       .setDepth(hudDepth + 1);
     this.hudBarsGfx = this.add.graphics().setScrollFactor(0).setDepth(hudDepth + 1);
 
     this.bannerText = this.add
-      .text(320, 150, '', style('#ffffff', '26px'))
+      .text(0, 0, '', style('#ffffff', '26px'))
       .setOrigin(0.5, 0.5)
       .setScrollFactor(0)
       .setDepth(hudDepth + 2)
       .setVisible(false);
     this.specialText = this.add
-      .text(320, 200, '', style('#ffffff', '36px'))
+      .text(0, 0, '', style('#ffffff', '36px'))
+      .setOrigin(0.5, 0.5)
+      .setScrollFactor(0)
+      .setDepth(hudDepth + 2)
+      .setVisible(false);
+
+    this.minimapGfx = this.add.graphics().setScrollFactor(0).setDepth(hudDepth);
+    this.arrowGfx = this.add.graphics().setScrollFactor(0).setDepth(hudDepth + 1);
+    this.arrowText = this.add
+      .text(0, 0, this.state.players[this.humanIdx].name, style(hexCss(HUMAN_MARK), '11px'))
       .setOrigin(0.5, 0.5)
       .setScrollFactor(0)
       .setDepth(hudDepth + 2)
@@ -648,6 +796,50 @@ export class MatchScene extends Phaser.Scene {
 
     this.createPkHud(style, hudDepth);
     this.createPkOrder(style, hudDepth);
+  }
+
+  /** Positions the HUD for a logical view. Runs on create and on every resize. */
+  private layoutHud(v: View): void {
+    this.view = v;
+    const { W, H } = v;
+    this.touch.setView(v);
+    this.refreshTextResolution();
+
+    this.topBarGfx.clear().fillStyle(0x000000, 0.55).fillRect(0, 0, W, 34);
+    this.homeText.setPosition(W / 2 - 8, 17);
+    this.dashText.setPosition(W / 2, 17);
+    this.awayText.setPosition(W / 2 + 8, 17);
+    this.clockText.setPosition(W - 10, 17);
+
+    this.bottomBarGfx.clear().fillStyle(0x000000, 0.55).fillRect(0, H - 38, W, 38);
+    this.hudNameText.setPosition(8, H - 35);
+    this.hudSpecialText.setPosition(8, H - 17);
+    this.bannerText.setPosition(W / 2, H / 2 - 30);
+    this.specialText.setPosition(W / 2, H / 2 + 20);
+    this.pkMeterLabel.setPosition(W - PK_METER_RIGHT - 6, H - PK_METER_BOTTOM + PK_METER_H / 2);
+
+    const left = orderLeft(W);
+    this.pkOrderTitle.setPosition(W / 2, 52);
+    this.pkOrderHint.setPosition(W / 2, 74);
+    this.pkOrderCount.setPosition(W / 2, 292);
+    this.pkOrderUndo.setPosition(left + ORDER_UNDO_X + ORDER_UNDO_W / 2, ORDER_UNDO_Y + ORDER_UNDO_H / 2);
+    this.pkOrderRows.forEach((row, i) => {
+      const y = ORDER_ROW_Y0 + i * ORDER_ROW_H;
+      row.slot.setPosition(left + ORDER_ROW_X + 20, y);
+      row.role.setPosition(left + ORDER_ROW_X + 54, y);
+      row.name.setPosition(left + ORDER_ROW_X + 80, y);
+      row.stats.setPosition(left + ORDER_ROW_X + 332, y);
+    });
+    if (this.pkOrderOpen) this.refreshPkOrder();
+  }
+
+  /** Re-applies the current text resolution to every text object (HUD, touch labels, player names). */
+  private refreshTextResolution(): void {
+    const res = textResolution();
+    this.children.list.forEach((o) => {
+      if (o instanceof Phaser.GameObjects.Text) o.setResolution(res);
+    });
+    this.playerViews.forEach((v) => v.label.setResolution(res));
   }
 
   private createPkHud(style: HudStyle, depth: number): void {
@@ -664,7 +856,7 @@ export class MatchScene extends Phaser.Scene {
     const away = COUNTRY_INFO[this.awayCountry];
     this.pkHomeText = add(8, 64, hexCss(home.color), '13px', home.name);
     this.pkAwayText = add(8, 85, hexCss(away.color), '13px', away.name);
-    this.pkMeterLabel = add(PK_METER_X - 6, PK_METER_Y + PK_METER_H / 2, '#ffffff', '12px', '力量')
+    this.pkMeterLabel = add(0, 0, '#ffffff', '12px', '力量')
       .setOrigin(1, 0.5);
     this.pkObjs = [
       this.pkHudGfx,
@@ -702,25 +894,23 @@ export class MatchScene extends Phaser.Scene {
         .setDepth(depth + 1);
 
     this.pkOrderGfx = this.add.graphics().setScrollFactor(0).setDepth(depth);
-    const title = add(320, 52, '選擇踢球順序', '#ffd98a', '18px', 0.5);
-    const hint = add(320, 74, 'W/S 移動　J 加入（依序踢）　K 取消最後一位', '#ffffff', '12px', 0.5, false);
-    this.pkOrderCount = add(320, 292, '', '#ffffff', '12px', 0.5);
-    const undoText = add(ORDER_UNDO_X + ORDER_UNDO_W / 2, ORDER_UNDO_Y + ORDER_UNDO_H / 2, '重選', '#ffffff', '14px', 0.5);
-    this.pkOrderRows = Array.from({ length: PK_ROUNDS }, (_, i) => {
-      const y = ORDER_ROW_Y0 + i * ORDER_ROW_H;
-      return {
-        slot: add(166, y, '', '#ffd98a', '16px', 0.5),
-        role: add(200, y, '', '#9fd3ff', '12px', 0.5),
-        name: add(226, y, '', '#ffffff', '16px', 0),
-        stats: add(478, y, '', '#cfd8e3', '12px', 1, false),
-      };
-    });
+    // Positions are set by layoutHud.
+    this.pkOrderTitle = add(0, 0, '選擇踢球順序', '#ffd98a', '18px', 0.5);
+    this.pkOrderHint = add(0, 0, 'W/S 移動　J 加入（依序踢）　K 取消最後一位', '#ffffff', '12px', 0.5, false);
+    this.pkOrderCount = add(0, 0, '', '#ffffff', '12px', 0.5);
+    this.pkOrderUndo = add(0, 0, '重選', '#ffffff', '14px', 0.5);
+    this.pkOrderRows = Array.from({ length: PK_ROUNDS }, () => ({
+      slot: add(0, 0, '', '#ffd98a', '16px', 0.5),
+      role: add(0, 0, '', '#9fd3ff', '12px', 0.5),
+      name: add(0, 0, '', '#ffffff', '16px', 0),
+      stats: add(0, 0, '', '#cfd8e3', '12px', 1, false),
+    }));
     this.pkOrderObjs = [
       this.pkOrderGfx,
-      title,
-      hint,
+      this.pkOrderTitle,
+      this.pkOrderHint,
       this.pkOrderCount,
-      undoText,
+      this.pkOrderUndo,
       ...this.pkOrderRows.flatMap((r) => [r.slot, r.role, r.name, r.stats]),
     ];
     this.input.on('pointerdown', this.onPkOrderPointer);
@@ -730,14 +920,19 @@ export class MatchScene extends Phaser.Scene {
   /** Pointer tap on the order overlay: a row picks that player (same as J), 重選 undoes the last pick (same as K). */
   private onPkOrderPointer = (pointer: Phaser.Input.Pointer): void => {
     if (!this.pkOrderOpen) return;
-    const { x, y } = pointer;
-    if (x >= ORDER_UNDO_X && x < ORDER_UNDO_X + ORDER_UNDO_W && y >= ORDER_UNDO_Y && y < ORDER_UNDO_Y + ORDER_UNDO_H) {
+    // Canvas pixels to logical view units.
+    const x = pointer.x / this.view.Z;
+    const y = pointer.y / this.view.Z;
+    const left = orderLeft(this.view.W);
+    const undoX = left + ORDER_UNDO_X;
+    if (x >= undoX && x < undoX + ORDER_UNDO_W && y >= ORDER_UNDO_Y && y < ORDER_UNDO_Y + ORDER_UNDO_H) {
       this.pkOrderTap = 'undo';
       return;
     }
+    const rowX = left + ORDER_ROW_X;
     for (let i = 0; i < this.pkOrderRows.length; i++) {
       const top = ORDER_ROW_Y0 + i * ORDER_ROW_H - ORDER_ROW_BOX_H / 2;
-      if (x >= ORDER_ROW_X && x < ORDER_ROW_X + ORDER_ROW_W && y >= top && y < top + ORDER_ROW_BOX_H) {
+      if (x >= rowX && x < rowX + ORDER_ROW_W && y >= top && y < top + ORDER_ROW_BOX_H) {
         this.pkOrderTap = i;
         return;
       }
@@ -768,6 +963,7 @@ export class MatchScene extends Phaser.Scene {
 
   private drawMatchHud(): void {
     const { match, players } = this.state;
+    const { H } = this.view;
     const secs = Math.ceil(match.clockTicks / TICK_HZ);
     const mm = String(Math.floor(secs / 60)).padStart(2, '0');
     const ss = String(secs % 60).padStart(2, '0');
@@ -783,17 +979,18 @@ export class MatchScene extends Phaser.Scene {
     const chargeRatio = Math.min(1, p.chargeTicks / CHARGE_FULL);
     this.hudBarsGfx.clear();
     this.hudBarsGfx.fillStyle(0x333333, 1);
-    this.hudBarsGfx.fillRect(barX, 330, barW, 7);
-    this.hudBarsGfx.fillRect(barX, 345, barW, 7);
+    this.hudBarsGfx.fillRect(barX, H - 30, barW, 7);
+    this.hudBarsGfx.fillRect(barX, H - 15, barW, 7);
     this.hudBarsGfx.fillStyle(0x6cd46c, 1);
-    this.hudBarsGfx.fillRect(barX, 330, barW * staminaRatio, 7);
+    this.hudBarsGfx.fillRect(barX, H - 30, barW * staminaRatio, 7);
     this.hudBarsGfx.fillStyle(chargeRatio >= 1 ? GOLD : 0x4fb3ff, 1);
-    this.hudBarsGfx.fillRect(barX, 345, barW * chargeRatio, 7);
+    this.hudBarsGfx.fillRect(barX, H - 15, barW * chargeRatio, 7);
   }
 
   /** Shootout HUD: title, PK score, per-team kick markers, shooter/keeper line, aim helpers and power meter. */
   private drawPkHud(pk: PkState): void {
     const { players } = this.state;
+    const { W, H } = this.view;
     const sudden = pk.kicks[0].length >= PK_ROUNDS && pk.kicks[1].length >= PK_ROUNDS;
     this.clockText.setText(sudden ? 'PK 大戰　驟死' : 'PK 大戰');
     this.pkScoreText.setText(`PK ${pk.score[0]} - ${pk.score[1]}`);
@@ -835,13 +1032,13 @@ export class MatchScene extends Phaser.Scene {
       const boxW = 3 * PK_CELL_W + 2 * PK_CELL_GAP;
       const boxH = 2 * PK_CELL_H + PK_CELL_GAP;
       aim.fillStyle(0x000000, 0.55);
-      aim.fillRect(PK_AIM_X - 6, PK_AIM_Y - 6, boxW + 12, boxH + 12);
+      aim.fillRect((W - PK_AIM_RIGHT) - 6, PK_AIM_Y - 6, boxW + 12, boxH + 12);
       for (let row = 0; row < 2; row++) {
         for (let col = 0; col < 3; col++) {
           const on = col === selCol && (row === 0) === selHigh;
           aim.fillStyle(on ? highlight : 0x2b333d, 1);
           aim.fillRect(
-            PK_AIM_X + col * (PK_CELL_W + PK_CELL_GAP),
+            (W - PK_AIM_RIGHT) + col * (PK_CELL_W + PK_CELL_GAP),
             PK_AIM_Y + row * (PK_CELL_H + PK_CELL_GAP),
             PK_CELL_W,
             PK_CELL_H,
@@ -855,14 +1052,14 @@ export class MatchScene extends Phaser.Scene {
     if (showMeter) {
       const value = pk.meterTicks >= 0 ? pkMeterValue(pk.meterTicks) : 0;
       aim.fillStyle(0x333333, 1);
-      aim.fillRect(PK_METER_X, PK_METER_Y, PK_METER_W, PK_METER_H);
+      aim.fillRect((W - PK_METER_RIGHT), (H - PK_METER_BOTTOM), PK_METER_W, PK_METER_H);
       aim.fillStyle(0xffffff, 1);
-      aim.fillRect(PK_METER_X, PK_METER_Y, PK_METER_W * value, PK_METER_H);
+      aim.fillRect((W - PK_METER_RIGHT), (H - PK_METER_BOTTOM), PK_METER_W * value, PK_METER_H);
       // Zones are drawn over the fill so they stay visible while the bar passes them.
       aim.fillStyle(0x6cd46c, 0.55);
-      aim.fillRect(PK_METER_X + PK_METER_W * 0.6, PK_METER_Y, PK_METER_W * 0.3, PK_METER_H);
+      aim.fillRect((W - PK_METER_RIGHT) + PK_METER_W * 0.6, (H - PK_METER_BOTTOM), PK_METER_W * 0.3, PK_METER_H);
       aim.fillStyle(0xff3b3b, 0.75);
-      aim.fillRect(PK_METER_X + PK_METER_W * 0.92, PK_METER_Y, PK_METER_W * 0.08, PK_METER_H);
+      aim.fillRect((W - PK_METER_RIGHT) + PK_METER_W * 0.92, (H - PK_METER_BOTTOM), PK_METER_W * 0.08, PK_METER_H);
     }
   }
 
@@ -953,14 +1150,15 @@ export class MatchScene extends Phaser.Scene {
 
   private refreshPkOrder(): void {
     const roster = this.humanRoster();
+    const left = orderLeft(this.view.W);
     const g = this.pkOrderGfx.clear();
     g.fillStyle(0x000000, 0.8);
-    g.fillRect(ORDER_BOX_X, ORDER_BOX_Y, ORDER_BOX_W, ORDER_BOX_H);
+    g.fillRect(left, ORDER_BOX_Y, ORDER_BOX_W, ORDER_BOX_H);
     roster.forEach((idx, i) => {
       const p = this.state.players[idx];
       const pos = this.pkOrderPicks.indexOf(idx);
       g.fillStyle(i === this.pkOrderCursor ? 0x3a5a7a : 0x1d2630, 1);
-      g.fillRect(ORDER_ROW_X, ORDER_ROW_Y0 + i * ORDER_ROW_H - ORDER_ROW_BOX_H / 2, ORDER_ROW_W, ORDER_ROW_BOX_H);
+      g.fillRect(left + ORDER_ROW_X, ORDER_ROW_Y0 + i * ORDER_ROW_H - ORDER_ROW_BOX_H / 2, ORDER_ROW_W, ORDER_ROW_BOX_H);
       const row = this.pkOrderRows[i];
       row.slot.setText(pos >= 0 ? String(pos + 1) : '-');
       row.role.setText(p.role);
@@ -968,7 +1166,7 @@ export class MatchScene extends Phaser.Scene {
       row.stats.setText(`力量 ${p.stats.power}　技巧 ${p.stats.technique}`);
     });
     g.fillStyle(0x3a5a7a, 1);
-    g.fillRect(ORDER_UNDO_X, ORDER_UNDO_Y, ORDER_UNDO_W, ORDER_UNDO_H);
+    g.fillRect(left + ORDER_UNDO_X, ORDER_UNDO_Y, ORDER_UNDO_W, ORDER_UNDO_H);
     this.pkOrderCount.setText(`已選 ${this.pkOrderPicks.length} / ${PK_ROUNDS}`);
   }
 

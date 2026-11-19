@@ -1,6 +1,6 @@
 // Mobile touch flow (Playwright, phone emulation): portrait overlay -> title -> team select -> match
-// (virtual joystick + J) -> penalty shootout (tap order, touch J) -> result -> title.
-// Usage: node e2e/mobile.mjs <url>   (runs with ?half=2&ai=0)
+// (virtual joystick + J, minimap, off-screen arrow) -> penalty shootout (tap order, touch J) -> result -> title.
+// Usage: node e2e/mobile.mjs <url>   (runs with ?half=12&ai=0: the first half is long enough for the joystick and arrow checks)
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -15,7 +15,7 @@ if (!base) {
   process.exit(2);
 }
 const flowUrl = new URL(base);
-flowUrl.searchParams.set('half', '2');
+flowUrl.searchParams.set('half', '12');
 flowUrl.searchParams.set('ai', '0');
 
 const outDir = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'test-results');
@@ -69,29 +69,38 @@ const pkSnapshot = (page) =>
       winner: pk ? pk.winner : -1,
     };
   });
+
 const humanX = (page) =>
   page.evaluate(() => {
     const sg = window.__sg;
     return sg.state().players[sg.humanIdx].x;
   });
 
-// Logical (640x360) point -> page pixel, via the canvas bounding box (FIT scaling and letterboxing included).
+// Current logical view ({ W, H, Z }) reported by the scene (render/view.ts). Changes with the viewport.
+const viewOf = (page) => page.evaluate(() => window.__sgView);
+
+// Logical view point -> page pixel. The canvas fills the viewport, so the scale is CSS px per logical unit.
 async function toPage(page, x, y) {
   const box = await page.locator('canvas').first().boundingBox();
   if (!box) throw new Error('canvas not found');
-  return { x: box.x + (x / 640) * box.width, y: box.y + (y / 360) * box.height };
+  const view = await viewOf(page);
+  const s = box.width / view.W;
+  return { x: box.x + x * s, y: box.y + y * s };
 }
 const tapLogical = async (page, x, y) => {
   const p = await toPage(page, x, y);
   await page.touchscreen.tap(p.x, p.y);
 };
 
-// Matches the on-screen buttons and panels in TouchControls / TeamSelectScene / MatchScene.
-const BTN_J = { x: 585, y: 268 };
-const BTN_CONFIRM = { x: 520, y: 335 };
-const PANEL_SHU = { x: 320, y: 180 };
-const PANEL_WU = { x: 510, y: 180 };
-const TITLE_TAP = { x: 320, y: 180 };
+// On-screen points, anchored like the scenes: buttons / stick from the bottom or right edge, menus centred.
+const anchors = (v) => ({
+  center: { x: v.W / 2, y: v.H / 2 },
+  panelShu: { x: v.W / 2, y: v.H / 2 },
+  panelWu: { x: v.W / 2 + 190, y: v.H / 2 },
+  confirm: { x: v.W - 120, y: v.H - 25 },
+  btnJ: { x: v.W - 55, y: v.H - 92 },
+  stickRest: { x: 70, y: v.H - 90 },
+});
 const ORDER_ROW_Y0 = 98;
 const ORDER_ROW_H = 36;
 
@@ -142,31 +151,47 @@ try {
   await page.screenshot({ path: shot('mobile-1-title.png') });
   report('1 title', (await page.evaluate(() => window.__sgScene)) === 'TitleScene');
 
+  // 1b. Full screen: the canvas covers the viewport (no letterbox) and is rendered at >= 1.5x its CSS size.
+  const fullBox = await page.locator('canvas').first().boundingBox();
+  const canvasPx = await page.evaluate(() => {
+    const c = document.querySelector('canvas');
+    return { w: c.width, h: c.height };
+  });
+  const covers = Math.abs(fullBox.width - 844) <= 1 && Math.abs(fullBox.height - 390) <= 1;
+  report('1b canvas covers the viewport', covers, `css ${fullBox.width}x${fullBox.height}`);
+  report(
+    '1b canvas backing width >= 1.5x CSS width',
+    canvasPx.w >= 1.5 * fullBox.width,
+    `backing ${canvasPx.w}x${canvasPx.h}, css ${fullBox.width}`,
+  );
+
   // 2. Title tap -> team select (own country stage)
-  await tapLogical(page, TITLE_TAP.x, TITLE_TAP.y);
+  const v0 = await viewOf(page);
+  await tapLogical(page, v0.W / 2, v0.H / 2);
   const ownOk = (await waitScene(page, 'TeamSelectScene')) && (await waitMenu(page, { stage: 'own' }));
   report('2 title tap -> team select', ownOk);
   if (!ownOk) throw new Error('team select did not appear after title tap');
 
   // 3. Own country: tap shu (moves cursor), tap again (confirm) -> opponent stage
-  await tapLogical(page, PANEL_SHU.x, PANEL_SHU.y);
+  let A = anchors(await viewOf(page));
+  await tapLogical(page, A.panelShu.x, A.panelShu.y);
   const shuCursor = await waitMenu(page, { stage: 'own', cursor: 1 });
-  await tapLogical(page, PANEL_SHU.x, PANEL_SHU.y);
+  await tapLogical(page, A.panelShu.x, A.panelShu.y);
   const oppOk = await waitMenu(page, { stage: 'opp', own: 'shu' });
   await page.waitForTimeout(200);
   await page.screenshot({ path: shot('mobile-2-select.png') });
   report('3 own country: tap panel twice confirms', shuCursor && oppOk);
 
   // 4. Opponent: tap wu (cursor), then 確定 -> general stage
-  await tapLogical(page, PANEL_WU.x, PANEL_WU.y);
+  await tapLogical(page, A.panelWu.x, A.panelWu.y);
   const wuCursor = await waitMenu(page, { stage: 'opp', cursor: 2 });
-  await tapLogical(page, BTN_CONFIRM.x, BTN_CONFIRM.y);
+  await tapLogical(page, A.confirm.x, A.confirm.y);
   const generalOk = await waitMenu(page, { stage: 'general', cursor: 4 });
   report('4 opponent: tap panel + 確定 -> general', wuCursor && generalOk);
   if (!generalOk) throw new Error('general stage did not appear');
 
   // 5. General: 確定 (default FW) -> match starts
-  await tapLogical(page, BTN_CONFIRM.x, BTN_CONFIRM.y);
+  await tapLogical(page, A.confirm.x, A.confirm.y);
   const matchOk =
     (await waitScene(page, 'MatchScene')) &&
     (await page
@@ -178,15 +203,18 @@ try {
   report('5 general 確定 -> match in play', matchOk);
   if (!matchOk) throw new Error('match did not reach play');
 
-  // 6. Touch controls visible during the match
+  // 6. Touch controls and HUD visible during the match; minimap drawn every frame.
+  A = anchors(await viewOf(page));
   await page.waitForTimeout(150);
-  await page.screenshot({ path: shot('mobile-3-match.png') });
+  await page.screenshot({ path: shot('view-mobile-match.png') });
+  const minimapFrames = await page.evaluate(() => window.__sg.minimap());
+  report('6 minimap drawn', minimapFrames > 0, `frames ${minimapFrames}`);
 
-  // 7. Joystick: touch down at (80, 270), move right to (120, 270), hold ~1 s.
+  // 7. Joystick: touch down at the stick rest, move right, hold ~1 s.
   const x0 = await humanX(page);
-  await touchStart(80, 270);
+  await touchStart(A.stickRest.x, A.stickRest.y);
   for (let i = 1; i <= 5; i++) {
-    await touchMove(80 + i * 8, 270);
+    await touchMove(A.stickRest.x + i * 8, A.stickRest.y);
     await page.waitForTimeout(40);
   }
   await page.waitForTimeout(800);
@@ -194,8 +222,42 @@ try {
   await touchEnd();
   report('7 joystick moves human right', x1 > x0 + 2, `x ${x0.toFixed(1)} -> ${x1.toFixed(1)}`);
 
+  // 7b. Off-screen arrow: the human carries the ball to the right; a short J press releases it (the ball stays put,
+  // so the camera stays on it), then the stick pushed left walks the human out of the camera view.
+  await touchStart(A.stickRest.x, A.stickRest.y);
+  await touchMove(A.stickRest.x + 40, A.stickRest.y);
+  await page.waitForTimeout(1200);
+  await touchEnd();
+  await touchStart(A.btnJ.x, A.btnJ.y);
+  await page.waitForTimeout(150);
+  await touchEnd();
+  const xStart = await humanX(page);
+  await touchStart(A.stickRest.x, A.stickRest.y);
+  await touchMove(A.stickRest.x - 40, A.stickRest.y);
+  let arrowOk = false;
+  const arrowDeadline = Date.now() + 10000;
+  while (Date.now() < arrowDeadline) {
+    if (await page.evaluate(() => window.__sg.arrowVisible())) {
+      arrowOk = true;
+      break;
+    }
+    await page.waitForTimeout(200);
+  }
+  if (arrowOk) await page.screenshot({ path: shot('view-arrow.png') });
+  await touchEnd();
+  const arrowState = await page.evaluate(() => {
+    const sg = window.__sg;
+    const st = sg.state();
+    return { human: Math.round(st.players[sg.humanIdx].x), ball: Math.round(st.ball.x), scrollX: Math.round(sg.scene.cameras.main.scrollX), phase: st.match.phase };
+  });
+  report(
+    '7b off-screen arrow shown when human leaves view',
+    arrowOk,
+    `from ${xStart.toFixed(0)} to ${arrowState.human}, ball ${arrowState.ball}, camera ${arrowState.scrollX}, ${arrowState.phase}`,
+  );
+
   // 8. J button tap -> no errors (checked at the end)
-  await tapLogical(page, BTN_J.x, BTN_J.y);
+  await tapLogical(page, A.btnJ.x, A.btnJ.y);
   await page.waitForTimeout(200);
 
   // 9. PK order overlay: tap the five rows (each tap picks that player, same as J)
@@ -230,7 +292,7 @@ try {
   report('9 pk order overlay open', orderOpen);
   if (!orderOpen) throw new Error('shootout order screen did not open');
   for (let i = 0; i < 5; i++) {
-    await tapLogical(page, 320, ORDER_ROW_Y0 + i * ORDER_ROW_H);
+    await tapLogical(page, A.center.x, ORDER_ROW_Y0 + i * ORDER_ROW_H);
     await page.waitForTimeout(150);
   }
   const submitted = await page
@@ -276,7 +338,7 @@ try {
     }
     if (s.stage === 'aim' && s.shooterIdx === human && s.meterTicks < 0 && pressedAtKick !== s.kicksTaken) {
       pressedAtKick = s.kicksTaken;
-      await touchStart(BTN_J.x, BTN_J.y);
+      await touchStart(A.btnJ.x, A.btnJ.y);
       await page.waitForTimeout(600);
       await touchEnd();
       continue;
@@ -298,7 +360,7 @@ try {
   await page.screenshot({ path: shot('mobile-5-result.png') });
   report('11 result scene', resultOk);
   if (!resultOk) throw new Error('result scene did not appear');
-  await tapLogical(page, 320, 180);
+  await tapLogical(page, A.center.x, A.center.y);
   const backOk = await waitScene(page, 'TitleScene', 8000);
   report('11 result tap -> title', backOk);
 } catch (err) {

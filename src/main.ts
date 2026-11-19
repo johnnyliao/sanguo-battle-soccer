@@ -24,17 +24,29 @@ window.addEventListener('resize', updateRotateHint);
 window.addEventListener('orientationchange', updateRotateHint);
 updateRotateHint();
 
-new Phaser.Game({
+// Canvas fills the window at up to 2x device pixels; the logical view is set per scene (render/view.ts).
+const dpr = (): number => Math.min(window.devicePixelRatio || 1, 2);
+const game = new Phaser.Game({
   type: Phaser.AUTO,
-  width: 640,
-  height: 360,
+  width: Math.round(window.innerWidth * dpr()),
+  height: Math.round(window.innerHeight * dpr()),
   parent: 'game',
   backgroundColor: '#000000',
-  pixelArt: true,
+  pixelArt: false,
+  roundPixels: true,
   input: { gamepad: true },
   scale: {
-    mode: Phaser.Scale.FIT,
-    autoCenter: Phaser.Scale.CENTER_BOTH,
+    mode: Phaser.Scale.NONE,
+    zoom: 1 / dpr(),
   },
   scene: scenes,
 });
+
+/** Resizes the canvas backing store to the window and keeps the CSS size equal to the window. */
+function fitToWindow(): void {
+  const d = dpr();
+  if (game.scale.zoom !== 1 / d) game.scale.setZoom(1 / d);
+  game.scale.resize(Math.round(window.innerWidth * d), Math.round(window.innerHeight * d));
+}
+window.addEventListener('resize', fitToWindow);
+window.addEventListener('orientationchange', fitToWindow);

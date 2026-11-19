@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { COUNTRY_INFO, type Country } from '../data';
+import { applyView, textResolution, type View } from './view';
 
 const FONT = '"Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif';
 
@@ -34,6 +35,7 @@ export class ResultScene extends Phaser.Scene {
   private result!: ResultInit;
   private started = false;
   private confirmKeys!: Record<'J' | 'ENTER', Phaser.Input.Keyboard.Key>;
+  private view!: View;
 
   constructor() {
     super('ResultScene');
@@ -47,51 +49,11 @@ export class ResultScene extends Phaser.Scene {
     (window as unknown as { __sgScene: string }).__sgScene = 'ResultScene';
     (window as unknown as { __sgResult: ResultInit }).__sgResult = this.result;
     this.started = false;
-    const r = this.result;
-    const homeInfo = COUNTRY_INFO[r.home];
-    const awayInfo = COUNTRY_INFO[r.away];
-
-    const g = this.add.graphics();
-    g.fillStyle(0x0b0f14, 1);
-    g.fillRect(0, 0, 640, 360);
-    g.fillStyle(0x1d5a2a, 0.35);
-    g.fillRect(0, 60, 640, 240);
-
-    const style = (size: string, color = '#ffffff', stroke = true): Phaser.Types.GameObjects.Text.TextStyle => ({
-      fontFamily: FONT,
-      fontSize: size,
-      color,
-      stroke: stroke ? '#000000' : undefined,
-      strokeThickness: stroke ? 4 : 0,
-      resolution: 2,
+    this.view = applyView(this, (v) => {
+      this.view = v;
+      this.build();
     });
-
-    this.add.text(320, 30, '比賽結束', style('26px', '#ffd98a')).setOrigin(0.5);
-
-    this.add
-      .text(250, 96, homeInfo.name, style('30px', hexCss(homeInfo.color)))
-      .setOrigin(1, 0.5);
-    this.add.text(320, 96, `${r.score[0]} - ${r.score[1]}`, style('40px')).setOrigin(0.5);
-    this.add
-      .text(390, 96, awayInfo.name, style('30px', hexCss(awayInfo.color)))
-      .setOrigin(0, 0.5);
-
-    if (r.pk) {
-      this.add
-        .text(320, 136, `PK ${r.pk[0]} - ${r.pk[1]}`, style('18px', '#ffffff'))
-        .setOrigin(0.5);
-    }
-
-    const winner = winnerOf(r);
-    const winnerText = winner === null ? '平手' : `${COUNTRY_INFO[winner === 0 ? r.home : r.away].name} 勝利！`;
-    this.add.text(320, 170, winnerText, style('22px', '#ffd98a')).setOrigin(0.5);
-
-    this.drawScorers(0, r.home, 160);
-    this.drawScorers(1, r.away, 480);
-
-    const prompt = this.add.text(320, 330, '按 J 或點一下回到標題', style('16px')).setOrigin(0.5);
-    this.tweens.add({ targets: prompt, alpha: 0.2, duration: 600, yoyo: true, repeat: -1 });
-
+    this.build();
     this.confirmKeys = this.input.keyboard!.addKeys('J,ENTER') as Record<'J' | 'ENTER', Phaser.Input.Keyboard.Key>;
     this.input.on('pointerdown', () => this.backToTitle());
   }
@@ -101,6 +63,57 @@ export class ResultScene extends Phaser.Scene {
     if (Phaser.Input.Keyboard.JustDown(J) || Phaser.Input.Keyboard.JustDown(ENTER)) {
       this.backToTitle();
     }
+  }
+
+  /** Builds the result screen for the current view. Runs on create and on every resize. */
+  private build(): void {
+    this.children.removeAll(true);
+    this.tweens.killAll();
+    const { W, H } = this.view;
+    const r = this.result;
+    const homeInfo = COUNTRY_INFO[r.home];
+    const awayInfo = COUNTRY_INFO[r.away];
+
+    const g = this.add.graphics();
+    g.fillStyle(0x0b0f14, 1);
+    g.fillRect(0, 0, W, H);
+    g.fillStyle(0x1d5a2a, 0.35);
+    g.fillRect(0, 60, W, 240);
+
+    const style = (size: string, color = '#ffffff', stroke = true): Phaser.Types.GameObjects.Text.TextStyle => ({
+      fontFamily: FONT,
+      fontSize: size,
+      color,
+      stroke: stroke ? '#000000' : undefined,
+      strokeThickness: stroke ? 4 : 0,
+      resolution: textResolution(),
+    });
+
+    this.add.text(W / 2, 30, '比賽結束', style('26px', '#ffd98a')).setOrigin(0.5);
+
+    this.add
+      .text(W / 2 - 70, 96, homeInfo.name, style('30px', hexCss(homeInfo.color)))
+      .setOrigin(1, 0.5);
+    this.add.text(W / 2, 96, `${r.score[0]} - ${r.score[1]}`, style('40px')).setOrigin(0.5);
+    this.add
+      .text(W / 2 + 70, 96, awayInfo.name, style('30px', hexCss(awayInfo.color)))
+      .setOrigin(0, 0.5);
+
+    if (r.pk) {
+      this.add
+        .text(W / 2, 136, `PK ${r.pk[0]} - ${r.pk[1]}`, style('18px', '#ffffff'))
+        .setOrigin(0.5);
+    }
+
+    const winner = winnerOf(r);
+    const winnerText = winner === null ? '平手' : `${COUNTRY_INFO[winner === 0 ? r.home : r.away].name} 勝利！`;
+    this.add.text(W / 2, 170, winnerText, style('22px', '#ffd98a')).setOrigin(0.5);
+
+    this.drawScorers(0, r.home, W / 2 - 160);
+    this.drawScorers(1, r.away, W / 2 + 160);
+
+    const prompt = this.add.text(W / 2, H - 30, '按 J 或點一下回到標題', style('16px')).setOrigin(0.5);
+    this.tweens.add({ targets: prompt, alpha: 0.2, duration: 600, yoyo: true, repeat: -1 });
   }
 
   private backToTitle(): void {
@@ -117,7 +130,7 @@ export class ResultScene extends Phaser.Scene {
       color: '#ffffff',
       stroke: '#000000',
       strokeThickness: 3,
-      resolution: 2,
+      resolution: textResolution(),
     };
     this.add
       .text(centerX, 196, `${info.name} 進球`, { ...style, color: hexCss(info.color) })
