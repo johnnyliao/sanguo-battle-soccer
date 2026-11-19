@@ -14,6 +14,7 @@ import {
   EMPTY_INPUT,
   GOAL_HALF_W,
   SPECIAL_COOLDOWN_TICKS,
+  SPECIAL_STAMINA_COST,
   TICK_HZ,
   autoPkOrders,
   createInitialState,
@@ -73,6 +74,14 @@ interface PkOrderRow {
 }
 
 type HudStyle = (color: string, size: string, stroke?: boolean) => Phaser.Types.GameObjects.Text.TextStyle;
+
+/** Why the human's L press starts no special. Checked before the step that consumes the press. */
+function specialBlockReason(state: GameState, p: Player): string {
+  if (p.specialMode === 'rampage' && state.ball.ownerIdx !== p.idx) return '需持球';
+  if (p.specialCooldown > 0) return `冷卻中 ${Math.ceil(p.specialCooldown / TICK_HZ)} 秒`;
+  if (p.stamina < SPECIAL_STAMINA_COST) return '體力不足';
+  return '現在不能放';
+}
 
 const STEP_MS = 1000 / TICK_HZ;
 const MAX_STEPS_PER_FRAME = 4;
@@ -137,6 +146,10 @@ const ROAR_SHAKE_MS = 160;
 const ROAR_SHAKE_INTENSITY = 0.004;
 const COOLDOWN_GREY = 0x9aa3ad;
 const HUD_COOLDOWN_W = 120;
+/** Why-not hint above the human's name: shown for HINT_MS, rising HINT_RISE px while it fades. */
+const HINT_MS = 1000;
+const HINT_RISE = 8;
+const HINT_COLOR = '#fff3b0';
 /** The bike is wider than the block body, so the shadow is widened to match. */
 const SPRITE_SHADOW_SCALE = 1.6;
 const PLAYER_COUNT = 10;
@@ -246,6 +259,11 @@ export class MatchScene extends Phaser.Scene {
   private bannerUntil = 0;
   private specialText!: Phaser.GameObjects.Text;
   private specialUntil = 0;
+  private hintText!: Phaser.GameObjects.Text;
+  private hintUntil = 0;
+  private lastHintText = '';
+  /** The human's L button on the previous tick, for the press edge that triggers the special hint. */
+  private prevHumanL = false;
   private prevPhase: MatchPhase | null = null;
   private scorers: ResultScorer[] = [];
   private resultQueued = false;
@@ -310,6 +328,9 @@ export class MatchScene extends Phaser.Scene {
     this.roarWaves = [];
     this.scorers = [];
     this.resultQueued = false;
+    this.prevHumanL = false;
+    this.hintUntil = 0;
+    this.lastHintText = '';
     this.teamColors = [COUNTRY_INFO[this.homeCountry].color, COUNTRY_INFO[this.awayCountry].color];
     this.touch = new TouchControls(this, this.view);
     this.localInput = new LocalInput(this, this.touch);
@@ -338,6 +359,7 @@ export class MatchScene extends Phaser.Scene {
       scene: this,
       minimap: () => this.minimapFrames,
       arrowVisible: () => this.arrowShown,
+      lastHint: () => this.lastHintText,
     };
     (window as unknown as { __sgScene: string }).__sgScene = 'MatchScene';
 
@@ -366,7 +388,16 @@ export class MatchScene extends Phaser.Scene {
       : computeAIInputs(this.state, this.aiState, this.humanMask);
     inputs[this.humanIdx] = this.localInput.sample();
     this.humanInput = inputs[this.humanIdx];
+    // A fresh L press in play gets a reason; the hint shows only if this step starts no special for the human.
+    const pressedL = this.humanInput.l && !this.prevHumanL;
+    this.prevHumanL = this.humanInput.l;
+    const blocked =
+      pressedL && this.state.match.phase === 'play'
+        ? specialBlockReason(this.state, this.state.players[this.humanIdx])
+        : null;
     step(this.state, inputs);
+    const special = this.state.events.some((e) => e.type === 'special' && e.playerIdx === this.humanIdx);
+    if (blocked !== null && !special) this.showHint(blocked);
     this.audio.handleEvents(this.state.events);
     this.updateTrail();
     this.onEvents(this.state.events);
@@ -689,6 +720,12 @@ export class MatchScene extends Phaser.Scene {
       const container = this.add.container(0, 0, sprite ? [gfx, sprite, label, tag] : [gfx, label, tag]);
       return { container, gfx, label, sprite, spriteCfg, tag };
     });
+    // The special hint lives in the human's container, so it follows the figure above the name.
+    this.hintText = this.add
+      .text(0, 0, '', { ...style, fontSize: '11px', color: HINT_COLOR, strokeThickness: 3 })
+      .setOrigin(0.5, 1)
+      .setVisible(false);
+    this.playerViews[this.humanIdx].container.add(this.hintText);
   }
 
   /** Sprite config for a character whose sheet loaded. Null means the block figure is drawn. */
@@ -863,7 +900,25 @@ export class MatchScene extends Phaser.Scene {
       const tipY = labelY - 13;
       g.fillStyle(HUMAN_MARK, 1);
       g.fillTriangle(0, tipY, -3, tipY - 5, 3, tipY - 5);
+      this.placeSpecialHint(labelY);
     }
+  }
+
+  /** Shows a why-not hint for HINT_MS, rising and fading above the human's name (container space). */
+  private showHint(text: string): void {
+    this.lastHintText = text;
+    this.hintText.setText(text).setVisible(true);
+    this.hintUntil = this.time.now + HINT_MS;
+  }
+
+  private placeSpecialHint(labelY: number): void {
+    const left = this.hintUntil - this.time.now;
+    if (left <= 0) {
+      this.hintText.setVisible(false);
+      return;
+    }
+    const t = 1 - left / HINT_MS;
+    this.hintText.setPosition(0, labelY - 40 - HINT_RISE * t).setAlpha(1 - t);
   }
 
   private drawBall(): void {
@@ -1019,6 +1074,8 @@ export class MatchScene extends Phaser.Scene {
       v.label.setResolution(res);
       v.tag.setResolution(res);
     });
+    // layoutHud can run before createPlayerViews (applyView in create), so the hint may not exist yet.
+    if (this.hintText) this.hintText.setResolution(res);
   }
 
   private createPkHud(style: HudStyle, depth: number): void {
@@ -1151,6 +1208,7 @@ export class MatchScene extends Phaser.Scene {
 
     const p = players[this.humanIdx];
     this.touch.setSpecialCooldown(p.specialCooldown);
+    this.touch.setSpecialNeedsBall(p.specialMode === 'rampage' && this.state.ball.ownerIdx !== p.idx);
     this.hudNameText.setText(p.name);
     this.hudSpecialText.setText(`必殺：${p.specialName}`);
 

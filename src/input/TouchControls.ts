@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { textResolution, type View } from '../render/view';
 import { TICK_HZ } from '../sim/constants';
+import { ButtonLatch } from './ButtonLatch';
 
 /** Held state of the on-screen controls. */
 export interface TouchState {
@@ -49,6 +50,7 @@ const FONT = '"Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif';
 const GOLD = 0xffd98a;
 const COOLDOWN_FILL = 0x5a5f66;
 const COOLDOWN_LINE = 0xb8bec6;
+const BALL_HINT = '需持球';
 
 interface StickClaim {
   kind: 'stick';
@@ -77,9 +79,12 @@ export class TouchControls {
   private wanted = true;
   private pk = false;
   private cooldownTicks = 0;
+  private needsBall = false;
   private claims = new Map<Phaser.Input.Pointer, Claim>();
+  private pressLatch = new ButtonLatch<ButtonKey>();
   private gfx: Phaser.GameObjects.Graphics;
   private labels: Phaser.GameObjects.Text[];
+  private ballHint: Phaser.GameObjects.Text;
   private view: View;
 
   constructor(scene: Phaser.Scene, view: View) {
@@ -105,6 +110,20 @@ export class TouchControls {
         .setScrollFactor(0)
         .setDepth(DEPTH + 1),
     );
+    this.ballHint = scene.add
+      .text(0, 0, BALL_HINT, {
+        fontFamily: FONT,
+        fontSize: '10px',
+        color: '#ffffff',
+        stroke: '#000000',
+        strokeThickness: 2,
+        align: 'center',
+        resolution: textResolution(),
+      })
+      .setOrigin(0.5, 0)
+      .setScrollFactor(0)
+      .setDepth(DEPTH + 1)
+      .setVisible(false);
     this.placeLabels();
 
     scene.input.on('pointerdown', this.onDown);
@@ -120,10 +139,16 @@ export class TouchControls {
     this.placeLabels();
   }
 
-  /** Current held state. All false while hidden. */
+  /**
+   * Current held state, once per sample. A button pressed since the previous call is reported as held even if it was
+   * already released (a quick tap). All false while hidden.
+   */
   state(): TouchState {
     const out: TouchState = { moveX: 0, moveY: 0, dash: false, j: false, k: false, l: false };
-    if (!this.isShown()) return out;
+    if (!this.isShown()) {
+      this.pressLatch.clear();
+      return out;
+    }
     for (const claim of this.claims.values()) {
       if (claim.kind === 'button') {
         if (this.isActive(claim.def)) out[claim.def.key] = true;
@@ -137,6 +162,7 @@ export class TouchControls {
       if (Math.abs(dy) > AXIS_RATIO * len) out.moveY = dy > 0 ? 1 : -1;
       if (len > DASH_RATIO * STICK_R) out.dash = true;
     }
+    for (const key of ['j', 'k', 'l'] as const) out[key] = this.pressLatch.consume(key, out[key]);
     return out;
   }
 
@@ -150,6 +176,11 @@ export class TouchControls {
   /** Ticks left on the human's special cooldown. 0 = ready (the special button glows). */
   setSpecialCooldown(ticks: number): void {
     this.cooldownTicks = ticks;
+  }
+
+  /** True while the special needs the ball and the human does not have it: the special button is dimmed. */
+  setSpecialNeedsBall(on: boolean): void {
+    this.needsBall = on;
   }
 
   /** Shows or hides the controls. Hidden on desktops that never produced a touch. */
@@ -172,6 +203,7 @@ export class TouchControls {
     this.claims.clear();
     this.gfx.destroy();
     this.labels.forEach((t) => t.destroy());
+    this.ballHint.destroy();
   }
 
   /** A button is in use in the current mode (the special is hidden during the shootout). */
@@ -216,6 +248,11 @@ export class TouchControls {
       const c = this.buttonAt(b);
       this.labels[i].setPosition(c.x, c.y);
     });
+    const special = BUTTONS.find((b) => b.key === 'l');
+    if (special) {
+      const c = this.buttonAt(special);
+      this.ballHint.setPosition(c.x, c.y + special.r + 4);
+    }
   }
 
   private applyVisibility(): void {
@@ -236,6 +273,7 @@ export class TouchControls {
     const button = this.activeButtons().find((b) => this.inCircle(p.x, p.y, b));
     if (button) {
       this.claims.set(pointer, { kind: 'button', def: button });
+      this.pressLatch.press(button.key);
       return;
     }
     if (p.x < this.view.W * STICK_ZONE_RATIO && p.y > STICK_ZONE_TOP && !this.findStick()) {
@@ -280,6 +318,8 @@ export class TouchControls {
       const text = this.labelText(BUTTONS[i]);
       if (t.text !== text) t.setText(text);
     });
+    // The hint shows under the special while it is dimmed for the missing ball (not while cooling down or in the shootout).
+    this.ballHint.setVisible(this.isShown() && this.needsBall && this.cooldownTicks === 0 && !this.pk);
     if (!this.isShown()) return;
 
     const stick = this.findStick();
@@ -307,6 +347,14 @@ export class TouchControls {
         g.fillStyle(COOLDOWN_FILL, 0.6);
         g.fillCircle(c.x, c.y, b.r);
         g.lineStyle(2, COOLDOWN_LINE, 0.5);
+        g.strokeCircle(c.x, c.y, b.r);
+        continue;
+      }
+      if (b.key === 'l' && this.needsBall) {
+        // No ball for the rampage: dimmed, but still tappable (the hint explains why nothing happens).
+        g.fillStyle(0xffffff, pressed ? 0.3 : 0.08);
+        g.fillCircle(c.x, c.y, b.r);
+        g.lineStyle(2, 0xffffff, 0.3);
         g.strokeCircle(c.x, c.y, b.r);
         continue;
       }

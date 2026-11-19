@@ -1,5 +1,7 @@
 // Special check. Guan Yu (shu DF, human=1) presses L with the ball and rampages at once (aura + fire sprite).
 // Zhang Fei (shu GK, human=0) presses L without the ball next to two opponents: the roar fires at once (shockwave, stun, HUD cooldown).
+// Quick taps: touch 大招 / 攻擊 with CDP touchStart + touchEnd back to back (no wait), so press and release fall between
+// two samples. Without the ball 大招 shows the 需持球 hint.
 // Test-only state edits (ball owner, positions, stamina) go through window.__sg. Usage: node e2e/special.mjs <url>
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
@@ -102,6 +104,32 @@ const giveBall = (page, x, y) =>
     { x, y },
   );
 
+/** Phone-sized touch context on a match (Guan Yu, human=1). Returns the page and its CDP session. */
+async function openTouchMatch(browser, human) {
+  const context = await browser.newContext({ viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true });
+  const page = await context.newPage();
+  attachListeners(page);
+  const cdp = await context.newCDPSession(page);
+  await page.goto(matchUrl(human), { waitUntil: 'load', timeout: 20000 });
+  await page.waitForFunction(() => Boolean(window.__sg), null, { timeout: 15000 });
+  await page.waitForFunction(() => window.__sg.state().match.phase === 'play', null, { timeout: 20000 });
+  return { context, page, cdp };
+}
+
+/** Page point of a touch button, given its offset from the bottom-right corner of the logical view (same as TouchControls). */
+async function buttonPoint(page, offX, offY) {
+  const box = await page.locator('canvas').first().boundingBox();
+  const view = await page.evaluate(() => window.__sgView);
+  const s = box.width / view.W;
+  return { x: box.x + (view.W - offX) * s, y: box.y + (view.H - offY) * s };
+}
+
+/** Press and release with no wait in between: both land between two 60 Hz samples unless latched. */
+async function quickTap(cdp, p) {
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: p.x, y: p.y, id: 1 }] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+}
+
 const browser = await chromium.launch({
   args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 });
@@ -178,6 +206,75 @@ try {
     `victim action ${victim.action}, stamina ${opponentBefore.toFixed(1)} -> ${victim.stamina.toFixed(1)}`,
   );
   await zhang.close();
+
+  // Quick taps on the touch buttons (Guan Yu, phone context).
+  const touch = await openTouchMatch(browser, 1);
+  const tp = touch.page;
+  const ballHome = (x, y) => giveBall(tp, x, y);
+  const resetRampage = () =>
+    tp.evaluate(() => {
+      const h = window.__sg.state().players[window.__sg.humanIdx];
+      h.rampageTicks = 0;
+      h.specialCooldown = 0;
+    });
+
+  // a. 大招 quick tap with the ball starts the rampage.
+  await ballHome(400, 130);
+  await tp.waitForTimeout(300);
+  await quickTap(touch.cdp, await buttonPoint(tp, 119, 92));
+  await tp.waitForFunction(() => window.__sg.state().players[window.__sg.humanIdx].rampageTicks > 0, null, {
+    timeout: 3000,
+  }).catch(() => {});
+  const qSpecial = await human(tp);
+  report('quick tap on 大招 with the ball starts the rampage', qSpecial.rampageTicks > 0, `rampageTicks ${qSpecial.rampageTicks}`);
+
+  // b. 大招 quick tap without the ball shows the 需持球 hint; the dimmed button caption is shown too.
+  await resetRampage();
+  await tp.evaluate(() => {
+    const s = window.__sg.state();
+    const h = s.players[window.__sg.humanIdx];
+    h.x = 300;
+    h.y = 130;
+    h.stamina = h.maxStamina;
+    s.ball.ownerIdx = -1;
+    s.ball.lastTouchIdx = -1;
+    s.ball.special = null;
+    s.ball.x = 100;
+    s.ball.y = 70;
+    s.ball.z = 0;
+    s.ball.vx = 0;
+    s.ball.vy = 0;
+    s.ball.vz = 0;
+  });
+  await tp.waitForTimeout(200);
+  const dimCaption = await tp.evaluate(() => window.__sg.scene.touch.ballHint.visible);
+  await quickTap(touch.cdp, await buttonPoint(tp, 119, 92));
+  await tp.waitForFunction(() => window.__sg.lastHint() === '需持球', null, { timeout: 2000 }).catch(() => {});
+  const hint = await tp.evaluate(() => ({
+    text: window.__sg.lastHint(),
+    visible: window.__sg.scene.hintText.visible,
+    rampageTicks: window.__sg.state().players[window.__sg.humanIdx].rampageTicks,
+  }));
+  await tp.screenshot({ path: shot('hint.png') });
+  report(
+    'quick tap on 大招 without the ball shows the 需持球 hint',
+    hint.text === '需持球' && hint.visible && hint.rampageTicks === 0,
+    `hint "${hint.text}", visible ${hint.visible}, rampageTicks ${hint.rampageTicks}`,
+  );
+  report('dimmed 大招 shows the 需持球 caption without the ball', dimCaption, `caption visible ${dimCaption}`);
+
+  // c. 攻擊 quick tap with the ball releases it (a shot or a clear, either way the ball leaves the human).
+  await resetRampage();
+  await ballHome(400, 130);
+  await tp.waitForTimeout(300);
+  await quickTap(touch.cdp, await buttonPoint(tp, 55, 92));
+  await tp.waitForFunction(() => window.__sg.state().ball.ownerIdx !== window.__sg.humanIdx, null, { timeout: 3000 }).catch(() => {});
+  const released = await tp.evaluate(() => {
+    const s = window.__sg.state();
+    return { owner: s.ball.ownerIdx, human: window.__sg.humanIdx, vx: s.ball.vx };
+  });
+  report('quick tap on 攻擊 with the ball releases it', released.owner !== released.human, `owner ${released.owner}, ball vx ${released.vx.toFixed(1)}`);
+  await touch.context.close();
 } catch (err) {
   console.log(`FAIL: ${err.message}`);
   failed = true;
