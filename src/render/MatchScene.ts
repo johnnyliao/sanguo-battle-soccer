@@ -13,6 +13,8 @@ import {
   GOAL_H,
   EMPTY_INPUT,
   GOAL_HALF_W,
+  ROAR_CHARGE_TICKS,
+  SPECIAL_COOLDOWN_TICKS,
   TICK_HZ,
   autoPkOrders,
   createInitialState,
@@ -43,6 +45,8 @@ interface PlayerView {
   container: Phaser.GameObjects.Container;
   gfx: Phaser.GameObjects.Graphics;
   label: Phaser.GameObjects.Text;
+  /** Invincibility timer above the name (human rampage only). */
+  tag: Phaser.GameObjects.Text;
   /** Set when the character's sheet loaded. The block figure is drawn when this is null. */
   sprite: Phaser.GameObjects.Sprite | null;
   spriteCfg: SpriteConfig | null;
@@ -52,6 +56,14 @@ interface TrailPoint {
   x: number;
   y: number;
   z: number;
+}
+
+/** A roar's shockwave, in sim world space. */
+interface RoarWave {
+  x: number;
+  y: number;
+  radius: number;
+  startMs: number;
 }
 
 interface PkOrderRow {
@@ -118,8 +130,14 @@ const ARROW_EDGE_BOTTOM = 62;
 const ARROW_EDGE_BOTTOM_TOUCH = 142;
 /** Horizontal speed (sim units per second) above which the sprite runs. */
 const RUN_SPEED = 20;
-/** How long the special-shot pose overrides the action animation. */
+/** How long the special pose (activation) and the special-shot pose override the action animation. */
 const SPECIAL_POSE_MS = 900;
+const SHOT_POSE_MS = 400;
+const ROAR_WAVE_MS = 400;
+const ROAR_SHAKE_MS = 160;
+const ROAR_SHAKE_INTENSITY = 0.004;
+const COOLDOWN_GREY = 0x9aa3ad;
+const HUD_COOLDOWN_W = 120;
 /** The bike is wider than the block body, so the shadow is widened to match. */
 const SPRITE_SHADOW_SCALE = 1.6;
 const PLAYER_COUNT = 10;
@@ -203,8 +221,11 @@ export class MatchScene extends Phaser.Scene {
   private ballShadowGfx!: Phaser.GameObjects.Graphics;
   private trailGfx!: Phaser.GameObjects.Graphics;
   private trail: TrailPoint[] = [];
-  /** Per player idx: time (ms) until which the special-shot pose is shown. */
-  private specialAnimUntil: number[] = [];
+  /** Per player idx: time (ms) until which the pose animation is shown, and which one. */
+  private poseUntil: number[] = [];
+  private poseAnim: SpriteAnim[] = [];
+  private roarWaves: RoarWave[] = [];
+  private roarGfx!: Phaser.GameObjects.Graphics;
 
   private homeText!: Phaser.GameObjects.Text;
   private awayText!: Phaser.GameObjects.Text;
@@ -221,6 +242,7 @@ export class MatchScene extends Phaser.Scene {
   private hudNameText!: Phaser.GameObjects.Text;
   private hudSpecialText!: Phaser.GameObjects.Text;
   private hudBarsGfx!: Phaser.GameObjects.Graphics;
+  private hudCooldownText!: Phaser.GameObjects.Text;
   private bannerText!: Phaser.GameObjects.Text;
   private bannerUntil = 0;
   private specialText!: Phaser.GameObjects.Text;
@@ -284,7 +306,9 @@ export class MatchScene extends Phaser.Scene {
     this.accumulator = 0;
     this.prevPhase = null;
     this.trail = [];
-    this.specialAnimUntil = [];
+    this.poseUntil = [];
+    this.poseAnim = [];
+    this.roarWaves = [];
     this.scorers = [];
     this.resultQueued = false;
     this.teamColors = [COUNTRY_INFO[this.homeCountry].color, COUNTRY_INFO[this.awayCountry].color];
@@ -301,6 +325,7 @@ export class MatchScene extends Phaser.Scene {
     this.ballShadowGfx = this.add.graphics();
     this.trailGfx = this.add.graphics();
     this.ballGfx = this.add.graphics();
+    this.roarGfx = this.add.graphics().setDepth(350);
     this.createHud();
     this.layoutHud(this.view);
 
@@ -370,7 +395,12 @@ export class MatchScene extends Phaser.Scene {
         this.showBanner(`進球！ ${players[e.scorerIdx].name}`, 2000);
       } else if (e.type === 'special') {
         this.showSpecial(`${e.name}！`, SPECIAL_COLORS[e.kind]);
-        this.playSpecialPose(e.playerIdx);
+        this.playPose(e.playerIdx, 'special', SPECIAL_POSE_MS);
+      } else if (e.type === 'specialShot') {
+        this.playPose(e.playerIdx, 'shot', SHOT_POSE_MS);
+      } else if (e.type === 'roar') {
+        this.roarWaves.push({ x: e.x, y: e.y, radius: e.radius, startMs: this.time.now });
+        this.cameras.main.shake(ROAR_SHAKE_MS, ROAR_SHAKE_INTENSITY);
       } else if (e.type === 'pkResult') {
         const text = e.outcome === 'goal' ? '進球！' : e.outcome === 'save' ? '撲救！' : '射偏！';
         this.showBanner(text, PK_RESULT_BANNER_MS);
@@ -452,9 +482,24 @@ export class MatchScene extends Phaser.Scene {
 
     this.state.players.forEach((p, i) => this.drawPlayer(this.playerViews[i], p, time));
     this.drawBall();
+    this.drawRoarWaves();
     this.drawHud();
     this.drawMinimap();
     this.drawArrow();
+  }
+
+  /** Expanding shockwave rings for roars, on the ground plane (squashed by DEPTH_SCALE). */
+  private drawRoarWaves(): void {
+    const g = this.roarGfx.clear();
+    const now = this.time.now;
+    this.roarWaves = this.roarWaves.filter((w) => now - w.startMs < ROAR_WAVE_MS);
+    for (const w of this.roarWaves) {
+      const t = (now - w.startMs) / ROAR_WAVE_MS;
+      const { sx, sy } = worldToScreen(w.x, w.y, 0);
+      const R = w.radius * t;
+      g.lineStyle(1 + 4 * (1 - t), 0xffe9a8, 1 - t);
+      g.strokeEllipse(sx, sy, R * 2, R * 2 * DEPTH_SCALE);
+    }
   }
 
   /** Field overview in the top-left: players, ball, goals and the camera's x range. Hidden during the shootout. */
@@ -638,8 +683,12 @@ export class MatchScene extends Phaser.Scene {
       const spriteCfg = this.spriteConfigFor(p.charId);
       const sprite = spriteCfg ? this.add.sprite(0, 0, spriteCfg.key) : null;
       const label = this.add.text(0, 0, p.name, style).setOrigin(0.5, 1);
-      const container = this.add.container(0, 0, sprite ? [gfx, sprite, label] : [gfx, label]);
-      return { container, gfx, label, sprite, spriteCfg };
+      const tag = this.add
+        .text(0, 0, '', { ...style, fontSize: '11px', color: hexCss(GOLD) })
+        .setOrigin(0.5, 1)
+        .setVisible(false);
+      const container = this.add.container(0, 0, sprite ? [gfx, sprite, label, tag] : [gfx, label, tag]);
+      return { container, gfx, label, sprite, spriteCfg, tag };
     });
   }
 
@@ -650,11 +699,11 @@ export class MatchScene extends Phaser.Scene {
   }
 
   /**
-   * Which sprite animation a player shows: a special shot in progress first, then the sim action, then charging,
-   * then speed (run above RUN_SPEED, otherwise idle).
+   * Which sprite animation a player shows: a special pose in progress first, then the sim action, then the rampage
+   * loop, then charging, then speed (run above RUN_SPEED, otherwise idle).
    */
   private spriteAnimFor(p: Player): SpriteAnim {
-    if (this.specialAnimUntil[p.idx] > this.time.now) return 'special';
+    if (this.poseUntil[p.idx] > this.time.now) return this.poseAnim[p.idx];
     switch (p.action) {
       case 'punch':
       case 'tackle':
@@ -672,15 +721,17 @@ export class MatchScene extends Phaser.Scene {
       default:
         break;
     }
+    if (p.rampageTicks > 0) return 'rampage';
     if (p.chargeTicks > 0) return 'charge';
     return Math.abs(p.vx) > RUN_SPEED ? 'run' : 'idle';
   }
 
-  /** Plays the special-shot pose on this player's sprite and holds it for SPECIAL_POSE_MS. */
-  private playSpecialPose(idx: number): void {
-    this.specialAnimUntil[idx] = this.time.now + SPECIAL_POSE_MS;
+  /** Plays a special pose on this player's sprite and holds it for `ms`. */
+  private playPose(idx: number, anim: 'special' | 'shot', ms: number): void {
+    this.poseUntil[idx] = this.time.now + ms;
+    this.poseAnim[idx] = anim;
     const view = this.playerViews[idx];
-    if (view?.sprite && view.spriteCfg) view.sprite.play(spriteAnimKey(view.spriteCfg, 'special'));
+    if (view?.sprite && view.spriteCfg) view.sprite.play(spriteAnimKey(view.spriteCfg, anim));
   }
 
   /**
@@ -738,6 +789,35 @@ export class MatchScene extends Phaser.Scene {
       const R = r * 1.4 + ratio * r * 1.2;
       g.lineStyle(2, ratio >= 1 ? GOLD : 0xffffff, 0.4 + 0.6 * pulse);
       g.strokeEllipse(0, 0, R * 2, R * 2 * DEPTH_SCALE);
+    }
+
+    // Rampage aura: a pulsing gold ring over an orange glow, under the sprite.
+    if (p.rampageTicks > 0) {
+      const pulse = 0.5 + 0.5 * Math.sin(time / 90);
+      const R = r * 2.7 + r * 0.45 * pulse;
+      g.fillStyle(0xff8c1a, 0.22 + 0.14 * pulse);
+      g.fillEllipse(0, 0, R * 2.3, R * 2.3 * DEPTH_SCALE);
+      g.lineStyle(3, GOLD, 0.6 + 0.4 * pulse);
+      g.strokeEllipse(0, 0, R * 2, R * 2 * DEPTH_SCALE);
+    }
+
+    // Roar build-up (no ball): a ring fills clockwise from the top while the human holds J.
+    if (p.idx === this.humanIdx && p.roarHoldTicks > 0) {
+      const ratio = Math.min(1, p.roarHoldTicks / ROAR_CHARGE_TICKS);
+      const R = r * 1.6;
+      g.lineStyle(1, 0xffffff, 0.3);
+      g.strokeEllipse(0, 0, R * 2, R * 2 * DEPTH_SCALE);
+      const segs = Math.max(2, Math.ceil(36 * ratio));
+      g.lineStyle(3, ratio >= 1 ? GOLD : SPECIAL_COLORS[p.specialKind], 0.95);
+      g.beginPath();
+      for (let i = 0; i <= segs; i++) {
+        const a = -Math.PI / 2 + (2 * Math.PI * ratio * i) / segs;
+        const ex = Math.cos(a) * R;
+        const ey = Math.sin(a) * R * DEPTH_SCALE;
+        if (i === 0) g.moveTo(ex, ey);
+        else g.lineTo(ex, ey);
+      }
+      g.strokePath();
     }
 
     let topY: number;
@@ -805,6 +885,9 @@ export class MatchScene extends Phaser.Scene {
     // Name label above the top of the figure; human marker above the name.
     const labelY = topY - 2;
     view.label.setPosition(0, labelY);
+    const invincible = p.idx === this.humanIdx && p.rampageTicks > 0;
+    view.tag.setVisible(invincible);
+    if (invincible) view.tag.setPosition(0, labelY - 20).setText(`無敵 ${(p.rampageTicks / TICK_HZ).toFixed(1)}`);
     if (p.idx === this.humanIdx) {
       const tipY = labelY - 13;
       g.fillStyle(HUMAN_MARK, 1);
@@ -888,6 +971,11 @@ export class MatchScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(hudDepth + 1);
     this.hudBarsGfx = this.add.graphics().setScrollFactor(0).setDepth(hudDepth + 1);
+    this.hudCooldownText = this.add
+      .text(0, 0, '', style('#ffffff', '12px'))
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(hudDepth + 1);
 
     this.bannerText = this.add
       .text(0, 0, '', style('#ffffff', '26px'))
@@ -956,7 +1044,10 @@ export class MatchScene extends Phaser.Scene {
     this.children.list.forEach((o) => {
       if (o instanceof Phaser.GameObjects.Text) o.setResolution(res);
     });
-    this.playerViews.forEach((v) => v.label.setResolution(res));
+    this.playerViews.forEach((v) => {
+      v.label.setResolution(res);
+      v.tag.setResolution(res);
+    });
   }
 
   private createPkHud(style: HudStyle, depth: number): void {
@@ -1102,6 +1193,20 @@ export class MatchScene extends Phaser.Scene {
     this.hudBarsGfx.fillRect(barX, H - 30, barW * staminaRatio, 7);
     this.hudBarsGfx.fillStyle(chargeRatio >= 1 ? GOLD : 0x4fb3ff, 1);
     this.hudBarsGfx.fillRect(barX, H - 15, barW * chargeRatio, 7);
+
+    // Special cooldown, right of the bars: a grey bar draining while cooling down, gold when ready.
+    const cdX = barX + barW + 10;
+    const cooling = p.specialCooldown > 0;
+    const cdRatio = Math.min(1, p.specialCooldown / SPECIAL_COOLDOWN_TICKS);
+    const label = cooling ? `必殺冷卻 ${Math.ceil(p.specialCooldown / TICK_HZ)} 秒` : '必殺可用';
+    this.hudCooldownText.setVisible(true).setPosition(cdX, H - 30);
+    if (this.hudCooldownText.text !== label) {
+      this.hudCooldownText.setText(label).setColor(cooling ? hexCss(COOLDOWN_GREY) : hexCss(GOLD));
+    }
+    this.hudBarsGfx.fillStyle(0x333333, 1);
+    this.hudBarsGfx.fillRect(cdX, H - 15, HUD_COOLDOWN_W, 7);
+    this.hudBarsGfx.fillStyle(cooling ? COOLDOWN_GREY : GOLD, 1);
+    this.hudBarsGfx.fillRect(cdX, H - 15, HUD_COOLDOWN_W * (cooling ? cdRatio : 1), 7);
   }
 
   /** Shootout HUD: title, PK score, per-team kick markers, shooter/keeper line, aim helpers and power meter. */
@@ -1112,6 +1217,7 @@ export class MatchScene extends Phaser.Scene {
     this.clockText.setText(sudden ? 'PK 大戰　驟死' : 'PK 大戰');
     this.pkScoreText.setText(`PK ${pk.score[0]} - ${pk.score[1]}`);
     this.hudBarsGfx.clear();
+    this.hudCooldownText.setVisible(false);
 
     const g = this.pkHudGfx.clear();
     g.fillStyle(0x000000, 0.55);

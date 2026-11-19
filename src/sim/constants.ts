@@ -73,6 +73,16 @@ export const RAMPAGE_SPEED_MULT = 1.35;
 export const RAMPAGE_BUMP_SPEED = 220;
 export const RAMPAGE_BUMP_STAMINA = 8;
 export const RAMPAGE_BUMP_COOLDOWN = 30;
+/** Ticks before any special can be used again (10 s). */
+export const SPECIAL_COOLDOWN_TICKS = 600;
+/** Roar shockwave: circle radius, and how far in front of the roarer its centre sits. */
+export const ROAR_RADIUS = 105;
+export const ROAR_FORWARD = 30;
+export const ROAR_KNOCK_SPEED = 280;
+export const ROAR_STUN_TICKS = 60;
+export const ROAR_STAMINA = 10;
+/** Ticks J must be held without the ball before the roar fires (1 s). */
+export const ROAR_CHARGE_TICKS = 60;
 
 export const KICKOFF_TICKS = 60;
 export const GOAL_CELEBRATE_TICKS = 150;

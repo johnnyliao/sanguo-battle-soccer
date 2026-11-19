@@ -74,7 +74,7 @@ function runMatch(
 
     for (const e of state.events) {
       if (e.type === 'kick' && e.kind === 'shot') report.shots[state.players[e.playerIdx].team]++;
-      else if (e.type === 'special') report.specials[state.players[e.playerIdx].team]++;
+      else if (e.type === 'specialShot') report.specials[state.players[e.playerIdx].team]++;
       else if (e.type === 'rampageStart') report.rampages++;
       else if (e.type === 'hit') report.hits++;
       else if (e.type === 'goal') report.goals++;
@@ -201,12 +201,71 @@ describe('AI behaviour', () => {
     let fired = false;
     for (let t = 0; t < 120 && !fired; t++) {
       step(state, computeAIInputs(state, ai, NO_HUMANS));
-      fired = state.events.some((e) => e.type === 'special' && e.playerIdx === 3);
+      fired = state.events.some((e) => e.type === 'specialShot' && e.playerIdx === 3);
     }
 
     expect(fired).toBe(true);
     expect(state.ball.special).not.toBeNull();
     expect(Math.abs(FIELD_W - owner.x)).toBeLessThan(260);
+  });
+
+  it('Zhang Fei holds J to roar when two opponents stand in his roar circle, and the roar fires', () => {
+    const state = createInitialState({ seed: 6, teams: [getTeam('shu'), getTeam('wei')], startInPlay: true }, SIZE_PARAMS);
+    state.players.forEach((p, i) => {
+      p.x = 100;
+      p.y = 20 + i * 24;
+    });
+    const gk = state.players[0];
+    expect(gk.specialMode).toBe('roar');
+    gk.x = 300;
+    gk.y = FIELD_D / 2;
+    gk.facingX = 1;
+    gk.facingY = 0;
+    state.players[5].x = 390;
+    state.players[5].y = FIELD_D / 2;
+    state.players[6].x = 330;
+    state.players[6].y = FIELD_D / 2 + 70;
+    state.ball.x = 1100;
+    state.ball.y = 30;
+    state.ball.ownerIdx = -1;
+
+    const ai = createAIState(6);
+    let pressed = false;
+    let fired = false;
+    for (let t = 0; t < 120 && !fired; t++) {
+      // Only Zhang Fei is driven by the AI here; the opponents stand still inside the circle.
+      const frames = computeAIInputs(state, ai, NO_HUMANS).map((f, i) => (i === 0 ? f : { ...EMPTY_INPUT }));
+      pressed = pressed || frames[0].j;
+      step(state, frames);
+      fired = state.events.some((e) => e.type === 'roar' && e.playerIdx === 0);
+    }
+
+    expect(pressed).toBe(true);
+    expect(fired).toBe(true);
+  });
+
+  it('an AI carrier does not start a full charge while the special cooldown runs', () => {
+    const state = createInitialState({ seed: 4, teams: [getTeam('shu'), getTeam('wei')], startInPlay: true }, SIZE_PARAMS);
+    state.players.forEach((p, i) => {
+      p.x = 100;
+      p.y = 20 + i * 24;
+    });
+    const owner = state.players[3];
+    owner.x = 900;
+    owner.y = FIELD_D / 2;
+    owner.facingX = 1;
+    owner.facingY = 0;
+    owner.specialCooldown = 300;
+    state.ball.x = owner.x + owner.radius + DRIBBLE_OFFSET;
+    state.ball.y = owner.y;
+    state.ball.ownerIdx = 3;
+    state.ball.lastTouchIdx = 3;
+
+    const ai = createAIState(4);
+    for (let t = 0; t < 30; t++) {
+      step(state, computeAIInputs(state, ai, NO_HUMANS));
+      expect(ai.perPlayer[3].intent).not.toBe('charge');
+    }
   });
 
   it('keeps each goalkeeper near its own goal line while the ball is far from it', () => {

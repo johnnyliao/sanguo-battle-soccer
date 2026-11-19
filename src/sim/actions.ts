@@ -40,9 +40,16 @@ import {
   RAMPAGE_SPEED_MULT,
   RAMPAGE_TICKS,
   RECOVER_TICKS,
+  ROAR_CHARGE_TICKS,
+  ROAR_FORWARD,
+  ROAR_KNOCK_SPEED,
+  ROAR_RADIUS,
+  ROAR_STAMINA,
+  ROAR_STUN_TICKS,
   SHOT_BASE_SPEED,
   SHOT_SPEED_PER_CHARGE,
   SHOT_SPEED_PER_POWER,
+  SPECIAL_COOLDOWN_TICKS,
   SPECIAL_FLAT_Z,
   SPECIAL_HIT_STAMINA,
   SPECIAL_LOB_FALL_GRAVITY_MULT,
@@ -83,6 +90,7 @@ const LOOSE_BALL_SPEED = 90;
 const LOOSE_BALL_SPREAD = 30;
 const LOOSE_BALL_VZ = 120;
 const RAMPAGE_BUMP_VZ = 90;
+const ROAR_VZ = 140;
 /** A rampager bumps opponents whose circle comes within this many px of its own. */
 const RAMPAGE_BUMP_PAD = 4;
 const PASS_CONE_COS = 0.3;
@@ -106,6 +114,8 @@ export function updateAction(state: GameState, p: Player, input: InputFrame): vo
   if (p.callPassTicks > 0) p.callPassTicks--;
   const landed = applyGravity(p);
   tickRampage(state, p);
+  tickSpecialCooldown(state, p);
+  updateRoarHold(state, p, input);
   switch (p.action) {
     case 'normal':
       updateNormal(state, p, input);
@@ -442,14 +452,15 @@ function moveCharging(p: Player, input: InputFrame): void {
   integrate(p);
 }
 
-/** Picks the shot type on J release: rampage (full charge, stamina), shot (toward goal), else clear. */
+/** Picks the shot type on J release: special (full charge, stamina, no cooldown), shot (toward goal), else clear. */
 function releaseCharge(state: GameState, p: Player, input: InputFrame): void {
   const full = p.chargeTicks >= CHARGE_FULL;
   const charge = Math.min(p.chargeTicks, CHARGE_FULL - 1);
   p.chargeTicks = 0;
   const towardGoal = p.facingX * attackDir(state, p.team) > 0;
-  if (full && p.stamina >= SPECIAL_STAMINA_COST) {
-    startRampage(state, p);
+  if (full && p.stamina >= SPECIAL_STAMINA_COST && p.specialCooldown === 0) {
+    if (p.specialMode === 'roar') castRoar(state, p);
+    else startRampage(state, p);
   } else if (towardGoal) {
     shoot(state, p, input, charge);
   } else {
@@ -461,10 +472,83 @@ function releaseCharge(state: GameState, p: Player, input: InputFrame): void {
 function startRampage(state: GameState, p: Player): void {
   p.stamina -= SPECIAL_STAMINA_COST;
   p.rampageTicks = RAMPAGE_TICKS;
+  p.specialCooldown = SPECIAL_COOLDOWN_TICKS;
   p.action = 'normal';
   p.actionTimer = 0;
   state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
   state.events.push({ type: 'rampageStart', playerIdx: p.idx });
+}
+
+/** Counts the special cooldown down while the match is in play. */
+function tickSpecialCooldown(state: GameState, p: Player): void {
+  if (p.specialCooldown > 0 && state.match.phase === 'play') p.specialCooldown--;
+}
+
+/**
+ * Roar build-up without the ball (roar specials only): J held while standing or punching builds roarHoldTicks.
+ * Releasing J, or losing the option (cooldown, stamina, a non-idle action), resets it. At ROAR_CHARGE_TICKS the roar fires.
+ */
+function updateRoarHold(state: GameState, p: Player, input: InputFrame): void {
+  const building =
+    input.j &&
+    p.specialMode === 'roar' &&
+    state.ball.ownerIdx !== p.idx &&
+    (p.action === 'normal' || p.action === 'punch') &&
+    p.specialCooldown === 0 &&
+    p.stamina >= SPECIAL_STAMINA_COST;
+  if (!building) {
+    p.roarHoldTicks = 0;
+    return;
+  }
+  p.roarHoldTicks++;
+  if (p.roarHoldTicks >= ROAR_CHARGE_TICKS) castRoar(state, p);
+}
+
+/**
+ * Zhang Fei's roar: a shockwave centred ROAR_FORWARD in front of the player. Every standing opponent in the circle
+ * (rampaging ones are immune) is knocked away from the roarer and stunned. The roarer keeps any ball it has.
+ */
+function castRoar(state: GameState, p: Player): void {
+  p.stamina = Math.max(0, p.stamina - SPECIAL_STAMINA_COST);
+  p.specialCooldown = SPECIAL_COOLDOWN_TICKS;
+  p.roarHoldTicks = 0;
+  toNormal(p);
+  const cx = p.x + p.facingX * ROAR_FORWARD;
+  const cy = p.y + p.facingY * ROAR_FORWARD;
+  state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
+  state.events.push({ type: 'roar', playerIdx: p.idx, x: cx, y: cy, radius: ROAR_RADIUS });
+  for (const v of state.players) {
+    if (v.team === p.team || v.action === 'down' || v.rampageTicks > 0) continue;
+    if (distance(cx, cy, v.x, v.y) > ROAR_RADIUS) continue;
+    roarKnock(state, p, v);
+  }
+}
+
+/** One roar victim: pushed away from the roarer, stunned, loses stamina (down when empty), drops the ball if holding it. */
+function roarKnock(state: GameState, p: Player, v: Player): void {
+  const dist = distance(p.x, p.y, v.x, v.y);
+  const dirX = dist > 0 ? (v.x - p.x) / dist : p.facingX;
+  const dirY = dist > 0 ? (v.y - p.y) / dist : p.facingY;
+  const massMult = Math.min(1.4, Math.max(0.8, p.mass / v.mass));
+  v.vx = dirX * ROAR_KNOCK_SPEED * massMult;
+  v.vy = dirY * ROAR_KNOCK_SPEED * massMult;
+  v.vz = ROAR_VZ;
+  v.chargeTicks = 0;
+  v.stamina = Math.max(0, v.stamina - ROAR_STAMINA);
+
+  let down = false;
+  if (v.stamina <= 0) {
+    setDown(v, DOWN_TICKS_EXHAUSTED);
+    down = true;
+  } else {
+    v.action = 'hitstun';
+    v.actionTimer = ROAR_STUN_TICKS;
+  }
+
+  state.events.push({ type: 'hit', attackerIdx: p.idx, victimIdx: v.idx, kind: 'special', damage: ROAR_STAMINA });
+  if (down) state.events.push({ type: 'down', playerIdx: v.idx });
+
+  if (state.ball.ownerIdx === v.idx) knockLooseBall(state, p, v, dirX, dirY);
 }
 
 /** Clears a rampage and reports it. Callers only call this while the player is rampaging. */
@@ -545,7 +629,7 @@ function startSpecial(state: GameState, p: Player): void {
     rolled: [],
   };
   ball.special = special;
-  state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
+  state.events.push({ type: 'specialShot', playerIdx: p.idx, kind: p.specialKind });
 }
 
 function shoot(state: GameState, p: Player, input: InputFrame, charge: number): void {
@@ -789,19 +873,22 @@ function applyHit(state: GameState, attacker: Player, victim: Player, kind: Atta
     damage,
   });
 
-  const ball = state.ball;
-  if (ball.ownerIdx === victim.idx) {
-    ball.ownerIdx = -1;
-    // The attacker's hit is the last touch, so a knock-in (even into the victim's own goal) is credited to the attacker.
-    ball.lastTouchIdx = attacker.idx;
-    ball.vx = dirX * LOOSE_BALL_SPEED + (rngNext(state) * 2 - 1) * LOOSE_BALL_SPREAD;
-    ball.vy = dirY * LOOSE_BALL_SPEED + (rngNext(state) * 2 - 1) * LOOSE_BALL_SPREAD;
-    ball.vz = LOOSE_BALL_VZ;
-    victim.noTouchTicks = LOOSE_BALL_NO_TOUCH;
-    state.events.push({ type: 'looseBall', playerIdx: victim.idx });
-  }
+  if (state.ball.ownerIdx === victim.idx) knockLooseBall(state, attacker, victim, dirX, dirY);
 
   if (down) state.events.push({ type: 'down', playerIdx: victim.idx });
+}
+
+/** A hit knocks the ball out of the victim's control, launched along the hit direction. */
+function knockLooseBall(state: GameState, attacker: Player, victim: Player, dirX: number, dirY: number): void {
+  const ball = state.ball;
+  ball.ownerIdx = -1;
+  // The attacker's hit is the last touch, so a knock-in (even into the victim's own goal) is credited to the attacker.
+  ball.lastTouchIdx = attacker.idx;
+  ball.vx = dirX * LOOSE_BALL_SPEED + (rngNext(state) * 2 - 1) * LOOSE_BALL_SPREAD;
+  ball.vy = dirY * LOOSE_BALL_SPEED + (rngNext(state) * 2 - 1) * LOOSE_BALL_SPREAD;
+  ball.vz = LOOSE_BALL_VZ;
+  victim.noTouchTicks = LOOSE_BALL_NO_TOUCH;
+  state.events.push({ type: 'looseBall', playerIdx: victim.idx });
 }
 
 function distance(ax: number, ay: number, bx: number, by: number): number {

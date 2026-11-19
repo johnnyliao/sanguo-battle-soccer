@@ -69,6 +69,12 @@ export interface Player {
   rampageTicks: number;
   /** Ticks during which this player cannot be bumped by a rampaging opponent again. */
   bumpCooldown: number;
+  /** What a full-charge release does: a rampage, or a roar (shockwave) for Zhang Fei. */
+  specialMode: 'rampage' | 'roar';
+  /** Ticks until the special can be used again. Set when a rampage starts or a roar fires. */
+  specialCooldown: number;
+  /** Ticks J has been held without the ball (roar build-up). 0 = not building. */
+  roarHoldTicks: number;
   specialKind: SpecialKind;
   specialName: string;
   prevInput: InputFrame;
@@ -115,7 +121,12 @@ export type SimEvent =
   | { type: 'looseBall'; playerIdx: number }
   | { type: 'kick'; playerIdx: number; kind: 'pass' | 'shot' | 'clear'; targetIdx: number }
   | { type: 'chargeFull'; playerIdx: number }
+  /** A special is activated: a rampage starts or a roar fires. Emitted once per activation. */
   | { type: 'special'; playerIdx: number; kind: SpecialKind; name: string }
+  /** The special ball is fired (J during a rampage). */
+  | { type: 'specialShot'; playerIdx: number; kind: SpecialKind }
+  /** A roar's shockwave centre and radius. */
+  | { type: 'roar'; playerIdx: number; x: number; y: number; radius: number }
   | { type: 'rampageStart'; playerIdx: number }
   | { type: 'rampageEnd'; playerIdx: number }
   | { type: 'specialEnd' }

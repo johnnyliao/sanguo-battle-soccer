@@ -11,6 +11,7 @@ function ch(
   stats: [number, number, number, number, number],
   specialName: string,
   specialKind: SpecialKind,
+  specialMode: 'rampage' | 'roar' = 'rampage',
 ): CharacterDef {
   const [power, speed, stamina, technique, defense] = stats;
   return {
@@ -20,12 +21,12 @@ function ch(
     role,
     size,
     stats: { power, speed, stamina, technique, defense },
-    special: { name: specialName, kind: specialKind },
+    special: { name: specialName, kind: specialKind, mode: specialMode },
   };
 }
 
 export const RAW_CHARACTERS: CharacterDef[] = [
-  ch('zhangfei', '張飛', 'shu', 'GK', 'L', [9, 3, 10, 2, 9], '當陽怒吼', 'pierce'),
+  ch('zhangfei', '張飛', 'shu', 'GK', 'L', [9, 3, 10, 2, 9], '當陽怒吼', 'pierce', 'roar'),
   ch('guanyu', '關羽', 'shu', 'DF', 'L', [9, 5, 8, 4, 8], '青龍偃月', 'lob'),
   ch('zhugeliang', '諸葛亮', 'shu', 'MF', 'S', [3, 5, 4, 10, 4], '八陣圖', 'zigzag'),
   ch('machao', '馬超', 'shu', 'MF', 'M', [7, 9, 6, 6, 4], '西涼鐵騎', 'straight'),

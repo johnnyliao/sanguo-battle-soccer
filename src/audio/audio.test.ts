@@ -19,6 +19,11 @@ describe('soundsForEvent', () => {
     expect(soundsForEvent({ type: 'bounce', strength: 90 })).toEqual([{ name: 'bounce', volume: 0.9 }]);
   });
 
+  it('plays the big special sound for a special activation and for the special ball', () => {
+    expect(soundsForEvent({ type: 'special', playerIdx: 0, kind: 'straight', name: 'x' })).toEqual([{ name: 'special', volume: 1 }]);
+    expect(soundsForEvent({ type: 'specialShot', playerIdx: 0, kind: 'straight' })).toEqual([{ name: 'special', volume: 1 }]);
+  });
+
   it('plays the goal sound for a scored penalty only', () => {
     expect(soundsForEvent({ type: 'pkResult', team: 0, outcome: 'goal' })).toEqual([{ name: 'goal', volume: 1 }]);
     expect(soundsForEvent({ type: 'pkResult', team: 1, outcome: 'miss' })).toEqual([]);

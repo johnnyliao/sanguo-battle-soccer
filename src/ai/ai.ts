@@ -5,6 +5,9 @@ import {
   FIELD_W,
   GK_AREA_DEPTH,
   GOAL_HALF_W,
+  ROAR_FORWARD,
+  ROAR_RADIUS,
+  SPECIAL_STAMINA_COST,
   attackDir,
   opponentGoalX,
   ownGoalX,
@@ -112,12 +115,53 @@ function decide(state: GameState, ai: AIState, p: Player): InputFrame {
   if (s.cooldown > 0) s.cooldown--;
   if (s.holdTicks > 0) s.holdTicks--;
 
+  const roar = roarFrame(state, p, s);
+  if (roar !== null) return roar;
   if (p.action !== 'normal') return busyFrame(state, p, s);
   if (state.ball.ownerIdx === p.idx) {
     if (p.rampageTicks > 0) return rampageFrame(state, p, s);
     return p.role === 'GK' ? gkOwnerFrame(state, ai, p, s) : ownerFrame(state, ai, p, s);
   }
   return freeFrame(state, ai, p, s);
+}
+
+/**
+ * Zhang Fei's roar (the one special that is not a rampage). While the roar is worth it, J is pressed: with the ball
+ * that starts a charge, without it the hold builds the roar (the first press still punches). A roar charge is held
+ * to full, so releasing never falls back to a plain shot or clear.
+ */
+function roarFrame(state: GameState, p: Player, s: AIState['perPlayer'][number]): InputFrame | null {
+  if (p.specialMode !== 'roar') return null;
+  if (p.action === 'charge' && s.intent === 'roar' && p.chargeTicks < CHARGE_FULL) {
+    return frame(NO_MOVE, { j: true });
+  }
+  if (!roarWanted(state, p)) return null;
+  if (p.action === 'normal' || (p.action === 'punch' && s.intent === 'roar')) {
+    s.intent = 'roar';
+    return frame(NO_MOVE, { j: true });
+  }
+  return null;
+}
+
+/**
+ * Roar is worth using: off cooldown, enough stamina, and either two standing opponents in the roar circle or an
+ * opponent carrier in the circle inside the roarer's own area.
+ */
+function roarWanted(state: GameState, p: Player): boolean {
+  if (p.specialCooldown > 0 || p.stamina < SPECIAL_STAMINA_COST) return false;
+  const cx = p.x + p.facingX * ROAR_FORWARD;
+  const cy = p.y + p.facingY * ROAR_FORWARD;
+  const ownGoal = ownGoalX(state, p.team);
+  let inCircle = 0;
+  let carrierInCircle = false;
+  for (const t of state.players) {
+    if (t.team === p.team || t.action === 'down' || t.rampageTicks > 0) continue;
+    if (dist(t.x, t.y, cx, cy) > ROAR_RADIUS) continue;
+    inCircle++;
+    if (t.idx === state.ball.ownerIdx) carrierInCircle = true;
+  }
+  const ballNearOwnGoal = Math.abs(state.ball.x - ownGoal) < GK_AREA_DEPTH + 60;
+  return inCircle >= 2 || carrierInCircle || (inCircle >= 1 && ballNearOwnGoal);
 }
 
 /** Non-normal actions send nothing, except keeping J held while a shot is charging. */
@@ -142,6 +186,7 @@ function ownerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPla
   if (inChargeRange && p.facingX * dir > 0 && !p.prevInput.j) {
     const full =
       p.stamina >= SHOT_MIN_STAMINA &&
+      p.specialCooldown === 0 &&
       nearestOpponent(state, team, p.x, p.y, SHOT_CLEAR_RANGE) === null &&
       nextRandom(ai) < SHOT_FULL_CHANCE;
     // Outside its role range a player only shoots when the charge is full (a rampage).

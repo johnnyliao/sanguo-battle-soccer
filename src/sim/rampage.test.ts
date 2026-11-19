@@ -289,7 +289,8 @@ describe('rampage special ball', () => {
     const events = run(state, 1, inputFor(0, { j: true }));
 
     expect(events).toContainEqual({ type: 'rampageEnd', playerIdx: 0 });
-    expect(events).toContainEqual({ type: 'special', playerIdx: 0, kind: 'straight', name: 'test' });
+    expect(events).toContainEqual({ type: 'specialShot', playerIdx: 0, kind: 'straight' });
+    expect(events.some((e) => e.type === 'special')).toBe(false);
     expect(state.ball.special).not.toBeNull();
     expect(state.ball.special?.kind).toBe('straight');
     expect(state.ball.special?.dirX).toBeGreaterThan(0);

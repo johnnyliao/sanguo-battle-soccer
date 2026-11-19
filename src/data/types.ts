@@ -20,7 +20,8 @@ export interface CharacterDef {
   role: Role;
   size: BodySize;
   stats: Stats;
-  special: { name: string; kind: SpecialKind };
+  /** 'rampage' (full charge: invincible run with the ball) or 'roar' (full charge or 1 s hold without the ball: shockwave). */
+  special: { name: string; kind: SpecialKind; mode?: 'rampage' | 'roar' };
 }
 
 export interface SizeParams {

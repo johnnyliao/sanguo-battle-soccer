@@ -45,6 +45,7 @@ export function soundsForEvent(e: SimEvent): SoundCue[] {
     case 'chargeFull':
       return [{ name: 'chargeFull', volume: 1 }];
     case 'special':
+    case 'specialShot':
       return [{ name: 'special', volume: 1 }];
     case 'goal':
       return [{ name: 'goal', volume: 1 }];

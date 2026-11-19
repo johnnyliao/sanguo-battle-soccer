@@ -6,7 +6,8 @@ import type Phaser from 'phaser';
  * copies that JSON, so re-run the tool and update the numbers here if the sheet changes.
  */
 
-export type SpriteAnim = 'idle' | 'run' | 'attack' | 'charge' | 'special' | 'jump' | 'hitstun' | 'down' | 'dive' | 'recover';
+/** `rampage` loops while invincible with the ball; `shot` is the special ball's launch pose. */
+export type SpriteAnim = 'idle' | 'run' | 'attack' | 'charge' | 'special' | 'rampage' | 'shot' | 'jump' | 'hitstun' | 'down' | 'dive' | 'recover';
 
 export interface SpriteMeta {
   frameWidth: number;
@@ -51,6 +52,8 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
       attack: { frames: [at(2, 0), at(2, 1), at(2, 2), at(2, 3)], fps: 14, repeat: 0 },
       charge: { frames: [at(3, 0)], fps: 1, repeat: -1 },
       special: { frames: [at(3, 1), at(3, 2), at(3, 3)], fps: 10, repeat: 0 },
+      rampage: { frames: [at(3, 1), at(3, 2)], fps: 8, repeat: -1 },
+      shot: { frames: [at(3, 3)], fps: 1, repeat: -1 },
       jump: { frames: [at(3, 1)], fps: 1, repeat: -1 },
       dive: { frames: [at(4, 1)], fps: 1, repeat: -1 },
       hitstun: { frames: [at(4, 0)], fps: 1, repeat: -1 },
