@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { computeAIInputs, createAIState, type AIState } from '../ai';
 import { AudioPlayer } from '../audio';
 import { COUNTRY_INFO, getTeam, SIZE_PARAMS, type Country, type SpecialKind } from '../data';
-import { LocalInput } from '../input';
+import { LocalInput, TouchControls } from '../input';
 import {
   BALL_RADIUS,
   CHARGE_FULL,
@@ -93,6 +93,13 @@ const ORDER_BOX_W = 380;
 const ORDER_BOX_H = 276;
 const ORDER_ROW_Y0 = 98;
 const ORDER_ROW_H = 36;
+const ORDER_ROW_X = 146;
+const ORDER_ROW_W = 348;
+const ORDER_ROW_BOX_H = 30;
+const ORDER_UNDO_X = 380;
+const ORDER_UNDO_Y = 280;
+const ORDER_UNDO_W = 120;
+const ORDER_UNDO_H = 26;
 
 const FONT = '"Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif';
 const SKIN = 0xf1c27d;
@@ -133,6 +140,7 @@ export class MatchScene extends Phaser.Scene {
 
   private state!: GameState;
   private localInput!: LocalInput;
+  private touch!: TouchControls;
   private aiState!: AIState;
   private humanMask: boolean[] = [];
   /** Test-only (`?ai=0`): non-human players stand still instead of running AI (the shootout still runs AI). */
@@ -177,6 +185,8 @@ export class MatchScene extends Phaser.Scene {
   private pkOrderOpen = false;
   private pkOrderCursor = 0;
   private pkOrderPicks: number[] = [];
+  /** Pending pointer tap on the order overlay: a row index, or 'undo' for the 重選 button. */
+  private pkOrderTap: number | 'undo' | null = null;
 
   constructor() {
     super('MatchScene');
@@ -208,8 +218,12 @@ export class MatchScene extends Phaser.Scene {
     this.scorers = [];
     this.resultQueued = false;
     this.teamColors = [COUNTRY_INFO[this.homeCountry].color, COUNTRY_INFO[this.awayCountry].color];
-    this.localInput = new LocalInput(this);
-    this.events.once('shutdown', () => this.localInput.destroy());
+    this.touch = new TouchControls(this);
+    this.localInput = new LocalInput(this, this.touch);
+    this.events.once('shutdown', () => {
+      this.localInput.destroy();
+      this.touch.destroy();
+    });
 
     this.drawField();
     this.createPlayerViews();
@@ -691,6 +705,7 @@ export class MatchScene extends Phaser.Scene {
     const title = add(320, 52, '選擇踢球順序', '#ffd98a', '18px', 0.5);
     const hint = add(320, 74, 'W/S 移動　J 加入（依序踢）　K 取消最後一位', '#ffffff', '12px', 0.5, false);
     this.pkOrderCount = add(320, 292, '', '#ffffff', '12px', 0.5);
+    const undoText = add(ORDER_UNDO_X + ORDER_UNDO_W / 2, ORDER_UNDO_Y + ORDER_UNDO_H / 2, '重選', '#ffffff', '14px', 0.5);
     this.pkOrderRows = Array.from({ length: PK_ROUNDS }, (_, i) => {
       const y = ORDER_ROW_Y0 + i * ORDER_ROW_H;
       return {
@@ -705,10 +720,29 @@ export class MatchScene extends Phaser.Scene {
       title,
       hint,
       this.pkOrderCount,
+      undoText,
       ...this.pkOrderRows.flatMap((r) => [r.slot, r.role, r.name, r.stats]),
     ];
+    this.input.on('pointerdown', this.onPkOrderPointer);
     this.setPkOrderVisible(false);
   }
+
+  /** Pointer tap on the order overlay: a row picks that player (same as J), 重選 undoes the last pick (same as K). */
+  private onPkOrderPointer = (pointer: Phaser.Input.Pointer): void => {
+    if (!this.pkOrderOpen) return;
+    const { x, y } = pointer;
+    if (x >= ORDER_UNDO_X && x < ORDER_UNDO_X + ORDER_UNDO_W && y >= ORDER_UNDO_Y && y < ORDER_UNDO_Y + ORDER_UNDO_H) {
+      this.pkOrderTap = 'undo';
+      return;
+    }
+    for (let i = 0; i < this.pkOrderRows.length; i++) {
+      const top = ORDER_ROW_Y0 + i * ORDER_ROW_H - ORDER_ROW_BOX_H / 2;
+      if (x >= ORDER_ROW_X && x < ORDER_ROW_X + ORDER_ROW_W && y >= top && y < top + ORDER_ROW_BOX_H) {
+        this.pkOrderTap = i;
+        return;
+      }
+    }
+  };
 
   private drawHud(): void {
     const { match } = this.state;
@@ -779,10 +813,13 @@ export class MatchScene extends Phaser.Scene {
     const humanShoots = live && pk.shooterIdx === this.humanIdx;
     const humanKeeps = live && pk.keeperIdx === this.humanIdx;
     let hint = '';
+    const touchUi = this.touch.isShown();
     if (pk.stage === 'aim' && humanShoots) {
-      hint = 'W/S 選方向（不按＝中間），按住 K 射高球；按住 J 蓄力，放開射門';
+      hint = touchUi
+        ? '搖桿上下選方向，按住 K 高球，按住 J 蓄力放開射門'
+        : 'W/S 選方向（不按＝中間），按住 K 射高球；按住 J 蓄力，放開射門';
     } else if (pk.stage === 'aim' && humanKeeps) {
-      hint = 'W/S 猜方向，按住 K 撲高球';
+      hint = touchUi ? '搖桿上下猜方向，按住 K 撲高球' : 'W/S 猜方向，按住 K 撲高球';
     } else if (pk.stage === 'aim') {
       hint = '觀看中…';
     }
@@ -858,11 +895,16 @@ export class MatchScene extends Phaser.Scene {
     const down = Phaser.Input.Keyboard.JustDown(S);
     const pick = Phaser.Input.Keyboard.JustDown(J);
     const undo = Phaser.Input.Keyboard.JustDown(K);
+    const tap = this.pkOrderTap;
+    this.pkOrderTap = null;
 
     const pk = this.state.match.pk;
     const open = pk !== null && pk.stage === 'order' && pk.order[0] === null;
     if (!open) {
-      if (this.pkOrderOpen) this.setPkOrderVisible(false);
+      if (this.pkOrderOpen) {
+        this.setPkOrderVisible(false);
+        this.touch.setVisible(true);
+      }
       this.pkOrderOpen = false;
       return;
     }
@@ -871,13 +913,16 @@ export class MatchScene extends Phaser.Scene {
       this.pkOrderCursor = 0;
       this.pkOrderPicks = [];
       this.setPkOrderVisible(true);
+      this.touch.setVisible(false);
       this.refreshPkOrder();
     }
 
     const roster = this.humanRoster();
     if (up) this.pkOrderCursor = (this.pkOrderCursor + roster.length - 1) % roster.length;
     if (down) this.pkOrderCursor = (this.pkOrderCursor + 1) % roster.length;
-    if (pick) {
+    const tapRow = typeof tap === 'number' ? tap : null;
+    if (tapRow !== null) this.pkOrderCursor = tapRow;
+    if (pick || tapRow !== null) {
       const idx = roster[this.pkOrderCursor];
       if (!this.pkOrderPicks.includes(idx)) {
         this.pkOrderPicks.push(idx);
@@ -891,11 +936,11 @@ export class MatchScene extends Phaser.Scene {
         }
       }
     }
-    if (undo && this.pkOrderPicks.length > 0) {
+    if ((undo || tap === 'undo') && this.pkOrderPicks.length > 0) {
       const last = this.pkOrderPicks.pop() as number;
       this.pkOrderCursor = roster.indexOf(last);
     }
-    if (up || down || pick || undo) this.refreshPkOrder();
+    if (up || down || pick || undo || tap !== null) this.refreshPkOrder();
 
     if (this.pkOrderPicks.length === roster.length) {
       submitPkOrder(this.state, 0, this.pkOrderPicks);
@@ -915,13 +960,15 @@ export class MatchScene extends Phaser.Scene {
       const p = this.state.players[idx];
       const pos = this.pkOrderPicks.indexOf(idx);
       g.fillStyle(i === this.pkOrderCursor ? 0x3a5a7a : 0x1d2630, 1);
-      g.fillRect(146, ORDER_ROW_Y0 + i * ORDER_ROW_H - 15, 348, 30);
+      g.fillRect(ORDER_ROW_X, ORDER_ROW_Y0 + i * ORDER_ROW_H - ORDER_ROW_BOX_H / 2, ORDER_ROW_W, ORDER_ROW_BOX_H);
       const row = this.pkOrderRows[i];
       row.slot.setText(pos >= 0 ? String(pos + 1) : '-');
       row.role.setText(p.role);
       row.name.setText(p.name);
       row.stats.setText(`力量 ${p.stats.power}　技巧 ${p.stats.technique}`);
     });
+    g.fillStyle(0x3a5a7a, 1);
+    g.fillRect(ORDER_UNDO_X, ORDER_UNDO_Y, ORDER_UNDO_W, ORDER_UNDO_H);
     this.pkOrderCount.setText(`已選 ${this.pkOrderPicks.length} / ${PK_ROUNDS}`);
   }
 

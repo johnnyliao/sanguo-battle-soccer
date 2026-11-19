@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import type { InputFrame } from '../sim/types';
 import { DashDetector } from './DashDetector';
 import { buildInputFrame, type RawInput } from './buildInputFrame';
+import type { TouchControls } from './TouchControls';
 
 const STICK_DEADZONE = 0.4;
 
@@ -25,9 +26,11 @@ export class LocalInput {
   private keys: Partial<Record<KeyName, Phaser.Input.Keyboard.Key>> = {};
   private scene: Phaser.Scene;
   private dash = new DashDetector();
+  private touch?: TouchControls;
 
-  constructor(scene: Phaser.Scene) {
+  constructor(scene: Phaser.Scene, touch?: TouchControls) {
     this.scene = scene;
+    this.touch = touch;
     const keyboard = scene.input.keyboard;
     if (keyboard) {
       this.keys = keyboard.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,J,K,L') as Partial<
@@ -43,16 +46,18 @@ export class LocalInput {
     const padBtn = (index: number): boolean => pad?.buttons[index]?.pressed ?? false;
     const stickX = pad?.leftStick.x ?? 0;
     const stickY = pad?.leftStick.y ?? 0;
+    const t = this.touch?.state();
 
+    // Touch dash goes through dashButton, which buildInputFrame ORs in directly (not through DashDetector).
     const raw: RawInput = {
-      left: down('A') || down('LEFT') || stickX < -STICK_DEADZONE || padBtn(PAD_DPAD_LEFT),
-      right: down('D') || down('RIGHT') || stickX > STICK_DEADZONE || padBtn(PAD_DPAD_RIGHT),
-      up: down('W') || down('UP') || stickY < -STICK_DEADZONE || padBtn(PAD_DPAD_UP),
-      down: down('S') || down('DOWN') || stickY > STICK_DEADZONE || padBtn(PAD_DPAD_DOWN),
-      j: down('J') || padBtn(PAD_BTN_J),
-      k: down('K') || padBtn(PAD_BTN_K),
-      l: down('L') || padBtn(PAD_BTN_L),
-      dashButton: padBtn(PAD_BTN_DASH),
+      left: down('A') || down('LEFT') || stickX < -STICK_DEADZONE || padBtn(PAD_DPAD_LEFT) || t?.moveX === -1,
+      right: down('D') || down('RIGHT') || stickX > STICK_DEADZONE || padBtn(PAD_DPAD_RIGHT) || t?.moveX === 1,
+      up: down('W') || down('UP') || stickY < -STICK_DEADZONE || padBtn(PAD_DPAD_UP) || t?.moveY === -1,
+      down: down('S') || down('DOWN') || stickY > STICK_DEADZONE || padBtn(PAD_DPAD_DOWN) || t?.moveY === 1,
+      j: down('J') || padBtn(PAD_BTN_J) || t?.j === true,
+      k: down('K') || padBtn(PAD_BTN_K) || t?.k === true,
+      l: down('L') || padBtn(PAD_BTN_L) || t?.l === true,
+      dashButton: padBtn(PAD_BTN_DASH) || t?.dash === true,
     };
 
     const base = buildInputFrame(raw, false);

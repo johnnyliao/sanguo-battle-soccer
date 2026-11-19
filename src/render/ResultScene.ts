@@ -89,10 +89,11 @@ export class ResultScene extends Phaser.Scene {
     this.drawScorers(0, r.home, 160);
     this.drawScorers(1, r.away, 480);
 
-    const prompt = this.add.text(320, 330, '按 J 回到標題', style('16px')).setOrigin(0.5);
+    const prompt = this.add.text(320, 330, '按 J 或點一下回到標題', style('16px')).setOrigin(0.5);
     this.tweens.add({ targets: prompt, alpha: 0.2, duration: 600, yoyo: true, repeat: -1 });
 
     this.confirmKeys = this.input.keyboard!.addKeys('J,ENTER') as Record<'J' | 'ENTER', Phaser.Input.Keyboard.Key>;
+    this.input.on('pointerdown', () => this.backToTitle());
   }
 
   update(): void {

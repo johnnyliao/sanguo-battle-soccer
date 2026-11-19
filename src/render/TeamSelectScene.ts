@@ -19,6 +19,33 @@ const DEFAULT_HALF_SECONDS = 120;
 const COUNTRIES: Country[] = ['wei', 'shu', 'wu'];
 const GK_SLOT = 0;
 const FW_SLOT = 4;
+const PANEL_Y = 90;
+const PANEL_W = 170;
+const PANEL_H = 200;
+const ROW_Y0 = 58;
+const ROW_STEP = 50;
+const ROW_H = 46;
+const ROW_X = 10;
+const ROW_W = 620;
+
+interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** On-screen buttons (touch): 返回 bottom-left, 確定 bottom-right. */
+const BACK_BTN: Rect = { x: 60, y: 318, w: 120, h: 34 };
+const CONFIRM_BTN: Rect = { x: 460, y: 318, w: 120, h: 34 };
+
+function hitRect(x: number, y: number, r: Rect): boolean {
+  return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
+}
+
+function panelRect(index: number): Rect {
+  return { x: 130 + index * 190 - PANEL_W / 2, y: PANEL_Y, w: PANEL_W, h: PANEL_H };
+}
 
 const ROLE_LABEL: Record<Role, string> = { GK: '守門員', DF: '後衛', MF: '中場', FW: '前鋒' };
 const SIZE_LABEL: Record<BodySize, string> = { S: '小', M: '中', L: '大' };
@@ -86,6 +113,9 @@ export class TeamSelectScene extends Phaser.Scene {
     this.headerText = this.add.text(320, 26, '', this.textStyle('22px', '#ffffff')).setOrigin(0.5);
     this.hintText = this.add.text(320, 340, '', this.textStyle('12px', '#d0d8e0', false)).setOrigin(0.5);
 
+    this.drawButtons();
+    this.input.on('pointerdown', this.onPointer);
+
     this.enterStage('own');
   }
 
@@ -103,28 +133,74 @@ export class TeamSelectScene extends Phaser.Scene {
       if (up) this.generalCursor = Math.max(GK_SLOT, this.generalCursor - 1);
       if (down) this.generalCursor = Math.min(FW_SLOT, this.generalCursor + 1);
       if (up || down) this.renderList();
-      if (confirm) this.startMatch();
-      else if (back) this.enterStage('opp');
+    } else {
+      if (left) this.cursor = this.nextSelectable(this.cursor, -1);
+      if (right) this.cursor = this.nextSelectable(this.cursor, 1);
+      if (left || right) this.renderPanels();
+    }
+
+    if (confirm) this.onConfirm();
+    else if (back) this.onBack();
+  }
+
+  /** J / Enter / 確定: confirm the highlighted panel or general. */
+  private onConfirm(): void {
+    if (this.stage === 'general') {
+      this.startMatch();
+    } else if (this.stage === 'own') {
+      this.ownCountry = COUNTRIES[this.cursor];
+      this.enterStage('opp');
+    } else {
+      this.oppCountry = COUNTRIES[this.cursor];
+      this.enterStage('general');
+    }
+  }
+
+  /** K / Esc / 返回: go back one stage, or to the title from the first stage. */
+  private onBack(): void {
+    if (this.stage === 'general') this.enterStage('opp');
+    else if (this.stage === 'opp') this.enterStage('own');
+    else this.scene.start('TitleScene');
+  }
+
+  /**
+   * Touch / mouse. Country stages: tap a panel to move the cursor there, tap the cursor panel again to confirm.
+   * General: tap a row to select it, tap the selected row again to confirm. 確定 / 返回 always work.
+   */
+  private onPointer = (pointer: Phaser.Input.Pointer): void => {
+    const { x, y } = pointer;
+    if (hitRect(x, y, CONFIRM_BTN)) {
+      this.onConfirm();
+      return;
+    }
+    if (hitRect(x, y, BACK_BTN)) {
+      this.onBack();
       return;
     }
 
-    if (left) this.cursor = this.nextSelectable(this.cursor, -1);
-    if (right) this.cursor = this.nextSelectable(this.cursor, 1);
-    if (left || right) this.renderPanels();
-
-    if (confirm) {
-      if (this.stage === 'own') {
-        this.ownCountry = COUNTRIES[this.cursor];
-        this.enterStage('opp');
+    if (this.stage === 'general') {
+      const slot = Math.floor((y - ROW_Y0) / ROW_STEP);
+      const inRow =
+        x >= ROW_X && x < ROW_X + ROW_W && slot >= GK_SLOT && slot <= FW_SLOT && y - ROW_Y0 - slot * ROW_STEP < ROW_H;
+      if (!inRow) return;
+      if (slot === this.generalCursor) {
+        this.startMatch();
       } else {
-        this.oppCountry = COUNTRIES[this.cursor];
-        this.enterStage('general');
+        this.generalCursor = slot;
+        this.renderList();
       }
-    } else if (back) {
-      if (this.stage === 'opp') this.enterStage('own');
-      else this.scene.start('TitleScene');
+      return;
     }
-  }
+
+    const index = COUNTRIES.findIndex((_, i) => hitRect(x, y, panelRect(i)));
+    if (index < 0 || this.isDisabled(index)) return;
+    if (index === this.cursor) {
+      this.onConfirm();
+    } else {
+      this.cursor = index;
+      this.renderPanels();
+    }
+  };
 
   private textStyle(size: string, color: string, stroke = true): Phaser.Types.GameObjects.Text.TextStyle {
     return {
@@ -180,6 +256,19 @@ export class TeamSelectScene extends Phaser.Scene {
     return this.stage === 'opp' && COUNTRIES[index] === this.ownCountry;
   }
 
+  private drawButtons(): void {
+    const button = (r: Rect, label: string) => {
+      const g = this.add.graphics();
+      g.fillStyle(0x000000, 0.55);
+      g.fillRect(r.x, r.y, r.w, r.h);
+      g.lineStyle(2, GOLD, 1);
+      g.strokeRect(r.x, r.y, r.w, r.h);
+      this.add.text(r.x + r.w / 2, r.y + r.h / 2, label, this.textStyle('16px', '#ffffff')).setOrigin(0.5);
+    };
+    button(BACK_BTN, '返回');
+    button(CONFIRM_BTN, '確定');
+  }
+
   private createPanels(): void {
     this.panelGfx = this.add.graphics();
     COUNTRIES.forEach((country, i) => {
@@ -198,9 +287,9 @@ export class TeamSelectScene extends Phaser.Scene {
     COUNTRIES.forEach((country, i) => {
       const cx = 130 + i * 190;
       const x = cx - 85;
-      const y = 90;
-      const w = 170;
-      const h = 200;
+      const y = PANEL_Y;
+      const w = PANEL_W;
+      const h = PANEL_H;
       const disabled = this.isDisabled(i);
       const color = disabled ? GREY_PANEL : COUNTRY_INFO[country].color;
       g.fillStyle(color, disabled ? 0.8 : 1);
@@ -228,7 +317,7 @@ export class TeamSelectScene extends Phaser.Scene {
     const teamColor = COUNTRY_INFO[this.ownCountry].color;
 
     team.forEach((c, slot) => {
-      const y0 = 58 + slot * 50;
+      const y0 = ROW_Y0 + slot * ROW_STEP;
       const selected = slot === this.generalCursor;
       const bg = this.add.graphics();
       bg.fillStyle(selected ? teamColor : 0x000000, selected ? 0.35 : 0.45);

@@ -3,6 +3,20 @@ import Phaser from 'phaser';
 const FONT = '"Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif';
 const GOLD_CSS = '#ffd98a';
 
+/** Best-effort fullscreen and landscape lock for phones. Failures (e.g. iOS) are ignored. */
+function tryFullscreenLandscape(scene: Phaser.Scene): void {
+  try {
+    scene.scale.startFullscreen();
+  } catch {
+    // Fullscreen not available.
+  }
+  try {
+    screen.orientation?.lock?.('landscape')?.catch(() => undefined);
+  } catch {
+    // Orientation lock not available.
+  }
+}
+
 /** Title screen: press J / Enter / Space / click to go to team select. */
 export class TitleScene extends Phaser.Scene {
   private started = false;
@@ -41,7 +55,10 @@ export class TitleScene extends Phaser.Scene {
 
     const keyboard = this.input.keyboard!;
     this.startKeys = keyboard.addKeys('J,ENTER,SPACE') as Record<'J' | 'ENTER' | 'SPACE', Phaser.Input.Keyboard.Key>;
-    this.input.on('pointerdown', () => this.go());
+    this.input.on('pointerdown', () => {
+      if (this.sys.game.device.input.touch) tryFullscreenLandscape(this);
+      this.go();
+    });
   }
 
   update(): void {
