@@ -7,6 +7,7 @@ import {
   BALL_RADIUS,
   BEAM_CAST_TICKS,
   CHARGE_FULL,
+  DRIBBLE_OFFSET,
   FIELD_D,
   FIELD_W,
   EMPTY_INPUT,
@@ -48,6 +49,7 @@ import {
   type SpriteConfig,
 } from './sprites';
 import { Stadium } from './stadium';
+import type { TeamSelectState } from './TeamSelectScene';
 import { applyView, BASE_H, textResolution, type View } from './view';
 
 export interface MatchInit {
@@ -56,6 +58,9 @@ export interface MatchInit {
   humanIdx?: number;
   seed?: number;
   halfSeconds?: number;
+  /** Skill preview (team select 預覽): the character's id, and the team-select state to return to. */
+  preview?: string;
+  returnTo?: TeamSelectState;
 }
 
 interface PlayerView {
@@ -291,6 +296,22 @@ const HINT_MS = 1000;
 const HINT_RISE = 8;
 const HINT_COLOR = '#fff3b0';
 const PLAYER_COUNT = 10;
+/** Skill preview: a long half so the clock never ends it, the human's L press at 0.6 s and J 1.2 s later (rampage), and the end 4.5 s after L. */
+const PREVIEW_HALF_SECONDS = 600;
+const PREVIEW_L_TICK = 36;
+const PREVIEW_J_TICK = PREVIEW_L_TICK + 72;
+const PREVIEW_END_TICK = PREVIEW_L_TICK + 270;
+/** After a goal in a preview, the demo ends this long after the celebration starts. */
+const PREVIEW_GOAL_END_MS = 1500;
+/** Preview start: the human's distance in front of the far goal line, and three defenders' offsets from him (x, y). */
+const PREVIEW_GOAL_DIST = 250;
+const PREVIEW_DEFENDERS: [number, number][] = [
+  [55, -40],
+  [55, 40],
+  [110, 0],
+];
+const PREVIEW_BACK_W = 64;
+const PREVIEW_BACK_H = 22;
 
 const FONT = '"Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif';
 const SKIN = 0xf1c27d;
@@ -317,6 +338,14 @@ function orderLeft(W: number): number {
 /** Minimap scale for a view of width W: MINIMAP_SCALE, shrunk on narrow touch views to clear the touch controls. */
 function minimapScale(W: number): number {
   return Math.min(MINIMAP_SCALE, (W - MINIMAP_SIDE_CLEAR) / FIELD_W);
+}
+
+function hitRect(x: number, y: number, r: { x: number; y: number; w: number; h: number }): boolean {
+  return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
+}
+
+function previewBackRect(W: number): { x: number; y: number; w: number; h: number } {
+  return { x: W - 10 - PREVIEW_BACK_W, y: 6, w: PREVIEW_BACK_W, h: PREVIEW_BACK_H };
 }
 
 function mix(a: number, b: number, t: number): number {
@@ -424,6 +453,16 @@ export class MatchScene extends Phaser.Scene {
   private scorers: ResultScorer[] = [];
   private resultQueued = false;
 
+  /** Skill preview mode (null for a real match). The human is scripted; see previewInput. */
+  private preview: { id: string; returnTo?: TeamSelectState } | null = null;
+  private previewTick = 0;
+  private previewEnded = false;
+  /** Event types seen during a preview, for the e2e check. */
+  private previewEvents: string[] = [];
+  private previewGfx!: Phaser.GameObjects.Graphics;
+  private previewText!: Phaser.GameObjects.Text;
+  private previewBackText!: Phaser.GameObjects.Text;
+
   private pkObjs: Phaser.GameObjects.Components.Visible[] = [];
   private pkHudGfx!: Phaser.GameObjects.Graphics;
   private pkAimGfx!: Phaser.GameObjects.Graphics;
@@ -460,6 +499,10 @@ export class MatchScene extends Phaser.Scene {
     this.humanIdx = data?.humanIdx ?? url.humanIdx ?? 4;
     this.seed = data?.seed ?? 1;
     this.halfSeconds = data?.halfSeconds ?? 120;
+    this.preview = data?.preview ? { id: data.preview, returnTo: data.returnTo } : null;
+    this.previewTick = 0;
+    this.previewEnded = false;
+    this.previewEvents = [];
   }
 
   preload(): void {
@@ -473,10 +516,12 @@ export class MatchScene extends Phaser.Scene {
       {
         seed: this.seed,
         teams: [getTeam(this.homeCountry), getTeam(this.awayCountry)],
-        halfSeconds: this.halfSeconds,
+        halfSeconds: this.preview ? PREVIEW_HALF_SECONDS : this.halfSeconds,
+        startInPlay: this.preview !== null,
       },
       SIZE_PARAMS,
     );
+    if (this.preview) this.setupPreview();
     this.aiState = createAIState((this.seed ^ 0x5bd1e995) >>> 0);
     this.aiOff = new URLSearchParams(window.location.search).get('ai') === '0';
     this.humanMask = this.state.players.map((p) => p.idx === this.humanIdx);
@@ -522,6 +567,7 @@ export class MatchScene extends Phaser.Scene {
     }
     this.roarGfx = this.add.graphics().setDepth(350);
     this.createHud();
+    if (this.preview) this.createPreviewHud();
     this.layoutHud(this.view);
 
     const cam = this.cameras.main;
@@ -535,6 +581,7 @@ export class MatchScene extends Phaser.Scene {
       minimap: () => this.minimapFrames,
       arrowVisible: () => this.arrowShown,
       lastHint: () => this.lastHintText,
+      preview: () => ({ events: this.previewEvents.slice(), ended: this.previewEnded }),
     };
     (window as unknown as { __sgScene: string }).__sgScene = 'MatchScene';
 
@@ -558,10 +605,10 @@ export class MatchScene extends Phaser.Scene {
 
   private tickOnce(): void {
     const inShootout = this.state.match.phase === 'pk';
-    const inputs = this.aiOff && !inShootout
+    const inputs = (this.aiOff || this.preview) && !inShootout
       ? this.state.players.map(() => ({ ...EMPTY_INPUT }))
       : computeAIInputs(this.state, this.aiState, this.humanMask);
-    inputs[this.humanIdx] = this.localInput.sample();
+    inputs[this.humanIdx] = this.preview ? this.previewInput() : this.localInput.sample();
     this.humanInput = inputs[this.humanIdx];
     // A fresh L press in play gets a reason; the hint shows only if this step starts no special for the human.
     const pressedL = this.humanInput.l && !this.prevHumanL;
@@ -577,6 +624,48 @@ export class MatchScene extends Phaser.Scene {
     this.audio.handleEvents(this.state.events);
     this.updateTrail();
     this.onEvents(this.state.events);
+    if (this.preview && this.previewTick > PREVIEW_END_TICK) this.endPreview();
+  }
+
+  /** Preview script: one L tick at 0.6 s, and for a rampage one J tick 1.2 s later. Nothing else. */
+  private previewInput(): InputFrame {
+    const t = this.previewTick;
+    this.previewTick++;
+    const input: InputFrame = { ...EMPTY_INPUT };
+    if (t === PREVIEW_L_TICK) input.l = true;
+    if (t === PREVIEW_J_TICK && this.state.players[this.humanIdx].specialMode === 'rampage') input.j = true;
+    return input;
+  }
+
+  /** Human on the far side of the opponent's goal, owning the ball, with three defenders in front. */
+  private setupPreview(): void {
+    const { players, ball } = this.state;
+    const human = players[this.humanIdx];
+    const x = FIELD_W - PREVIEW_GOAL_DIST;
+    human.x = x;
+    human.y = FIELD_D / 2;
+    human.facingX = 1;
+    human.facingY = 0;
+    PREVIEW_DEFENDERS.forEach(([dx, dy], i) => {
+      const p = players[PLAYER_COUNT / 2 + 1 + i];
+      p.x = x + dx;
+      p.y = FIELD_D / 2 + dy;
+    });
+    ball.ownerIdx = this.humanIdx;
+    ball.lastTouchIdx = this.humanIdx;
+    ball.special = null;
+    ball.x = human.x + human.facingX * (human.radius + DRIBBLE_OFFSET);
+    ball.y = human.y;
+    ball.z = 0;
+    ball.vx = 0;
+    ball.vy = 0;
+    ball.vz = 0;
+  }
+
+  private endPreview(): void {
+    if (!this.preview || this.previewEnded) return;
+    this.previewEnded = true;
+    this.scene.start('TeamSelectScene', { returnTo: this.preview.returnTo });
   }
 
   private updateTrail(): void {
@@ -591,6 +680,7 @@ export class MatchScene extends Phaser.Scene {
 
   private onEvents(events: SimEvent[]): void {
     const { match, players } = this.state;
+    if (this.preview) for (const e of events) this.previewEvents.push(e.type);
     if (match.phase !== this.prevPhase) {
       this.prevPhase = match.phase;
       this.onPhase(match.phase);
@@ -602,6 +692,7 @@ export class MatchScene extends Phaser.Scene {
         this.scorers.push({ team: e.team, name: scorerName, minute: this.elapsedMinute() });
         this.showBanner(`進球！ ${scorerName}`, 2000);
         this.stadium.cheer(this.time.now);
+        if (this.preview) this.time.delayedCall(PREVIEW_GOAL_END_MS, () => this.endPreview());
         if (this.specialBeforeStep === 'beam') this.impactFx(this.state.ball.x, this.state.ball.y, this.state.ball.z);
       } else if (e.type === 'special') {
         this.showSpecial(`${e.name}！`, SPECIAL_COLORS[e.kind]);
@@ -1028,7 +1119,7 @@ export class MatchScene extends Phaser.Scene {
 
   /** Field overview in the top-left: players, ball, goals and the camera's x range. Hidden during the shootout. */
   private drawMinimap(): void {
-    const visible = this.state.match.pk === null;
+    const visible = this.state.match.pk === null && this.preview === null;
     this.minimapGfx.setVisible(visible);
     if (!visible) return;
     this.minimapFrames++;
@@ -1096,7 +1187,7 @@ export class MatchScene extends Phaser.Scene {
     const px = sx - cam.scrollX;
     const py = sy - cam.scrollY;
     const outside = px < ARROW_MARGIN || px > W - ARROW_MARGIN || py < ARROW_MARGIN || py > H - ARROW_MARGIN;
-    const show = this.state.match.phase === 'play' && this.state.match.pk === null && outside;
+    const show = this.state.match.phase === 'play' && this.state.match.pk === null && outside && this.preview === null;
     this.arrowShown = show;
     this.arrowText.setVisible(show);
     if (!show) return;
@@ -1510,7 +1601,57 @@ export class MatchScene extends Phaser.Scene {
       row.stats.setPosition(left + ORDER_ROW_X + 332, y);
     });
     if (this.pkOrderOpen) this.refreshPkOrder();
+    if (this.preview) this.layoutPreviewHud(v);
   }
+
+  /** Preview HUD: the banner at top-left, and 返回 at top-right. The match HUD and touch controls are hidden. */
+  private createPreviewHud(): void {
+    const hudDepth = 1000;
+    const hide = (o: Phaser.GameObjects.Components.Visible) => o.setVisible(false);
+    this.touch.setVisible(false);
+    [this.topBarGfx, this.homeText, this.dashText, this.awayText, this.clockText, this.hudNameText].forEach(hide);
+    const style = (size: string): Phaser.Types.GameObjects.Text.TextStyle => ({
+      fontFamily: FONT,
+      fontSize: size,
+      color: '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 3,
+      resolution: textResolution(),
+    });
+    const human = this.state.players[this.humanIdx];
+    this.previewGfx = this.add.graphics().setScrollFactor(0).setDepth(hudDepth + 2);
+    this.previewText = this.add
+      .text(0, 0, `技能預覽：${human.name}・${human.specialName}`, style('14px'))
+      .setOrigin(0.5, 0)
+      .setScrollFactor(0)
+      .setDepth(hudDepth + 2);
+    this.previewBackText = this.add
+      .text(0, 0, '返回', style('13px'))
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(hudDepth + 3);
+    this.input.on('pointerdown', this.onPreviewPointer);
+    this.layoutPreviewHud(this.view);
+  }
+
+  private layoutPreviewHud(v: View): void {
+    const back = previewBackRect(v.W);
+    this.previewGfx
+      .clear()
+      .fillStyle(0x000000, 0.55)
+      .fillRect(back.x, back.y, back.w, back.h)
+      .lineStyle(2, GOLD, 1)
+      .strokeRect(back.x, back.y, back.w, back.h);
+    this.previewText.setPosition(v.W / 2, 8);
+    this.previewBackText.setPosition(back.x + back.w / 2, back.y + back.h / 2);
+  }
+
+  /** Tap on 返回 (logical units) ends the preview at any time. Other taps do nothing. */
+  private onPreviewPointer = (pointer: Phaser.Input.Pointer): void => {
+    const x = pointer.x / this.view.Z;
+    const y = pointer.y / this.view.Z;
+    if (hitRect(x, y, previewBackRect(this.view.W))) this.endPreview();
+  };
 
   /** Re-applies the current text resolution to every text object (HUD, touch labels, player names). */
   private refreshTextResolution(): void {
@@ -1652,6 +1793,7 @@ export class MatchScene extends Phaser.Scene {
   }
 
   private drawMatchHud(): void {
+    if (this.preview) return;
     const { match, players } = this.state;
     const secs = Math.ceil(match.clockTicks / TICK_HZ);
     const mm = String(Math.floor(secs / 60)).padStart(2, '0');

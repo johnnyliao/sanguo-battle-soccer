@@ -1,8 +1,10 @@
 // Turns a character sheet (grid of frames on white, with or without black ground lines) into a transparent sprite sheet.
-// Usage: node tools/make-sprite.mjs <input sheet.png> <output sprite.png> [--scale <factor>] [--keep-white] [--rows <n>]
+// Usage: node tools/make-sprite.mjs <input sheet.png> <output sprite.png> [--scale <factor>] [--keep-white] [--rows <n>] [--grid-cut]
 // Writes <output>.png (uniform frames, packed, transparent), <output>.json (frameWidth, frameHeight,
 // cols, rows, anchorX, anchorY) and test-results/<name>-preview.png for a visual check.
 // --scale downscales the packed sheet (frame size and anchor in the json are scaled to match).
+// --grid-cut uses fixed column cuts and row bands per frame (art crossing a cell boundary is clipped or leaks in);
+// the default assigns each connected art component to one cell, so art crossing a boundary stays whole.
 // Without ground lines, the ground of each row is the median foot row of its frames.
 // Image processing runs in a headless Chromium canvas (Playwright from mountain-race-dev).
 import { createRequire } from 'node:module';
@@ -26,6 +28,10 @@ if (scaleAt >= 0) argv.splice(scaleAt, 2);
 const keepAt = argv.indexOf('--keep-white');
 const KEEP_WHITE = keepAt >= 0;
 if (keepAt >= 0) argv.splice(keepAt, 1);
+// --grid-cut: old behaviour, each frame takes only the art inside its own column cut and row band.
+const gridAt = argv.indexOf('--grid-cut');
+const GRID_CUT = gridAt >= 0;
+if (gridAt >= 0) argv.splice(gridAt, 1);
 // --rows <n> for sheets with a different number of rows (default 5).
 const rowsAt = argv.indexOf('--rows');
 if (rowsAt >= 0) {
@@ -43,7 +49,7 @@ const metaPath = outPath.replace(/\.png$/, '.json');
 const previewPath = resolve(repoRoot, 'test-results', `${basename(outPath, '.png')}-preview.png`);
 
 // Runs in the page. Everything the pixel work needs is inside this function.
-function processSheet({ dataUrl, cols, rows, pad, scale, keepWhite }) {
+function processSheet({ dataUrl, cols, rows, pad, scale, keepWhite, gridCut }) {
   return (async () => {
     const img = new Image();
     img.src = dataUrl;
@@ -160,7 +166,7 @@ function processSheet({ dataUrl, cols, rows, pad, scale, keepWhite }) {
     cuts.push(W);
     const cellW = [];
     for (let c = 0; c < cols; c++) cellW.push(cuts[c + 1] - cuts[c]);
-    const FW = Math.max(...cellW);
+    let FW = Math.max(...cellW);
     const frameX0 = [];
     for (let c = 0; c < cols; c++) frameX0.push(cuts[c] - Math.floor((FW - cellW[c]) / 2));
 
@@ -185,35 +191,6 @@ function processSheet({ dataUrl, cols, rows, pad, scale, keepWhite }) {
         return { yt: y, yb: y, segs: [] };
       });
     }
-
-    // 4) Vertical: same frame height for every row; ground line at the same frame y.
-    const above = [];
-    const below = [];
-    for (let r = 0; r < rows; r++) {
-      const [y0, y1] = bands[r];
-      const { yt, yb } = lines[r];
-      let artTop = -1;
-      for (let y = y0; y < yt; y++) {
-        if (rowArt[y] > 2) {
-          artTop = y;
-          break;
-        }
-      }
-      let artBot = yb;
-      for (let y = y1; y > yb; y--) {
-        if (rowArt[y] > 2) {
-          artBot = y;
-          break;
-        }
-      }
-      if (artTop < 0) throw new Error(`no art above the ground line in row ${r}`);
-      above.push(yt - artTop);
-      below.push(artBot - yb);
-    }
-    const G = Math.max(...above) + pad;
-    const B = Math.max(0, ...below) + pad;
-    const FH = G + B;
-    const frameY0 = lines.map((l) => l.yt - G);
 
     // 5) Mark what is removed: ground-line pixels (plus their grey anti-aliasing), then background
     //    connected to the sheet border. The flood fill may pass through removed line pixels, otherwise the
@@ -328,36 +305,161 @@ function processSheet({ dataUrl, cols, rows, pad, scale, keepWhite }) {
       }
       return [r, g, b, 255];
     };
+    const px = new Uint8ClampedArray(N * 4);
+    for (let p = 0; p < N; p++) px.set(outRGBA(p), p * 4);
 
-    // 8) Pack the frames tightly into the output sheet. A frame only takes art from its own cell (x range
-    //    between the gutters) and its own row band, so neighbours never leak in.
-    const outW = FW * cols;
-    const outH = FH * rows;
-    const ob = new Uint8ClampedArray(outW * outH * 4);
-    const clipWarnings = [];
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        let clipped = 0;
-        for (let dy = 0; dy < FH; dy++) {
-          for (let dx = 0; dx < FW; dx++) {
-            const sx = frameX0[c] + dx;
-            const sy = frameY0[r] + dy;
-            const oi = ((r * FH + dy) * outW + (c * FW + dx)) * 4;
-            if (sx < cuts[c] || sx >= cuts[c + 1] || sy < bands[r][0] || sy > bands[r][1]) continue;
-            const [R, Gc, Bc, A] = outRGBA(sy * W + sx);
-            ob[oi] = R;
-            ob[oi + 1] = Gc;
-            ob[oi + 2] = Bc;
-            ob[oi + 3] = A;
-            if (A > 0 && (sx === cuts[c] || sx === cuts[c + 1] - 1)) clipped++;
+    // 8) Components (default): opaque pixels (alpha > 20) are grouped into 8-connected components. A component
+    //    goes whole to the cell (row band x column) that holds most of its pixels, so art crossing into a
+    //    neighbour's area stays with its own frame. A component with a real share in two cells (two characters
+    //    touching) is split by the column cut instead. Specks (< 30 px) far from their cell's main body are dropped.
+    const SPLIT_MIN = 200;
+    const SPECK_MAX = 30;
+    const SPECK_DIST = 20;
+    const ROW_OF = new Int32Array(H);
+    for (let y = 0; y < H; y++) {
+      let best = 0;
+      let bestD = Infinity;
+      bands.forEach(([y0, y1], r) => {
+        const d = y < y0 ? y0 - y : y > y1 ? y - y1 : 0;
+        if (d < bestD) {
+          bestD = d;
+          best = r;
+        }
+      });
+      ROW_OF[y] = best;
+    }
+    const COL_OF = new Int32Array(W);
+    for (let c = 0; c < cols; c++) for (let x = cuts[c]; x < cuts[c + 1]; x++) COL_OF[x] = c;
+    const cellOf = (p) => ROW_OF[Math.floor(p / W)] * cols + COL_OF[p % W];
+    const cellName = (k) => `r${Math.floor(k / cols)}c${k % cols}`;
+    const bboxOf = (list) => {
+      let x0 = W;
+      let x1 = -1;
+      let y0 = H;
+      let y1 = -1;
+      for (const p of list) {
+        const x = p % W;
+        const y = (p - x) / W;
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+      }
+      return { x0, x1, y0, y1 };
+    };
+    const pieces = [];
+    const splitLog = [];
+    const seen = new Uint8Array(N);
+    for (let p0 = 0; p0 < N; p0++) {
+      if (seen[p0] || px[p0 * 4 + 3] <= 20) continue;
+      const comp = [p0];
+      seen[p0] = 1;
+      for (let i = 0; i < comp.length; i++) {
+        const p = comp[i];
+        const x = p % W;
+        const y = (p - x) / W;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+            const q = ny * W + nx;
+            if (!seen[q] && px[q * 4 + 3] > 20) {
+              seen[q] = 1;
+              comp.push(q);
+            }
           }
         }
-        if (clipped > 0) clipWarnings.push(`row ${r} col ${c}: ${clipped} px on the cell boundary (art may be clipped)`);
+      }
+      const byCell = new Map();
+      for (const p of comp) {
+        const k = cellOf(p);
+        if (!byCell.has(k)) byCell.set(k, []);
+        byCell.get(k).push(p);
+      }
+      const groups = [...byCell.entries()].sort((a, b) => b[1].length - a[1].length);
+      if (groups.length > 1 && groups[1][1].length >= SPLIT_MIN && groups[1][1].length >= 0.2 * comp.length) {
+        splitLog.push(groups.map(([k, l]) => `${cellName(k)}:${l.length}px`).join(' + '));
+        for (const [k, l] of groups) pieces.push({ cell: k, px: l });
+      } else {
+        pieces.push({ cell: groups[0][0], px: comp });
       }
     }
-    warnings.push(...clipWarnings);
+    const pieceByCell = new Map();
+    for (const pc of pieces) {
+      if (!pieceByCell.has(pc.cell)) pieceByCell.set(pc.cell, []);
+      pieceByCell.get(pc.cell).push(pc);
+    }
+    const owner = new Int32Array(N).fill(-1);
+    const keptTop = new Array(rows).fill(Infinity);
+    const keptBot = new Array(rows).fill(-Infinity);
+    let keptPieces = 0;
+    let specks = 0;
+    const keep = (pc) => {
+      keptPieces++;
+      const r = Math.floor(pc.cell / cols);
+      for (const p of pc.px) {
+        owner[p] = pc.cell;
+        const y = Math.floor(p / W);
+        if (y < keptTop[r]) keptTop[r] = y;
+        if (y > keptBot[r]) keptBot[r] = y;
+      }
+    };
+    if (!gridCut) {
+      for (const list of pieceByCell.values()) {
+        list.sort((a, b) => b.px.length - a.px.length);
+        const mb = bboxOf(list[0].px);
+        list.forEach((pc, i) => {
+          if (i === 0 || pc.px.length >= SPECK_MAX) {
+            keep(pc);
+            return;
+          }
+          const b = bboxOf(pc.px);
+          const gx = Math.max(0, mb.x0 - b.x1, b.x0 - mb.x1);
+          const gy = Math.max(0, mb.y0 - b.y1, b.y0 - mb.y1);
+          if (Math.hypot(gx, gy) <= SPECK_DIST) keep(pc);
+          else specks++;
+        });
+      }
+    }
 
-    // 9) Anchor X: center between the two wheels, from dark pixels in the strip just above the ground line.
+    // 9) Vertical: same frame height for every row; ground line at the same frame y. Component mode sizes each row
+    //    from its kept art; grid mode from the art inside the row band.
+    const above = [];
+    const below = [];
+    for (let r = 0; r < rows; r++) {
+      const [y0, y1] = bands[r];
+      const { yt, yb } = lines[r];
+      if (!gridCut) {
+        if (keptTop[r] === Infinity) throw new Error(`no art in row ${r}`);
+        above.push(Math.max(0, yt - keptTop[r]));
+        below.push(Math.max(0, keptBot[r] - yt));
+        continue;
+      }
+      let artTop = -1;
+      for (let y = y0; y < yt; y++) {
+        if (rowArt[y] > 2) {
+          artTop = y;
+          break;
+        }
+      }
+      let artBot = yb;
+      for (let y = y1; y > yb; y--) {
+        if (rowArt[y] > 2) {
+          artBot = y;
+          break;
+        }
+      }
+      if (artTop < 0) throw new Error(`no art above the ground line in row ${r}`);
+      above.push(yt - artTop);
+      below.push(artBot - yb);
+    }
+    const G = Math.max(...above) + pad;
+    const B = Math.max(0, ...below) + pad;
+    const FH = G + B;
+    const frameY0 = lines.map((l) => l.yt - G);
+
+    // 10) Anchor X: center between the two wheels, from dark pixels in the strip just above the ground line.
     const candidates = [];
     for (let r = 0; r < rows; r++) {
       const { yt } = lines[r];
@@ -407,7 +509,65 @@ function processSheet({ dataUrl, cols, rows, pad, scale, keepWhite }) {
     const anchorX = Math.round(sortedX[Math.floor(sortedX.length / 2)]);
     const anchorY = G;
 
-    // 10) Output sheet and preview (frames over a green field and a checkerboard, anchor marked in red).
+    // 11) Frame layout and packing. Grid mode: each frame takes only the art inside its own cut and row band, at the
+    //     old frame size. Default: each frame takes its kept components whole, and the frame is as wide as the largest
+    //     extent around the shared anchor, so nothing is clipped. The anchor sits at anchorOut in every frame.
+    const originX = frameX0.slice();
+    let anchorOut = anchorX;
+    if (!gridCut) {
+      let left = 0;
+      let right = 0;
+      for (let p = 0; p < N; p++) {
+        const k = owner[p];
+        if (k < 0) continue;
+        const rel = (p % W) - frameX0[k % cols];
+        left = Math.max(left, anchorX - rel);
+        right = Math.max(right, rel - anchorX);
+      }
+      anchorOut = pad + left;
+      FW = anchorOut + right + pad + 1;
+      for (let c = 0; c < cols; c++) originX[c] = frameX0[c] + anchorX - anchorOut;
+    }
+    const outW = FW * cols;
+    const outH = FH * rows;
+    const ob = new Uint8ClampedArray(outW * outH * 4);
+    const clipWarnings = [];
+    if (gridCut) {
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          let clipped = 0;
+          for (let dy = 0; dy < FH; dy++) {
+            for (let dx = 0; dx < FW; dx++) {
+              const sx = frameX0[c] + dx;
+              const sy = frameY0[r] + dy;
+              const oi = ((r * FH + dy) * outW + (c * FW + dx)) * 4;
+              if (sx < cuts[c] || sx >= cuts[c + 1] || sy < bands[r][0] || sy > bands[r][1]) continue;
+              const [R, Gc, Bc, A] = outRGBA(sy * W + sx);
+              ob[oi] = R;
+              ob[oi + 1] = Gc;
+              ob[oi + 2] = Bc;
+              ob[oi + 3] = A;
+              if (A > 0 && (sx === cuts[c] || sx === cuts[c + 1] - 1)) clipped++;
+            }
+          }
+          if (clipped > 0) clipWarnings.push(`row ${r} col ${c}: ${clipped} px on the cell boundary (art may be clipped)`);
+        }
+      }
+    } else {
+      for (let p = 0; p < N; p++) {
+        const k = owner[p];
+        if (k < 0) continue;
+        const r = Math.floor(k / cols);
+        const c = k % cols;
+        const x = p % W;
+        const y = (p - x) / W;
+        const oi = ((r * FH + (y - frameY0[r])) * outW + (c * FW + (x - originX[c]))) * 4;
+        ob.set(px.subarray(p * 4, p * 4 + 4), oi);
+      }
+    }
+    warnings.push(...clipWarnings);
+
+    // 12) Output sheet and preview (frames over a green field and a checkerboard, anchor marked in red).
     const toUrl = (w, h, data) => {
       const o = document.createElement('canvas');
       o.width = w;
@@ -450,7 +610,7 @@ function processSheet({ dataUrl, cols, rows, pad, scale, keepWhite }) {
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         for (const ox of [0, outW + 16]) {
-          const ax = ox + c * FW + anchorX;
+          const ax = ox + c * FW + anchorOut;
           const ay = r * FH + anchorY;
           pctx.beginPath();
           pctx.moveTo(ax - 5, ay + 0.5);
@@ -465,7 +625,7 @@ function processSheet({ dataUrl, cols, rows, pad, scale, keepWhite }) {
     return {
       sheetUrl: sheetCanvas.toDataURL('image/png'),
       previewUrl: pv.toDataURL('image/png'),
-      meta: { frameWidth: outFW, frameHeight: outFH, cols, rows, anchorX: Math.round(anchorX * scale), anchorY: Math.round(anchorY * scale) },
+      meta: { frameWidth: outFW, frameHeight: outFH, cols, rows, anchorX: Math.round(anchorOut * scale), anchorY: Math.round(anchorY * scale) },
       debug: {
         size: [W, H],
         bands,
@@ -477,6 +637,9 @@ function processSheet({ dataUrl, cols, rows, pad, scale, keepWhite }) {
         above,
         below,
         pockets,
+        keptPieces,
+        specks,
+        splitLog,
         anchorCandidates: candidates.map((k) => `r${k.r}c${k.c}=${k.x.toFixed(1)}`),
       },
       warnings,
@@ -489,7 +652,7 @@ const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--ena
 let result;
 try {
   const page = await browser.newPage();
-  result = await page.evaluate(processSheet, { dataUrl, cols: COLS, rows: ROWS, pad: PAD, scale: SCALE, keepWhite: KEEP_WHITE });
+  result = await page.evaluate(processSheet, { dataUrl, cols: COLS, rows: ROWS, pad: PAD, scale: SCALE, keepWhite: KEEP_WHITE, gridCut: GRID_CUT });
 } finally {
   await browser.close();
 }
@@ -508,6 +671,8 @@ console.log(`column cuts: ${result.debug.cuts.join(', ')}`);
 console.log(`above ground per row: ${result.debug.above.join(',')}; below: ${result.debug.below.join(',')}`);
 console.log(`frame ${m.frameWidth}x${m.frameHeight}, grid ${m.cols}x${m.rows}, anchor (${m.anchorX}, ${m.anchorY})`);
 console.log(`enclosed pockets kept opaque (20-249 px): ${result.debug.pockets.length}`);
+console.log(`components kept: ${result.debug.keptPieces}; specks dropped: ${result.debug.specks}`);
+console.log(`components split by column cut: ${result.debug.splitLog.length}${result.debug.splitLog.length ? ` (${result.debug.splitLog.join('; ')})` : ''}`);
 console.log(`anchor candidates: ${result.debug.anchorCandidates.join(' ')}`);
 for (const w of result.warnings) console.log(`warning: ${w}`);
 console.log(`wrote ${outPath} (${(pngBytes(result.sheetUrl).length / 1024).toFixed(1)} KB)`);

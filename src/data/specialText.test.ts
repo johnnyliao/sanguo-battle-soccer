@@ -1,0 +1,57 @@
+import { describe, expect, it } from 'vitest';
+import { specialDescription } from './specialText';
+import type { CharacterDef } from './types';
+
+function def(kind: CharacterDef['special']['kind'], mode?: CharacterDef['special']['mode']): CharacterDef {
+  return {
+    id: 'x',
+    name: 'X',
+    country: 'shu',
+    role: 'FW',
+    size: 'M',
+    stats: { power: 5, speed: 5, stamina: 5, technique: 5, defense: 5 },
+    special: { name: 'S', kind, mode },
+  };
+}
+
+describe('specialDescription', () => {
+  it('rampage (default mode) names the shot of its kind', () => {
+    expect(specialDescription(def('straight'))).toEqual({ condition: '持球', effect: '3 秒無敵衝刺，按攻擊射直線高速球' });
+    expect(specialDescription(def('zigzag', 'rampage')).effect).toContain('蛇行球');
+    expect(specialDescription(def('lob', 'rampage')).effect).toContain('高吊下墜球');
+    expect(specialDescription(def('pierce', 'rampage')).effect).toContain('穿人擊倒球');
+  });
+
+  it('roar works with or without the ball', () => {
+    const d = specialDescription(def('pierce', 'roar'));
+    expect(d.condition).toBe('持球或不持球');
+    expect(d.effect).toContain('暈眩');
+  });
+
+  it('lunge needs the ball', () => {
+    const d = specialDescription(def('pierce', 'lunge'));
+    expect(d.condition).toBe('持球');
+    expect(d.effect).toContain('突進');
+  });
+
+  it('beam needs the ball in the attacking half', () => {
+    const d = specialDescription(def('beam', 'beam'));
+    expect(d.condition).toBe('前半場持球');
+    expect(d.effect).toContain('光彈');
+  });
+
+  it('summon needs the ball and calls cavalry', () => {
+    const d = specialDescription(def('straight', 'summon'));
+    expect(d.condition).toBe('持球');
+    expect(d.effect).toContain('5 名鐵騎');
+  });
+
+  it('keeps effect texts short enough for one team-select line', () => {
+    const modes = ['rampage', 'roar', 'lunge', 'beam', 'summon'] as const;
+    for (const mode of modes) {
+      for (const kind of ['straight', 'zigzag', 'lob', 'pierce', 'beam'] as const) {
+        expect(specialDescription(def(kind, mode)).effect.length).toBeLessThanOrEqual(20);
+      }
+    }
+  });
+});

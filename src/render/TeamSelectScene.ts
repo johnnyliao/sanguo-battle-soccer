@@ -2,13 +2,14 @@ import Phaser from 'phaser';
 import {
   COUNTRY_INFO,
   getTeam,
+  specialDescription,
   type BodySize,
   type CharacterDef,
   type Country,
   type Role,
-  type SpecialKind,
   type Stats,
 } from '../data';
+import { SPECIAL_COOLDOWN_TICKS, TICK_HZ } from '../sim';
 import { applyView, textResolution, type View } from './view';
 
 const FONT = '"Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif';
@@ -16,6 +17,7 @@ const GOLD = 0xffd700;
 const GREY_PANEL = 0x3a3f46;
 const GREY_TEXT = '#7a8088';
 const DEFAULT_HALF_SECONDS = 120;
+const SPECIAL_COOLDOWN_SECONDS = SPECIAL_COOLDOWN_TICKS / TICK_HZ;
 
 const COUNTRIES: Country[] = ['wei', 'shu', 'wu'];
 const GK_SLOT = 0;
@@ -27,6 +29,8 @@ const ROW_Y0 = 58;
 const ROW_STEP = 50;
 const ROW_H = 46;
 const ROW_X = 10;
+const PREVIEW_W = 40;
+const PREVIEW_H = 20;
 
 interface Rect {
   x: number;
@@ -58,7 +62,6 @@ function panelRect(index: number, v: View): Rect {
 
 const ROLE_LABEL: Record<Role, string> = { GK: '守門員', DF: '後衛', MF: '中場', FW: '前鋒' };
 const SIZE_LABEL: Record<BodySize, string> = { S: '小', M: '中', L: '大' };
-const KIND_LABEL: Record<SpecialKind, string> = { straight: '直線', zigzag: '蛇行', lob: '高吊', pierce: '穿人', beam: '光彈' };
 const STATS: { label: string; key: keyof Stats }[] = [
   { label: '力', key: 'power' },
   { label: '速', key: 'speed' },
@@ -68,6 +71,15 @@ const STATS: { label: string; key: keyof Stats }[] = [
 ];
 
 type Stage = 'own' | 'opp' | 'general';
+
+/** The selection state, so a preview match can return to the same panel, row and countries. */
+export interface TeamSelectState {
+  stage: Stage;
+  cursor: number;
+  generalCursor: number;
+  own: Country;
+  opp: Country;
+}
 
 function darken(color: number, f: number): number {
   const ch = (shift: number) => Math.round(((color >> shift) & 0xff) * f);
@@ -84,6 +96,8 @@ export class TeamSelectScene extends Phaser.Scene {
   private roster: CharacterDef[] = [];
   private halfSeconds = DEFAULT_HALF_SECONDS;
   private started = false;
+  /** Selection to restore on create (set when returning from a preview match). */
+  private returnTo: TeamSelectState | undefined;
 
   private keys!: Record<'A' | 'D' | 'W' | 'S' | 'J' | 'K' | 'ENTER' | 'ESC' | 'LEFT' | 'RIGHT' | 'UP' | 'DOWN', Phaser.Input.Keyboard.Key>;
 
@@ -99,6 +113,10 @@ export class TeamSelectScene extends Phaser.Scene {
     super('TeamSelectScene');
   }
 
+  init(data?: { returnTo?: TeamSelectState }): void {
+    this.returnTo = data?.returnTo;
+  }
+
   create(): void {
     (window as unknown as { __sgScene: string }).__sgScene = 'TeamSelectScene';
     this.view = applyView(this, (v) => {
@@ -111,6 +129,7 @@ export class TeamSelectScene extends Phaser.Scene {
       cursor: this.stage === 'general' ? this.generalCursor : this.cursor,
       own: this.ownCountry,
       opp: this.oppCountry,
+      previewRect: (slot: number) => previewRect(slot, this.view),
     });
 
     this.started = false;
@@ -125,7 +144,19 @@ export class TeamSelectScene extends Phaser.Scene {
     this.buildObjects();
     this.input.on('pointerdown', this.onPointer);
 
-    this.enterStage('own');
+    const r = this.returnTo;
+    this.returnTo = undefined;
+    if (r) {
+      this.ownCountry = r.own;
+      this.oppCountry = r.opp;
+      this.roster = getTeam(r.own);
+      this.stage = r.stage;
+      this.cursor = r.cursor;
+      this.generalCursor = r.generalCursor;
+      this.refreshStage();
+    } else {
+      this.enterStage('own');
+    }
   }
 
   update(): void {
@@ -191,6 +222,12 @@ export class TeamSelectScene extends Phaser.Scene {
     }
 
     if (this.stage === 'general') {
+      for (let slot = GK_SLOT; slot <= FW_SLOT; slot++) {
+        if (hitRect(x, y, previewRect(slot, this.view))) {
+          this.startPreview(slot);
+          return;
+        }
+      }
       const slot = Math.floor((y - ROW_Y0) / ROW_STEP);
       const inRow =
         x >= ROW_X && x < this.view.W - ROW_X && slot >= GK_SLOT && slot <= FW_SLOT && y - ROW_Y0 - slot * ROW_STEP < ROW_H;
@@ -380,8 +417,26 @@ export class TeamSelectScene extends Phaser.Scene {
       });
 
       const specialX = this.view.W - 178;
-      add(this.add.text(specialX, y0 + 8, c.special.name, this.textStyle('13px', '#ffd98a')));
-      add(this.add.text(specialX, y0 + 26, `必殺・${KIND_LABEL[c.special.kind]}`, this.textStyle('11px', '#d0d8e0', false)));
+      const desc = specialDescription(c);
+      add(this.add.text(specialX, y0 + 4, c.special.name, this.textStyle('13px', '#ffd98a')));
+      add(
+        this.add.text(
+          specialX,
+          y0 + 21,
+          `${desc.condition}｜冷卻 ${SPECIAL_COOLDOWN_SECONDS} 秒`,
+          this.textStyle('10px', '#d0d8e0', false),
+        ),
+      );
+      add(this.add.text(specialX, y0 + 32, desc.effect, this.textStyle('10px', '#ffffff', false)));
+
+      const pr = previewRect(slot, this.view);
+      const pg = this.add.graphics();
+      pg.fillStyle(0x000000, 0.55);
+      pg.fillRect(pr.x, pr.y, pr.w, pr.h);
+      pg.lineStyle(1, GOLD, 1);
+      pg.strokeRect(pr.x, pr.y, pr.w, pr.h);
+      add(pg);
+      add(this.add.text(pr.x + pr.w / 2, pr.y + pr.h / 2, '預覽', this.textStyle('11px', '#ffffff')).setOrigin(0.5));
     });
   }
 
@@ -396,6 +451,32 @@ export class TeamSelectScene extends Phaser.Scene {
       halfSeconds: this.halfSeconds,
     });
   }
+
+  /** 預覽 on a row: a scripted demo of that character's special, then back here. */
+  private startPreview(slot: number): void {
+    if (this.started) return;
+    this.started = true;
+    this.scene.start('MatchScene', {
+      home: this.ownCountry,
+      away: this.oppCountry,
+      humanIdx: slot,
+      seed: Date.now() >>> 0,
+      halfSeconds: this.halfSeconds,
+      preview: this.roster[slot].id,
+      returnTo: {
+        stage: this.stage,
+        cursor: this.cursor,
+        generalCursor: this.generalCursor,
+        own: this.ownCountry,
+        opp: this.oppCountry,
+      },
+    });
+  }
+}
+
+/** 預覽 button on a general-stage row: right side of the special column, level with the name. */
+function previewRect(slot: number, v: View): Rect {
+  return { x: v.W - 10 - PREVIEW_W, y: ROW_Y0 + slot * ROW_STEP + 4, w: PREVIEW_W, h: PREVIEW_H };
 }
 
 /** Half length from the `half` URL query param (seconds), default 120. */
