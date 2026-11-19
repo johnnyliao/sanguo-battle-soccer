@@ -11,10 +11,24 @@ export type SpriteAnim = 'idle' | 'run' | 'attack' | 'charge' | 'special' | 'cas
 
 /**
  * Effects played over the character (see MatchScene): a spear thrust or fan slash, the lunge's dragon, an impact burst,
- * for Zhuge Liang's beam the channel circle, the energy ball and the impact, and for Ma Chao's summon the call and the
- * smoke a rider leaves when it vanishes.
+ * for Zhuge Liang's beam the channel circle, the energy ball and the impact, for Ma Chao's summon the call and the
+ * smoke a rider leaves when it vanishes, for Guan Yu's rampage the aura and exhaust, his special ball's fire dragon,
+ * and for Zhang Fei's roar the charge and the soundwave.
  */
-export type FxAnim = 'thrust' | 'lunge' | 'burst' | 'slash' | 'charge' | 'ball' | 'impact' | 'summon' | 'smoke';
+export type FxAnim =
+  | 'thrust'
+  | 'lunge'
+  | 'burst'
+  | 'slash'
+  | 'charge'
+  | 'ball'
+  | 'impact'
+  | 'summon'
+  | 'smoke'
+  | 'aura'
+  | 'exhaust'
+  | 'dragon'
+  | 'wave';
 
 export interface SpriteMeta {
   frameWidth: number;
@@ -74,8 +88,8 @@ export interface RiderSheet {
   anims: Record<RiderAnim, SpriteAnimDef>;
 }
 
-const GUANYU_META: SpriteMeta = { frameWidth: 197, frameHeight: 209, cols: 4, rows: 5, anchorX: 106, anchorY: 202 };
-const ZHANGFEI_META: SpriteMeta = { frameWidth: 211, frameHeight: 205, cols: 4, rows: 5, anchorX: 91, anchorY: 198 };
+const GUANYU_META: SpriteMeta = { frameWidth: 263, frameHeight: 284, cols: 4, rows: 5, anchorX: 172, anchorY: 217 };
+const ZHANGFEI_META: SpriteMeta = { frameWidth: 284, frameHeight: 206, cols: 4, rows: 5, anchorX: 142, anchorY: 199 };
 const ZHAOYUN_META: SpriteMeta = { frameWidth: 211, frameHeight: 204, cols: 4, rows: 5, anchorX: 94, anchorY: 191 };
 const ZHUGELIANG_META: SpriteMeta = { frameWidth: 211, frameHeight: 197, cols: 4, rows: 5, anchorX: 98, anchorY: 188 };
 const MACHAO_META: SpriteMeta = { frameWidth: 211, frameHeight: 195, cols: 4, rows: 5, anchorX: 91, anchorY: 191 };
@@ -108,7 +122,7 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
     key: 'sprite-guanyu',
     url: 'sprites/guanyu.png',
     meta: GUANYU_META,
-    displayHeight: 63,
+    displayHeight: 89,
     shadowScale: 1.6,
     anims: {
       idle: { frames: [at(0, 0), at(0, 1), at(0, 2), at(0, 3)], fps: 6, repeat: -1 },
@@ -116,36 +130,65 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
       attack: { frames: [at(2, 0), at(2, 1), at(2, 2), at(2, 3)], fps: 14, repeat: 0 },
       charge: { frames: [at(3, 0)], fps: 1, repeat: -1 },
       cast: { frames: [at(3, 0)], fps: 1, repeat: -1 },
-      special: { frames: [at(3, 1), at(3, 2), at(3, 3)], fps: 10, repeat: 0 },
-      rampage: { frames: [at(3, 1), at(3, 2)], fps: 8, repeat: -1 },
-      lunge: { frames: [at(3, 1), at(3, 2)], fps: 8, repeat: -1 },
+      special: { frames: [at(3, 0), at(3, 1)], fps: 8, repeat: 0 },
+      rampage: { frames: [at(3, 2)], fps: 8, repeat: -1 },
+      lunge: { frames: [at(3, 2)], fps: 8, repeat: -1 },
       shot: { frames: [at(3, 3)], fps: 1, repeat: -1 },
-      dive: { frames: [at(4, 1)], fps: 1, repeat: -1 },
+      dive: { frames: [at(4, 0)], fps: 1, repeat: -1 },
       hitstun: { frames: [at(4, 0)], fps: 1, repeat: -1 },
       down: { frames: [at(4, 1), at(4, 2)], fps: 6, repeat: 0 },
       recover: { frames: [at(4, 3)], fps: 1, repeat: -1 },
+    },
+    fx: {
+      key: 'fx-guanyu',
+      url: 'sprites/guanyu-fx.png',
+      frameWidth: 180,
+      frameHeight: 180,
+      punch: 'slash',
+      punchWidth: 90,
+      anims: {
+        slash: { frames: [fxat(0, 0), fxat(0, 1), fxat(0, 2), fxat(0, 3)], fps: 20, repeat: 0 },
+        exhaust: { frames: [fxat(1, 0), fxat(1, 1), fxat(1, 2), fxat(1, 3)], fps: 12, repeat: -1 },
+        aura: { frames: [fxat(2, 0), fxat(2, 1), fxat(2, 2), fxat(2, 3)], fps: 10, repeat: -1 },
+        dragon: { frames: [fxat(3, 0), fxat(3, 1), fxat(3, 2), fxat(3, 3)], fps: 12, repeat: -1 },
+        impact: { frames: [fxat(4, 0), fxat(4, 1), fxat(4, 2), fxat(4, 3)], fps: 14, repeat: 0 },
+      },
     },
   },
   zhangfei: {
     key: 'sprite-zhangfei',
     url: 'sprites/zhangfei.png',
     meta: ZHANGFEI_META,
-    displayHeight: 60,
-    shadowScale: 1.1,
+    displayHeight: 58,
+    shadowScale: 1.2,
     anims: {
       idle: { frames: [zat(0, 0), zat(0, 1), zat(0, 2), zat(0, 3)], fps: 6, repeat: -1 },
       run: { frames: [zat(1, 0), zat(1, 1), zat(1, 2), zat(1, 3)], fps: 10, repeat: -1 },
       attack: { frames: [zat(2, 0), zat(2, 1), zat(2, 2), zat(2, 3)], fps: 14, repeat: 0 },
       charge: { frames: [zat(2, 0)], fps: 1, repeat: -1 },
-      cast: { frames: [zat(2, 0)], fps: 1, repeat: -1 },
+      cast: { frames: [zat(3, 2), zat(3, 3)], fps: 8, repeat: -1 },
       special: { frames: [zat(3, 0), zat(3, 1), zat(3, 2), zat(3, 3)], fps: 10, repeat: 0 },
-      rampage: { frames: [zat(3, 3)], fps: 1, repeat: -1 },
-      lunge: { frames: [zat(3, 3)], fps: 1, repeat: -1 },
+      rampage: { frames: [zat(3, 2), zat(3, 3)], fps: 8, repeat: -1 },
+      lunge: { frames: [zat(3, 2), zat(3, 3)], fps: 8, repeat: -1 },
       shot: { frames: [zat(2, 3)], fps: 1, repeat: -1 },
       dive: { frames: [zat(4, 1)], fps: 1, repeat: -1 },
       hitstun: { frames: [zat(4, 0)], fps: 1, repeat: -1 },
       down: { frames: [zat(4, 1), zat(4, 2)], fps: 6, repeat: 0 },
       recover: { frames: [zat(4, 3)], fps: 1, repeat: -1 },
+    },
+    fx: {
+      key: 'fx-zhangfei',
+      url: 'sprites/zhangfei-fx.png',
+      frameWidth: 181,
+      frameHeight: 136,
+      punch: 'slash',
+      punchWidth: 90,
+      anims: {
+        slash: { frames: [fxat(0, 0), fxat(0, 1), fxat(0, 2), fxat(0, 3)], fps: 20, repeat: 0 },
+        charge: { frames: [fxat(1, 0), fxat(1, 1), fxat(1, 2), fxat(1, 3)], fps: 16, repeat: 0 },
+        wave: { frames: [fxat(2, 0), fxat(2, 1), fxat(2, 2), fxat(2, 3)], fps: 10, repeat: 0 },
+        impact: { frames: [fxat(3, 0), fxat(3, 1), fxat(3, 2), fxat(3, 3)], fps: 14, repeat: 0 },
+      },
     },
   },
   zhaoyun: {

@@ -87,14 +87,6 @@ interface TrailPoint {
   z: number;
 }
 
-/** A roar's shockwave, in sim world space. */
-interface RoarWave {
-  x: number;
-  y: number;
-  radius: number;
-  startMs: number;
-}
-
 /** A playing effect. It is opaque until holdMs, fades out by endMs, then is removed. follow: player idx it stays on. */
 interface FxInstance {
   sprite: Phaser.GameObjects.Sprite;
@@ -106,6 +98,14 @@ interface FxInstance {
   offY: number;
   /** Player idx whose beam channel this effect is, so a cancelled channel can stop it. */
   castOf: number | null;
+  /** Player idx whose rampage this effect is, so the rampage's end fades it. */
+  rampageOf: number | null;
+  /** Draw alpha while held. */
+  alpha: number;
+  /** A follower that turns with his facing: flipped, and its offset x turned around. */
+  mirror: boolean;
+  /** Depth relative to the followed player's y (0.5 in front of him, negative behind him). */
+  depthOff: number;
 }
 
 /** Where and how playFx places one effect (screen px). holdMs and endMs default to the animation's length. */
@@ -123,6 +123,10 @@ interface FxSpawn {
   offX?: number;
   offY?: number;
   castOf?: number;
+  rampageOf?: number;
+  alpha?: number;
+  mirror?: boolean;
+  depthOff?: number;
 }
 
 interface PkOrderRow {
@@ -258,9 +262,28 @@ const RUN_SPEED = 20;
 /** How long the special pose (activation) and the special-shot pose override the action animation. */
 const SPECIAL_POSE_MS = 900;
 const SHOT_POSE_MS = 400;
-const ROAR_WAVE_MS = 400;
 const ROAR_SHAKE_MS = 160;
 const ROAR_SHAKE_INTENSITY = 0.004;
+/** Zhang Fei's roar: the charge at his feet (its size), then the soundwave starts after the charge (ROAR_CHARGE_MS). */
+const ROAR_CHARGE_FX_SIZE = 110;
+const ROAR_CHARGE_MS = 250;
+/** The soundwave: width, and how far its left edge sits in front of his feet. */
+const ROAR_WAVE_FX_W = 170;
+const ROAR_WAVE_AHEAD = 10;
+/** Guan Yu's rampage: the aura over him (its size and alpha), the exhaust behind his rear wheel (its size and offset). */
+const RAMPAGE_AURA_FX_SIZE = 110;
+const RAMPAGE_AURA_ALPHA = 0.85;
+const RAMPAGE_EXHAUST_FX_SIZE = 70;
+const RAMPAGE_EXHAUST_BACK = 30;
+const RAMPAGE_EXHAUST_LIFT = 6;
+/** Fade time after a rampage ends or a roar charge plays. */
+const FX_FADE_MS = 150;
+/** Guan Yu's fire dragon on the special ball (its length, a square frame), and the impact burst (rampage bumps, the ball's end). */
+const DRAGON_FX_LEN = 120;
+const IMPACT_FX_SIZE = 80;
+/** Roar spark on each victim, and the height of a hit's burst over the victim's feet. */
+const SPARK_FX_SIZE = 60;
+const HIT_FX_LIFT = 20;
 /** Lunge start: a small shake. The dragon holds for the dash, then fades for LUNGE_FADE_MS. */
 const LUNGE_SHAKE_MS = 120;
 const LUNGE_SHAKE_INTENSITY = 0.002;
@@ -416,9 +439,10 @@ export class MatchScene extends Phaser.Scene {
   /** Per player idx: time (ms) until which the pose animation is shown, and which one. */
   private poseUntil: number[] = [];
   private poseAnim: SpriteAnim[] = [];
-  private roarWaves: RoarWave[] = [];
-  private roarGfx!: Phaser.GameObjects.Graphics;
   private fx: FxInstance[] = [];
+  /** Guan Yu's special ball in flight: its fire dragon (hidden otherwise) and the player who fired it. */
+  private dragonSprite: Phaser.GameObjects.Sprite | null = null;
+  private dragonOf: number | null = null;
   private riderViews = new Map<number, RiderView>();
   /** Zhuge Liang's energy ball in flight (hidden otherwise). */
   private beamBall: Phaser.GameObjects.Sprite | null = null;
@@ -530,8 +554,9 @@ export class MatchScene extends Phaser.Scene {
     this.trail = [];
     this.poseUntil = [];
     this.poseAnim = [];
-    this.roarWaves = [];
     this.fx = [];
+    this.dragonSprite = null;
+    this.dragonOf = null;
     this.scorers = [];
     this.resultQueued = false;
     this.prevHumanL = false;
@@ -565,7 +590,6 @@ export class MatchScene extends Phaser.Scene {
         .setDisplaySize(BEAM_BALL_FX_SIZE, (BEAM_BALL_FX_SIZE * beamFx.frameHeight) / beamFx.frameWidth)
         .setVisible(false);
     }
-    this.roarGfx = this.add.graphics().setDepth(350);
     this.createHud();
     if (this.preview) this.createPreviewHud();
     this.layoutHud(this.view);
@@ -702,6 +726,15 @@ export class MatchScene extends Phaser.Scene {
         }
       } else if (e.type === 'specialShot') {
         this.playPose(e.playerIdx, 'shot', SHOT_POSE_MS);
+        this.dragonShotFx(e.playerIdx);
+      } else if (e.type === 'specialEnd') {
+        this.endDragon();
+      } else if (e.type === 'rampageStart') {
+        this.rampageStartFx(e.playerIdx);
+      } else if (e.type === 'rampageEnd') {
+        this.rampageEndFx(e.playerIdx);
+      } else if (e.type === 'hit') {
+        this.specialHitFx(e);
       } else if (e.type === 'beamCharge') {
         this.beamChargeFx(e.playerIdx);
       } else if (e.type === 'beamCancel') {
@@ -711,8 +744,8 @@ export class MatchScene extends Phaser.Scene {
       } else if (e.type === 'beamHit') {
         this.impactFx(e.x, e.y, BEAM_HIT_LIFT);
       } else if (e.type === 'roar') {
-        this.roarWaves.push({ x: e.x, y: e.y, radius: e.radius, startMs: this.time.now });
         this.cameras.main.shake(ROAR_SHAKE_MS, ROAR_SHAKE_INTENSITY);
+        this.roarFx(e.playerIdx);
       } else if (e.type === 'attack') {
         if (e.kind === 'punch') this.punchFx(e.playerIdx);
       } else if (e.type === 'lungeStart') {
@@ -821,7 +854,6 @@ export class MatchScene extends Phaser.Scene {
     this.state.players.forEach((p, i) => this.drawPlayer(this.playerViews[i], p, time));
     this.drawRiders();
     this.drawBall();
-    this.drawRoarWaves();
     this.drawFx();
     this.drawHud();
     this.drawMinimap();
@@ -832,20 +864,6 @@ export class MatchScene extends Phaser.Scene {
   private fieldScrollY(H: number): number {
     const shift = this.baseH === BASE_H ? 0 : TOUCH_FIELD_SHIFT_Y;
     return (this.baseH - H) / 2 + shift;
-  }
-
-  /** Expanding shockwave rings for roars, on the ground plane (squashed by DEPTH_SCALE). */
-  private drawRoarWaves(): void {
-    const g = this.roarGfx.clear();
-    const now = this.time.now;
-    this.roarWaves = this.roarWaves.filter((w) => now - w.startMs < ROAR_WAVE_MS);
-    for (const w of this.roarWaves) {
-      const t = (now - w.startMs) / ROAR_WAVE_MS;
-      const { sx, sy } = worldToScreen(w.x, w.y, 0);
-      const R = w.radius * t;
-      g.lineStyle(1 + 4 * (1 - t), 0xffe9a8, 1 - t);
-      g.strokeEllipse(sx, sy, R * 2, R * 2 * DEPTH_SCALE);
-    }
   }
 
   /** The character's effect sheet, when its sprite config has one that loaded. */
@@ -879,6 +897,10 @@ export class MatchScene extends Phaser.Scene {
       offX: s.offX ?? 0,
       offY: s.offY ?? 0,
       castOf: s.castOf ?? null,
+      rampageOf: s.rampageOf ?? null,
+      alpha: s.alpha ?? 1,
+      mirror: s.mirror ?? false,
+      depthOff: s.depthOff ?? 0.5,
     });
   }
 
@@ -1098,6 +1120,171 @@ export class MatchScene extends Phaser.Scene {
     this.playFx(owner.fx, 'burst', { x: pt.sx, y: pt.sy, w: BURST_FX_SIZE, h: BURST_FX_SIZE, depth: y + 0.5 });
   }
 
+  /** Guan Yu's rampage: the aura over him and the exhaust behind his rear wheel, following him until the rampage ends. */
+  private rampageStartFx(idx: number): void {
+    const owner = this.fxOwner(idx);
+    if (!owner) return;
+    const p = this.state.players[idx];
+    const feet = worldToScreen(p.x, p.y, 0);
+    const dir = p.facingX < 0 ? -1 : 1;
+    const forever = Number.POSITIVE_INFINITY;
+    const lift = owner.cfg.displayHeight / 2;
+    this.playFx(owner.fx, 'aura', {
+      x: feet.sx,
+      y: feet.sy - lift,
+      w: RAMPAGE_AURA_FX_SIZE,
+      h: (RAMPAGE_AURA_FX_SIZE * owner.fx.frameHeight) / owner.fx.frameWidth,
+      depth: p.y,
+      follow: idx,
+      offX: 0,
+      offY: -lift,
+      mirror: true,
+      depthOff: -0.5,
+      alpha: RAMPAGE_AURA_ALPHA,
+      holdMs: forever,
+      endMs: forever,
+      rampageOf: idx,
+    });
+    this.playFx(owner.fx, 'exhaust', {
+      x: feet.sx - dir * RAMPAGE_EXHAUST_BACK,
+      y: feet.sy - RAMPAGE_EXHAUST_LIFT,
+      w: RAMPAGE_EXHAUST_FX_SIZE,
+      h: (RAMPAGE_EXHAUST_FX_SIZE * owner.fx.frameHeight) / owner.fx.frameWidth,
+      depth: p.y,
+      follow: idx,
+      offX: -RAMPAGE_EXHAUST_BACK,
+      offY: -RAMPAGE_EXHAUST_LIFT,
+      mirror: true,
+      depthOff: -0.5,
+      holdMs: forever,
+      endMs: forever,
+      rampageOf: idx,
+    });
+  }
+
+  /** The rampage ends: its aura and exhaust fade out from now. */
+  private rampageEndFx(idx: number): void {
+    const now = this.time.now;
+    for (const f of this.fx) {
+      if (f.rampageOf !== idx) continue;
+      f.holdMs = now - f.startMs;
+      f.endMs = f.holdMs + FX_FADE_MS;
+    }
+  }
+
+  /** True while a rampage's own aura effect plays for this player (it replaces the drawn ring). */
+  private rampageFxOn(p: Player): boolean {
+    return p.rampageTicks > 0 && this.fxOwner(p.idx)?.fx.anims.aura !== undefined;
+  }
+
+  /** Zhang Fei's roar: the charge at his feet, then the soundwave in front of him once the charge has played. */
+  private roarFx(idx: number): void {
+    const owner = this.fxOwner(idx);
+    if (!owner) return;
+    const p = this.state.players[idx];
+    const feet = worldToScreen(p.x, p.y, 0);
+    const dir = p.facingX < 0 ? -1 : 1;
+    this.playFx(owner.fx, 'charge', {
+      x: feet.sx,
+      y: feet.sy,
+      w: ROAR_CHARGE_FX_SIZE,
+      h: (ROAR_CHARGE_FX_SIZE * owner.fx.frameHeight) / owner.fx.frameWidth,
+      depth: p.y + 0.5,
+      endMs: ROAR_CHARGE_MS + FX_FADE_MS,
+    });
+    const waveH = (ROAR_WAVE_FX_W * owner.fx.frameHeight) / owner.fx.frameWidth;
+    this.time.delayedCall(ROAR_CHARGE_MS, () => {
+      this.playFx(owner.fx, 'wave', {
+        x: feet.sx + dir * (ROAR_WAVE_AHEAD + ROAR_WAVE_FX_W / 2),
+        y: feet.sy - owner.cfg.displayHeight / 2,
+        w: ROAR_WAVE_FX_W,
+        h: waveH,
+        depth: p.y + 0.5,
+        flip: dir < 0,
+      });
+    });
+  }
+
+  /** A special's hit: Zhang Fei's roar gives a spark on the victim, Guan Yu's rampage bump an impact burst. */
+  private specialHitFx(e: Extract<SimEvent, { type: 'hit' }>): void {
+    if (e.kind !== 'special') return;
+    const attacker = this.state.players[e.attackerIdx];
+    const victim = this.state.players[e.victimIdx];
+    if (attacker.specialMode === 'roar') {
+      this.ownerImpact(attacker.idx, victim.x, victim.y, HIT_FX_LIFT, SPARK_FX_SIZE);
+    } else if (attacker.rampageTicks > 0) {
+      this.ownerImpact(attacker.idx, victim.x, victim.y, HIT_FX_LIFT, IMPACT_FX_SIZE);
+    }
+  }
+
+  /** One of an owner's impact bursts in the air at sim point (x, y, z), `size` px wide. */
+  private ownerImpact(idx: number, x: number, y: number, z: number, size: number): void {
+    const owner = this.fxOwner(idx);
+    if (!owner) return;
+    const pt = worldToScreen(x, y, z);
+    this.playFx(owner.fx, 'impact', {
+      x: pt.sx,
+      y: pt.sy,
+      w: size,
+      h: (size * owner.fx.frameHeight) / owner.fx.frameWidth,
+      depth: y + 0.5,
+    });
+  }
+
+  /** Guan Yu's special ball is fired: its fire dragon is added and follows the ball until the ball ends. */
+  private dragonShotFx(idx: number): void {
+    const owner = this.fxOwner(idx);
+    if (!owner || owner.fx.anims.dragon === undefined) return;
+    this.clearDragon();
+    this.dragonOf = idx;
+    this.dragonSprite = this.add
+      .sprite(0, 0, owner.fx.key)
+      .setName('fx:dragon')
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setDisplaySize(DRAGON_FX_LEN, (DRAGON_FX_LEN * owner.fx.frameHeight) / owner.fx.frameWidth)
+      .setVisible(false)
+      .play(fxAnimKey(owner.fx, 'dragon'));
+  }
+
+  /** The special ball ends (landed, saved, out of play): the dragon's impact where the ball stops, and the dragon goes. */
+  private endDragon(): void {
+    if (this.dragonOf === null) return;
+    const ball = this.state.ball;
+    this.ownerImpact(this.dragonOf, ball.x, ball.y, ball.z, IMPACT_FX_SIZE);
+    this.clearDragon();
+  }
+
+  private clearDragon(): void {
+    this.dragonSprite?.destroy();
+    this.dragonSprite = null;
+    this.dragonOf = null;
+  }
+
+  /** The fire dragon on the special ball while it flies, turned to its flight direction (as the beam ball does). */
+  private drawDragonBall(): void {
+    const sprite = this.dragonSprite;
+    if (!sprite) return;
+    const ball = this.state.ball;
+    const special = ball.special;
+    if (special === null) {
+      this.clearDragon();
+      return;
+    }
+    const from = worldToScreen(ball.x, ball.y, ball.z);
+    const to = worldToScreen(ball.x + special.dirX * 100, ball.y + special.dirY * 100, ball.z);
+    const len = Math.hypot(to.sx - from.sx, to.sy - from.sy) || 1;
+    const ux = (to.sx - from.sx) / len;
+    const uy = (to.sy - from.sy) / len;
+    const flip = special.dirX < 0;
+    const angle = flip ? Math.atan2(-uy, -ux) : Math.atan2(uy, ux);
+    sprite
+      .setVisible(true)
+      .setPosition(from.sx, from.sy - BALL_LIFT)
+      .setDepth(ball.y + 0.6)
+      .setFlipX(flip)
+      .setRotation(angle);
+  }
+
   /** Keeps the attached effects on their player and removes each effect once its end time has passed. */
   private drawFx(): void {
     const now = this.time.now;
@@ -1107,11 +1294,13 @@ export class MatchScene extends Phaser.Scene {
         f.sprite.destroy();
         return false;
       }
-      f.sprite.setAlpha(t < f.holdMs ? 1 : 1 - (t - f.holdMs) / (f.endMs - f.holdMs));
+      f.sprite.setAlpha((t < f.holdMs ? 1 : 1 - (t - f.holdMs) / (f.endMs - f.holdMs)) * f.alpha);
       if (f.follow !== null) {
         const p = this.state.players[f.follow];
         const feet = worldToScreen(p.x, p.y, 0);
-        f.sprite.setPosition(feet.sx + f.offX, feet.sy + f.offY).setDepth(p.y + 0.5);
+        const dir = f.mirror && p.facingX < 0 ? -1 : 1;
+        f.sprite.setPosition(feet.sx + f.offX * dir, feet.sy + f.offY).setDepth(p.y + f.depthOff);
+        if (f.mirror) f.sprite.setFlipX(p.facingX < 0);
       }
       return true;
     });
@@ -1354,8 +1543,8 @@ export class MatchScene extends Phaser.Scene {
       g.strokeEllipse(0, 0, R * 2, R * 2 * DEPTH_SCALE);
     }
 
-    // Invincible aura (rampage or lunge): a pulsing gold ring over an orange glow, under the sprite.
-    if (isInvincible(p)) {
+    // Invincible aura (rampage or lunge): a pulsing gold ring over an orange glow, under the sprite. A rampage that has its own aura effect skips it.
+    if (isInvincible(p) && !this.rampageFxOn(p)) {
       const pulse = 0.5 + 0.5 * Math.sin(time / 90);
       const R = r * 2.7 + r * 0.45 * pulse;
       g.fillStyle(0xff8c1a, 0.22 + 0.14 * pulse);
@@ -1479,6 +1668,7 @@ export class MatchScene extends Phaser.Scene {
     this.spinBall(ball.x, ball.y);
     this.ballSprite.setPosition(pos.sx, pos.sy - BALL_LIFT).setFrame(this.ballSpinFrame).setDepth(ball.y + 0.5);
     this.drawBeamBall();
+    this.drawDragonBall();
   }
 
   /** Advances the ball's rotation frame by the ground distance it rolled since the last draw. Reversed when moving left. */
