@@ -1,5 +1,6 @@
 import type { SpecialKind } from '../data/types';
 import {
+  BALL_RADIUS,
   BEAM_CAST_TICKS,
   BEAM_SPEED,
   CALL_PASS_TICKS,
@@ -77,7 +78,7 @@ import {
   TACKLE_SPEED_MULT,
   TACKLE_TICKS,
 } from './constants';
-import { attackDir, inOwnArea, opponentGoalX } from './field';
+import { attackDir, goalMouth, inOwnArea, opponentGoalX } from './field';
 import { rngNext } from './rng';
 import {
   type AttackKind,
@@ -501,9 +502,31 @@ function updateLunge(state: GameState, p: Player): void {
   const nextX = p.x + p.vx * DT;
   const nextY = p.y + p.vy * DT;
   const atEdge = nextX < 0 || nextX > FIELD_W || nextY < 0 || nextY > FIELD_D;
+  // Reaching the opponent's goal line inside the mouth (ball radius inset) scores; the lunge never scores into his own goal.
+  const side: 0 | 1 = attackDir(state, p.team) === 1 ? 1 : 0;
+  const mouth = goalMouth(side);
+  const onGoalLine = side === 1 ? nextX >= FIELD_W : nextX <= 0;
+  const inMouth = nextY >= mouth.yMin + BALL_RADIUS && nextY <= mouth.yMax - BALL_RADIUS;
   integrate(p);
   p.actionTimer--;
-  if (atEdge || p.actionTimer <= 0) endLunge(state, p);
+  if (onGoalLine && inMouth && state.ball.ownerIdx === p.idx) {
+    lungeIntoGoal(state, p, side);
+    endLunge(state, p);
+  } else if (atEdge || p.actionTimer <= 0) {
+    endLunge(state, p);
+  }
+}
+
+/**
+ * The lunger's ball leaves his feet at lunge speed and is placed just past the goal line of `side`, so the goal check
+ * in updateMatch scores it this tick (the ball is past the line, so pickup and possession skip it).
+ */
+function lungeIntoGoal(state: GameState, p: Player, side: 0 | 1): void {
+  releaseBall(state, p, p.vx, p.vy, 0);
+  const ball = state.ball;
+  ball.x = side === 1 ? FIELD_W + BALL_RADIUS + 1 : -(BALL_RADIUS + 1);
+  ball.y = p.y;
+  ball.z = 0;
 }
 
 /** Back to normal play. The lunge speed is scaled down to the player's normal top speed, keeping its direction. */

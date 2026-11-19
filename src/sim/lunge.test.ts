@@ -5,6 +5,7 @@ import {
   EMPTY_INPUT,
   FIELD_D,
   FIELD_W,
+  GOAL_HALF_W,
   LUNGE_DISTANCE,
   LUNGE_TICKS,
   PUNCH_TICKS,
@@ -210,6 +211,8 @@ describe('lunge bumps and protection', () => {
 describe('lunge field edge and phase', () => {
   it('the lunge stops early at the field edge and the player stays on the field', () => {
     const state = lungerState(FIELD_W - 60);
+    state.players[0].y = FIELD_D / 2 + GOAL_HALF_W + 30; // beside the posts: no goal mouth
+    state.ball.y = state.players[0].y;
     pressSpecial(state);
 
     const endedAt: number[] = [];
@@ -234,5 +237,46 @@ describe('lunge field edge and phase', () => {
 
     expect(events).toContainEqual({ type: 'lungeEnd', playerIdx: 0, x: 300, y: FIELD_D / 2 });
     expect(state.players[0].action).toBe('normal');
+  });
+});
+
+describe('lunge into the goal', () => {
+  it('a lunge across the opponent goal line inside the mouth scores for his team, credited to him', () => {
+    const state = lungerState(FIELD_W - 120);
+    pressSpecial(state);
+
+    const events = run(state, 30);
+
+    expect(events).toContainEqual({ type: 'goal', team: 0, scorerIdx: 0 });
+    expect(state.match.score[0]).toBe(1);
+    expect(state.match.score[1]).toBe(0);
+    expect(state.match.lastGoal).toEqual(expect.objectContaining({ team: 0, scorerIdx: 0 }));
+  });
+
+  it('a lunge across the goal line beside the posts does not score and he keeps the ball at the edge', () => {
+    const state = lungerState(FIELD_W - 120);
+    state.players[0].y = FIELD_D / 2 + GOAL_HALF_W + 30;
+    state.ball.y = state.players[0].y;
+    pressSpecial(state);
+
+    const events = run(state, LUNGE_TICKS + 1);
+
+    expect(events.some((e) => e.type === 'goal')).toBe(false);
+    expect(state.match.score).toEqual([0, 0]);
+    expect(state.players[0].x).toBe(FIELD_W);
+    expect(state.players[0].action).toBe('normal');
+    expect(state.ball.ownerIdx).toBe(0);
+  });
+
+  it('a lunge toward his own goal never scores an own goal', () => {
+    const state = lungerState(120, -1);
+    pressSpecial(state);
+
+    const events = run(state, 30);
+
+    expect(events.some((e) => e.type === 'goal')).toBe(false);
+    expect(state.match.score).toEqual([0, 0]);
+    expect(state.players[0].x).toBe(0);
+    expect(state.ball.ownerIdx).toBe(0);
   });
 });
