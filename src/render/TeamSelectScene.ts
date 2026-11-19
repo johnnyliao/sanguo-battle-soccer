@@ -58,7 +58,7 @@ function panelRect(index: number, v: View): Rect {
 
 const ROLE_LABEL: Record<Role, string> = { GK: '守門員', DF: '後衛', MF: '中場', FW: '前鋒' };
 const SIZE_LABEL: Record<BodySize, string> = { S: '小', M: '中', L: '大' };
-const KIND_LABEL: Record<SpecialKind, string> = { straight: '直線', zigzag: '蛇行', lob: '高吊', pierce: '穿人' };
+const KIND_LABEL: Record<SpecialKind, string> = { straight: '直線', zigzag: '蛇行', lob: '高吊', pierce: '穿人', beam: '光彈' };
 const STATS: { label: string; key: keyof Stats }[] = [
   { label: '力', key: 'power' },
   { label: '速', key: 'speed' },

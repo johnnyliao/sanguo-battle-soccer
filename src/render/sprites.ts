@@ -6,11 +6,14 @@ import type Phaser from 'phaser';
  * copies that JSON, so re-run the tool and update the numbers here if the sheet changes.
  */
 
-/** `rampage` loops while invincible with the ball; `shot` is the special ball's launch pose; `lunge` is the dash pose. */
-export type SpriteAnim = 'idle' | 'run' | 'attack' | 'charge' | 'special' | 'rampage' | 'shot' | 'hitstun' | 'down' | 'dive' | 'recover' | 'lunge';
+/** `rampage` loops while invincible with the ball; `shot` is the special ball's launch pose; `lunge` is the dash pose; `cast` is the beam channel. */
+export type SpriteAnim = 'idle' | 'run' | 'attack' | 'charge' | 'special' | 'cast' | 'rampage' | 'shot' | 'hitstun' | 'down' | 'dive' | 'recover' | 'lunge';
 
-/** Effects played over the character (see MatchScene): a spear thrust, the lunge's dragon, and an impact burst. */
-export type FxAnim = 'thrust' | 'lunge' | 'burst';
+/**
+ * Effects played over the character (see MatchScene): a spear thrust or fan slash, the lunge's dragon, an impact burst,
+ * and for Zhuge Liang's beam the channel circle, the energy ball and the impact.
+ */
+export type FxAnim = 'thrust' | 'lunge' | 'burst' | 'slash' | 'charge' | 'ball' | 'impact';
 
 export interface SpriteMeta {
   frameWidth: number;
@@ -35,7 +38,9 @@ export interface FxSheet {
   url: string;
   frameWidth: number;
   frameHeight: number;
-  anims: Record<FxAnim, SpriteAnimDef>;
+  /** The effect a punch (J without the ball) plays in front of him. */
+  punch: FxAnim;
+  anims: Partial<Record<FxAnim, SpriteAnimDef>>;
 }
 
 export interface SpriteConfig {
@@ -54,13 +59,15 @@ export interface SpriteConfig {
 const GUANYU_META: SpriteMeta = { frameWidth: 197, frameHeight: 209, cols: 4, rows: 5, anchorX: 106, anchorY: 202 };
 const ZHANGFEI_META: SpriteMeta = { frameWidth: 211, frameHeight: 205, cols: 4, rows: 5, anchorX: 91, anchorY: 198 };
 const ZHAOYUN_META: SpriteMeta = { frameWidth: 211, frameHeight: 204, cols: 4, rows: 5, anchorX: 94, anchorY: 191 };
+const ZHUGELIANG_META: SpriteMeta = { frameWidth: 211, frameHeight: 197, cols: 4, rows: 5, anchorX: 98, anchorY: 188 };
 
 /** Frame index of a sheet cell (row-major) for a sheet with this meta. */
 const cellAt = (meta: SpriteMeta) => (row: number, col: number): number => row * meta.cols + col;
 const at = cellAt(GUANYU_META);
 const zat = cellAt(ZHANGFEI_META);
 const yat = cellAt(ZHAOYUN_META);
-/** The Zhao Yun effect sheet is 4 columns of 181 px frames. */
+const gat = cellAt(ZHUGELIANG_META);
+/** The Zhao Yun and Zhuge Liang effect sheets are 4 columns of 181 px frames. */
 const fxat = (row: number, col: number): number => row * 4 + col;
 
 export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
@@ -75,6 +82,7 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
       run: { frames: [at(1, 0), at(1, 1), at(1, 2), at(1, 3)], fps: 10, repeat: -1 },
       attack: { frames: [at(2, 0), at(2, 1), at(2, 2), at(2, 3)], fps: 14, repeat: 0 },
       charge: { frames: [at(3, 0)], fps: 1, repeat: -1 },
+      cast: { frames: [at(3, 0)], fps: 1, repeat: -1 },
       special: { frames: [at(3, 1), at(3, 2), at(3, 3)], fps: 10, repeat: 0 },
       rampage: { frames: [at(3, 1), at(3, 2)], fps: 8, repeat: -1 },
       lunge: { frames: [at(3, 1), at(3, 2)], fps: 8, repeat: -1 },
@@ -96,6 +104,7 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
       run: { frames: [zat(1, 0), zat(1, 1), zat(1, 2), zat(1, 3)], fps: 10, repeat: -1 },
       attack: { frames: [zat(2, 0), zat(2, 1), zat(2, 2), zat(2, 3)], fps: 14, repeat: 0 },
       charge: { frames: [zat(2, 0)], fps: 1, repeat: -1 },
+      cast: { frames: [zat(2, 0)], fps: 1, repeat: -1 },
       special: { frames: [zat(3, 0), zat(3, 1), zat(3, 2), zat(3, 3)], fps: 10, repeat: 0 },
       rampage: { frames: [zat(3, 3)], fps: 1, repeat: -1 },
       lunge: { frames: [zat(3, 3)], fps: 1, repeat: -1 },
@@ -117,6 +126,7 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
       run: { frames: [yat(1, 0), yat(1, 1), yat(1, 2), yat(1, 3)], fps: 10, repeat: -1 },
       attack: { frames: [yat(2, 0), yat(2, 1), yat(2, 2), yat(2, 3)], fps: 14, repeat: 0 },
       charge: { frames: [yat(3, 0)], fps: 1, repeat: -1 },
+      cast: { frames: [yat(3, 0)], fps: 1, repeat: -1 },
       special: { frames: [yat(3, 0), yat(3, 1), yat(3, 2), yat(3, 3)], fps: 10, repeat: 0 },
       rampage: { frames: [yat(3, 1), yat(3, 2)], fps: 8, repeat: -1 },
       lunge: { frames: [yat(3, 1), yat(3, 2)], fps: 8, repeat: -1 },
@@ -135,6 +145,42 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
         thrust: { frames: [fxat(0, 0), fxat(0, 1), fxat(0, 2), fxat(0, 3)], fps: 20, repeat: 0 },
         lunge: { frames: [fxat(1, 0), fxat(1, 1), fxat(1, 2), fxat(1, 3)], fps: 16, repeat: 0 },
         burst: { frames: [fxat(2, 0), fxat(2, 1), fxat(2, 2), fxat(2, 3)], fps: 12, repeat: 0 },
+      },
+      punch: 'thrust',
+    },
+  },
+  zhugeliang: {
+    key: 'sprite-zhugeliang',
+    url: 'sprites/zhugeliang.png',
+    meta: ZHUGELIANG_META,
+    displayHeight: 56,
+    shadowScale: 1.0,
+    anims: {
+      idle: { frames: [gat(0, 0), gat(0, 1), gat(0, 2), gat(0, 3)], fps: 6, repeat: -1 },
+      run: { frames: [gat(1, 0), gat(1, 1), gat(1, 2), gat(1, 3)], fps: 10, repeat: -1 },
+      attack: { frames: [gat(2, 0), gat(2, 1), gat(2, 2), gat(2, 3)], fps: 14, repeat: 0 },
+      charge: { frames: [gat(2, 0)], fps: 1, repeat: -1 },
+      special: { frames: [gat(3, 0), gat(3, 1), gat(3, 2), gat(3, 3)], fps: 8, repeat: 0 },
+      cast: { frames: [gat(3, 0), gat(3, 1)], fps: 4, repeat: -1 },
+      rampage: { frames: [gat(3, 2), gat(3, 3)], fps: 8, repeat: -1 },
+      lunge: { frames: [gat(3, 2), gat(3, 3)], fps: 8, repeat: -1 },
+      shot: { frames: [gat(3, 3)], fps: 1, repeat: -1 },
+      dive: { frames: [gat(4, 1)], fps: 1, repeat: -1 },
+      hitstun: { frames: [gat(4, 0)], fps: 1, repeat: -1 },
+      down: { frames: [gat(4, 1), gat(4, 2)], fps: 6, repeat: 0 },
+      recover: { frames: [gat(4, 3)], fps: 1, repeat: -1 },
+    },
+    fx: {
+      key: 'fx-zhugeliang',
+      url: 'sprites/zhugeliang-fx.png',
+      frameWidth: 181,
+      frameHeight: 136,
+      punch: 'slash',
+      anims: {
+        slash: { frames: [fxat(0, 0), fxat(0, 1), fxat(0, 2), fxat(0, 3)], fps: 20, repeat: 0 },
+        charge: { frames: [fxat(1, 0), fxat(1, 1), fxat(1, 2), fxat(1, 3)], fps: 8, repeat: 0 },
+        ball: { frames: [fxat(2, 0), fxat(2, 1), fxat(2, 2), fxat(2, 3)], fps: 12, repeat: -1 },
+        impact: { frames: [fxat(3, 0), fxat(3, 1), fxat(3, 2), fxat(3, 3)], fps: 12, repeat: 0 },
       },
     },
   },
@@ -178,6 +224,7 @@ export function createSpriteAnims(anims: Phaser.Animations.AnimationManager, tex
       const key = fxAnimKey(fx, name);
       if (anims.exists(key)) continue;
       const def = fx.anims[name];
+      if (!def) continue;
       anims.create({
         key,
         frames: anims.generateFrameNumbers(fx.key, { frames: def.frames }),

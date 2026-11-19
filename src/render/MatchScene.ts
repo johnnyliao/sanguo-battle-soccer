@@ -5,6 +5,7 @@ import { COUNTRY_INFO, getTeam, SIZE_PARAMS, type Country, type SpecialKind } fr
 import { LocalInput, TouchControls } from '../input';
 import {
   BALL_RADIUS,
+  BEAM_CAST_TICKS,
   CHARGE_FULL,
   FIELD_D,
   FIELD_W,
@@ -19,6 +20,7 @@ import {
   TICK_HZ,
   autoPkOrders,
   createInitialState,
+  inAttackingHalf,
   isInvincible,
   pkMeterValue,
   step,
@@ -115,11 +117,22 @@ interface PkOrderRow {
 type HudStyle = (color: string, size: string, stroke?: boolean) => Phaser.Types.GameObjects.Text.TextStyle;
 
 /**
+ * Why the player cannot cast the special where he stands: no ball (a roar needs none), or outside the attacking half
+ * for a beam. Null when the position allows it.
+ */
+function positionBlockReason(state: GameState, p: Player): string | null {
+  if (p.specialMode !== 'roar' && state.ball.ownerIdx !== p.idx) return '需持球';
+  if (p.specialMode === 'beam' && !inAttackingHalf(state, p)) return '需在前半場';
+  return null;
+}
+
+/**
  * Why the human's L press starts no special, or null when none of the three reasons applies (the sim then buffers
  * the press). Checked before the step that consumes the press.
  */
 function specialBlockReason(state: GameState, p: Player): string | null {
-  if (p.specialMode !== 'roar' && state.ball.ownerIdx !== p.idx) return '需持球';
+  const position = positionBlockReason(state, p);
+  if (position !== null) return position;
   if (p.specialCooldown > 0) return `冷卻中 ${Math.ceil(p.specialCooldown / TICK_HZ)} 秒`;
   if (p.stamina < SPECIAL_STAMINA_COST) return '體力不足';
   return null;
@@ -232,6 +245,14 @@ const THRUST_FX_AHEAD = 30;
 const THRUST_FX_HEIGHT = 0.45;
 /** Impact burst at the lunge start and end. */
 const BURST_FX_SIZE = 60;
+/** Zhuge Liang's beam: channel circle over his body (its size), energy ball size, impact size, and the impact height over a victim's feet. */
+const BEAM_CHARGE_FX_SIZE = 80;
+const BEAM_BALL_FX_SIZE = 56;
+const BEAM_IMPACT_FX_SIZE = 70;
+const BEAM_HIT_LIFT = 20;
+const BEAM_FADE_MS = 150;
+const BEAM_SHAKE_MS = 120;
+const BEAM_SHAKE_INTENSITY = 0.002;
 const COOLDOWN_GREY = 0x9aa3ad;
 const HUD_COOLDOWN_W = 120;
 /** Why-not hint above the human's name: shown for HINT_MS, rising HINT_RISE px while it fades. */
@@ -250,6 +271,7 @@ const SPECIAL_COLORS: Record<SpecialKind, number> = {
   zigzag: 0x3ff0ff,
   lob: 0xb07cff,
   pierce: 0xff3b3b,
+  beam: 0xfff27a,
 };
 
 function hexCss(color: number): string {
@@ -325,6 +347,10 @@ export class MatchScene extends Phaser.Scene {
   private roarWaves: RoarWave[] = [];
   private roarGfx!: Phaser.GameObjects.Graphics;
   private fx: FxInstance[] = [];
+  /** Zhuge Liang's energy ball in flight (hidden otherwise). */
+  private beamBall: Phaser.GameObjects.Sprite | null = null;
+  /** The ball's special kind before this tick's step, so a goal in this tick can tell a beam scored. */
+  private specialBeforeStep: SpecialKind | null = null;
 
   private homeText!: Phaser.GameObjects.Text;
   private awayText!: Phaser.GameObjects.Text;
@@ -436,6 +462,15 @@ export class MatchScene extends Phaser.Scene {
     this.ballShadowGfx = this.add.graphics();
     this.trailGfx = this.add.graphics();
     this.ballGfx = this.add.graphics();
+    const beamFx = this.beamFx();
+    if (beamFx) {
+      this.beamBall = this.add
+        .sprite(0, 0, beamFx.key)
+        .setName('beam-ball')
+        .setBlendMode(Phaser.BlendModes.ADD)
+        .setDisplaySize(BEAM_BALL_FX_SIZE, (BEAM_BALL_FX_SIZE * beamFx.frameHeight) / beamFx.frameWidth)
+        .setVisible(false);
+    }
     this.roarGfx = this.add.graphics().setDepth(350);
     this.createHud();
     this.layoutHud(this.view);
@@ -486,6 +521,7 @@ export class MatchScene extends Phaser.Scene {
       pressedL && this.state.match.phase === 'play'
         ? specialBlockReason(this.state, this.state.players[this.humanIdx])
         : null;
+    this.specialBeforeStep = this.state.ball.special?.kind ?? null;
     step(this.state, inputs);
     const special = this.state.events.some((e) => e.type === 'special' && e.playerIdx === this.humanIdx);
     if (blocked !== null && !special) this.showHint(blocked);
@@ -514,17 +550,26 @@ export class MatchScene extends Phaser.Scene {
       if (e.type === 'goal') {
         this.scorers.push({ team: e.team, name: players[e.scorerIdx].name, minute: this.elapsedMinute() });
         this.showBanner(`進球！ ${players[e.scorerIdx].name}`, 2000);
+        if (this.specialBeforeStep === 'beam') this.impactFx(this.state.ball.x, this.state.ball.y, this.state.ball.z);
       } else if (e.type === 'special') {
         this.showSpecial(`${e.name}！`, SPECIAL_COLORS[e.kind]);
-        // A lunge shows its dash pose for the whole dash (spriteAnimFor), not the activation pose.
-        if (players[e.playerIdx].specialMode !== 'lunge') this.playPose(e.playerIdx, 'special', SPECIAL_POSE_MS);
+        // A lunge shows its dash pose for the whole dash, and a beam its channel pose (spriteAnimFor), not the activation pose.
+        if (players[e.playerIdx].specialMode !== 'lunge' && players[e.playerIdx].specialMode !== 'beam') {
+          this.playPose(e.playerIdx, 'special', SPECIAL_POSE_MS);
+        }
       } else if (e.type === 'specialShot') {
         this.playPose(e.playerIdx, 'shot', SHOT_POSE_MS);
+      } else if (e.type === 'beamCharge') {
+        this.beamChargeFx(e.playerIdx);
+      } else if (e.type === 'beamFire') {
+        this.cameras.main.shake(BEAM_SHAKE_MS, BEAM_SHAKE_INTENSITY);
+      } else if (e.type === 'beamHit') {
+        this.impactFx(e.x, e.y, BEAM_HIT_LIFT);
       } else if (e.type === 'roar') {
         this.roarWaves.push({ x: e.x, y: e.y, radius: e.radius, startMs: this.time.now });
         this.cameras.main.shake(ROAR_SHAKE_MS, ROAR_SHAKE_INTENSITY);
       } else if (e.type === 'attack') {
-        if (e.kind === 'punch') this.thrustFx(e.playerIdx);
+        if (e.kind === 'punch') this.punchFx(e.playerIdx);
       } else if (e.type === 'lungeStart') {
         this.cameras.main.shake(LUNGE_SHAKE_MS, LUNGE_SHAKE_INTENSITY);
         this.lungeFx(e);
@@ -647,6 +692,7 @@ export class MatchScene extends Phaser.Scene {
   /** Adds one effect (additive blend) to the scene and tracks it in this.fx until it is removed. */
   private playFx(fx: FxSheet, name: FxAnim, s: FxSpawn): void {
     const def = fx.anims[name];
+    if (!def) return;
     const durMs = (def.frames.length / def.fps) * 1000;
     const holdMs = s.holdMs ?? durMs;
     const sprite = this.add
@@ -669,21 +715,91 @@ export class MatchScene extends Phaser.Scene {
     });
   }
 
-  /** Zhao Yun's spear thrust: a short streak in front of him at spear height. */
-  private thrustFx(idx: number): void {
+  /** A punch's streak in front of him at chest height: Zhao Yun's spear thrust or Zhuge Liang's fan slash (sheet's punch). */
+  private punchFx(idx: number): void {
     const owner = this.fxOwner(idx);
     if (!owner) return;
     const p = this.state.players[idx];
     const feet = worldToScreen(p.x, p.y, 0);
     const dir = p.facingX < 0 ? -1 : 1;
-    this.playFx(owner.fx, 'thrust', {
+    this.playFx(owner.fx, owner.fx.punch, {
       x: feet.sx + dir * THRUST_FX_AHEAD,
       y: feet.sy - owner.cfg.displayHeight * THRUST_FX_HEIGHT,
       w: THRUST_FX_LEN,
-      h: THRUST_FX_LEN,
+      h: (THRUST_FX_LEN * owner.fx.frameHeight) / owner.fx.frameWidth,
       depth: p.y + 0.5,
       flip: dir < 0,
     });
+  }
+
+  /** Zhuge Liang's effect sheet (channel, energy ball, impact), when it loaded. */
+  private beamFx(): FxSheet | null {
+    const fx = SPRITE_CONFIGS.zhugeliang?.fx;
+    return fx && this.textures.exists(fx.key) ? fx : null;
+  }
+
+  /** Zhuge Liang's channel: the bagua circle over his body for the whole cast, following him, then fading. */
+  private beamChargeFx(idx: number): void {
+    const fx = this.beamFx();
+    if (!fx) return;
+    const p = this.state.players[idx];
+    const lift = (this.playerViews[idx].spriteCfg?.displayHeight ?? 0) / 2;
+    const feet = worldToScreen(p.x, p.y, 0);
+    const holdMs = (BEAM_CAST_TICKS / TICK_HZ) * 1000;
+    this.playFx(fx, 'charge', {
+      x: feet.sx,
+      y: feet.sy - lift,
+      w: BEAM_CHARGE_FX_SIZE,
+      h: (BEAM_CHARGE_FX_SIZE * fx.frameHeight) / fx.frameWidth,
+      depth: p.y + 0.5,
+      holdMs,
+      endMs: holdMs + BEAM_FADE_MS,
+      follow: idx,
+      offX: 0,
+      offY: -lift,
+    });
+  }
+
+  /** Beam impact burst at sim point (x, y) with height z. */
+  private impactFx(x: number, y: number, z: number): void {
+    const fx = this.beamFx();
+    if (!fx) return;
+    const pt = worldToScreen(x, y, z);
+    this.playFx(fx, 'impact', {
+      x: pt.sx,
+      y: pt.sy,
+      w: BEAM_IMPACT_FX_SIZE,
+      h: (BEAM_IMPACT_FX_SIZE * fx.frameHeight) / fx.frameWidth,
+      depth: y + 0.5,
+    });
+  }
+
+  /** The beam's energy ball: looping frames on the ball, turned to its flight direction. Hidden for other specials. */
+  private drawBeamBall(): void {
+    const sprite = this.beamBall;
+    const { ball } = this.state;
+    const special = ball.special;
+    const fx = this.beamFx();
+    if (!sprite || !fx || special?.kind !== 'beam') {
+      sprite?.setVisible(false);
+      return;
+    }
+    const from = worldToScreen(ball.x, ball.y, ball.z);
+    // Screen direction of the flight, as the lunge dragon: a leftward shot is mirrored and turned from the reversed direction.
+    const to = worldToScreen(ball.x + special.dirX * 100, ball.y + special.dirY * 100, ball.z);
+    const len = Math.hypot(to.sx - from.sx, to.sy - from.sy) || 1;
+    const ux = (to.sx - from.sx) / len;
+    const uy = (to.sy - from.sy) / len;
+    const flip = special.dirX < 0;
+    const angle = flip ? Math.atan2(-uy, -ux) : Math.atan2(uy, ux);
+    const key = fxAnimKey(fx, 'ball');
+    if (sprite.anims.currentAnim?.key !== key) sprite.play(key);
+    sprite
+      .setVisible(true)
+      .setPosition(from.sx, from.sy)
+      .setDepth(ball.y + 0.6)
+      .setFlipX(flip)
+      .setRotation(angle);
   }
 
   /** Zhao Yun's lunge: the dragon along the dash, following him for the lunge's length, and a burst where he starts. */
@@ -961,6 +1077,7 @@ export class MatchScene extends Phaser.Scene {
       case 'dive':
       case 'recover':
       case 'lunge':
+      case 'cast':
         return p.action;
       case 'charge':
         return 'charge';
@@ -1109,7 +1226,7 @@ export class MatchScene extends Phaser.Scene {
     const invincible = p.idx === this.humanIdx && isInvincible(p);
     view.tag.setVisible(invincible);
     if (invincible) {
-      const ticks = p.action === 'lunge' ? p.actionTimer : p.rampageTicks;
+      const ticks = p.action === 'lunge' || p.action === 'cast' ? p.actionTimer : p.rampageTicks;
       view.tag.setPosition(0, labelY - 20).setText(`無敵 ${(ticks / TICK_HZ).toFixed(1)}`);
     }
     if (p.idx === this.humanIdx) {
@@ -1147,7 +1264,8 @@ export class MatchScene extends Phaser.Scene {
 
     this.trailGfx.clear().setDepth(ball.y);
     const kind = ball.special?.kind;
-    if (kind && this.trail.length > 0) {
+    // A beam's flight is drawn by its energy ball instead of the trail.
+    if (kind && kind !== 'beam' && this.trail.length > 0) {
       const color = SPECIAL_COLORS[kind];
       this.trail.forEach((pt, i) => {
         const ratio = (i + 1) / this.trail.length;
@@ -1163,6 +1281,7 @@ export class MatchScene extends Phaser.Scene {
     this.ballGfx.fillCircle(pos.sx, pos.sy, BALL_RADIUS);
     this.ballGfx.lineStyle(1, 0x333333, 1);
     this.ballGfx.strokeCircle(pos.sx, pos.sy, BALL_RADIUS);
+    this.drawBeamBall();
   }
 
   // ---------- HUD ----------
@@ -1425,12 +1544,7 @@ export class MatchScene extends Phaser.Scene {
     this.clockText.setText(`${match.half === 1 ? '上半場' : '下半場'} ${mm}:${ss}`);
 
     const p = players[this.humanIdx];
-    const block =
-      p.specialMode !== 'roar' && this.state.ball.ownerIdx !== p.idx
-        ? '需持球'
-        : p.stamina < SPECIAL_STAMINA_COST
-          ? '體力不足'
-          : null;
+    const block = positionBlockReason(this.state, p) ?? (p.stamina < SPECIAL_STAMINA_COST ? '體力不足' : null);
     this.touch.setSpecialStatus({ cooldownTicks: p.specialCooldown, cooldownTotal: SPECIAL_COOLDOWN_TICKS, block });
     this.hudNameText.setText(p.name);
     this.hudSpecialText.setText(`必殺：${p.specialName}`);
