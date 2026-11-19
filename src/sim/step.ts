@@ -23,7 +23,15 @@ import {
   SPECIAL_ZIGZAG_FREQ,
   WALL_BOUNCE,
 } from './constants';
-import { applyRampageBumps, applySpecialHit, clampPlayerToField, isInvincible, updateAction } from './actions';
+import {
+  applyRampageBumps,
+  applySpecialHit,
+  clampPlayerToField,
+  clearRiders,
+  isInvincible,
+  updateAction,
+  updateRiders,
+} from './actions';
 import { inOwnArea, goalMouth, isInGoalMouth } from './field';
 import { updateMatch } from './match';
 import { updatePk } from './pk';
@@ -66,12 +74,15 @@ export function step(state: GameState, inputs: InputFrame[]): GameState {
       updateAction(state, state.players[i], frames[i]);
     }
 
+    updateRiders(state);
     applyRampageBumps(state);
     resolvePlayerCollisions(state.players);
     updatePossession(state);
     updateBall(state);
     updatePickup(state);
     updateMatch(state);
+    // Riders only live while the phase is play: a goal, half time, kickoff or PK start clears them.
+    if (state.match.phase !== 'play') clearRiders(state);
   }
 
   for (let i = 0; i < state.players.length; i++) {

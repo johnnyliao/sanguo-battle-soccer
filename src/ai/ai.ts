@@ -56,6 +56,9 @@ const RAMPAGE_FIRE_RANGE = 260;
 const RAMPAGE_FIRE_RANGE_LOB = 380;
 /** A rampaging owner fires when this few rampage ticks are left. */
 const RAMPAGE_FIRE_LEFT = 15;
+/** Ma Chao's summon is called when at least SUMMON_AI_MIN_OPPONENTS standing opponents are within this range. */
+const SUMMON_AI_RANGE = 200;
+const SUMMON_AI_MIN_OPPONENTS = 2;
 
 const PRESSURE_RANGE = 40;
 const PRESSURE_PASS_CHANCE = 0.04;
@@ -172,6 +175,19 @@ function ownerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPla
     nextRandom(ai) < SHOT_FULL_CHANCE
   ) {
     s.intent = 'beam';
+    return frame(NO_MOVE, { l: true });
+  }
+
+  // Ma Chao's summon: called on the same per-tick chance when opponents are close enough to be charged.
+  if (
+    p.specialMode === 'summon' &&
+    !p.prevInput.l &&
+    p.specialCooldown === 0 &&
+    p.stamina >= SHOT_MIN_STAMINA &&
+    opponentsWithin(state, p, SUMMON_AI_RANGE) >= SUMMON_AI_MIN_OPPONENTS &&
+    nextRandom(ai) < SHOT_FULL_CHANCE
+  ) {
+    s.intent = 'summon';
     return frame(NO_MOVE, { l: true });
   }
 
@@ -429,6 +445,16 @@ function nearestOpponent(state: GameState, team: 0 | 1, x: number, y: number, ra
     }
   }
   return best;
+}
+
+/** Number of standing opponents of `p` within range. */
+function opponentsWithin(state: GameState, p: Player, range: number): number {
+  let count = 0;
+  for (const t of state.players) {
+    if (t.team === p.team || t.action === 'down') continue;
+    if (dist(t.x, t.y, p.x, p.y) < range) count++;
+  }
+  return count;
 }
 
 /** True if a standing opponent is within range and in the half-plane ahead of the player's facing (within lateral). */

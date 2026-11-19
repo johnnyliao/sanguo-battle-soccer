@@ -20,8 +20,8 @@ export interface CharacterDef {
   role: Role;
   size: BodySize;
   stats: Stats;
-  /** 'rampage' (L with the ball: invincible run), 'roar' (L with or without the ball: shockwave), 'lunge' (L with the ball: invincible long dash), or 'beam' (L with the ball in the attacking half: channel, then a flat energy ball at goal). */
-  special: { name: string; kind: SpecialKind; mode?: 'rampage' | 'roar' | 'lunge' | 'beam' };
+  /** 'rampage' (L with the ball: invincible run), 'roar' (L with or without the ball: shockwave), 'lunge' (L with the ball: invincible long dash), 'beam' (L with the ball in the attacking half: channel, then a flat energy ball at goal), or 'summon' (L with the ball: five cavalry riders for 3 s). */
+  special: { name: string; kind: SpecialKind; mode?: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' };
 }
 
 export interface SizeParams {

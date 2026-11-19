@@ -69,8 +69,8 @@ export interface Player {
   rampageTicks: number;
   /** Ticks during which this player cannot be bumped by a rampaging opponent again. */
   bumpCooldown: number;
-  /** What the special button (L) does: a rampage, a roar (shockwave) for Zhang Fei, a lunge (long dash) for Zhao Yun, or a beam (channel, then energy ball) for Zhuge Liang. */
-  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam';
+  /** What the special button (L) does: a rampage, a roar (shockwave) for Zhang Fei, a lunge (long dash) for Zhao Yun, a beam (channel, then energy ball) for Zhuge Liang, or a summon (cavalry riders) for Ma Chao. */
+  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon';
   /** Ticks until the special can be used again. Set when a rampage starts or a roar fires. */
   specialCooldown: number;
   /** Ticks left on a buffered L press. A press made while busy waits here and fires once the player can act. 0 = none. */
@@ -94,6 +94,25 @@ export interface SpecialShot {
   hit: number[];
   /** Goalkeeper idxs that already rolled a save on this special (separate from hit so contact still applies on a failed save). */
   rolled: number[];
+}
+
+/** A cavalry rider from Ma Chao's summon. Riders exist only while the phase is 'play'. */
+export interface Rider {
+  id: number;
+  team: 0 | 1;
+  /** Idx of the summoner (Ma Chao). */
+  ownerIdx: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  facingX: number;
+  /** Idx of the opponent being charged, or -1 when none is valid (the rider roams straight). */
+  targetIdx: number;
+  /** Ticks left before the rider vanishes. */
+  ticksLeft: number;
+  /** Victim idxs this rider has already knocked down. */
+  hit: number[];
 }
 
 export interface Ball {
@@ -129,6 +148,14 @@ export type SimEvent =
   | { type: 'roar'; playerIdx: number; x: number; y: number; radius: number }
   | { type: 'rampageStart'; playerIdx: number }
   | { type: 'rampageEnd'; playerIdx: number }
+  /** A summon starts: the summoner's position when he calls the riders. */
+  | { type: 'summonStart'; playerIdx: number; x: number; y: number }
+  /** One rider appears at (x, y). */
+  | { type: 'riderSpawn'; riderId: number; x: number; y: number }
+  /** A rider knocks down an opponent (x, y is the rider's position). */
+  | { type: 'riderHit'; riderId: number; victimIdx: number; x: number; y: number }
+  /** A rider vanishes (timer, or the phase left play). */
+  | { type: 'riderEnd'; riderId: number; x: number; y: number }
   /** A lunge starts: the dash origin and unit direction. */
   | { type: 'lungeStart'; playerIdx: number; x: number; y: number; dirX: number; dirY: number }
   /** A lunge ends (timer, field edge, or phase change). */
@@ -203,6 +230,8 @@ export interface GameState {
   rng: number;
   /** 10 players: idx 0-4 team 0, 5-9 team 1; slot order GK,DF,MF,MF,FW. */
   players: Player[];
+  /** Cavalry riders from a summon. Empty outside play. */
+  riders: Rider[];
   ball: Ball;
   match: MatchState;
   /** Cleared at the start of every step. */

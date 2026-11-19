@@ -22,6 +22,7 @@ export function createInitialState(
     tick: 0,
     rng: (setup.seed >>> 0) || 0x9e3779b9,
     players: [],
+    riders: [],
     ball: {
       x: FIELD_W / 2,
       y: FIELD_D / 2,

@@ -90,6 +90,18 @@ export const ROAR_FORWARD = 30;
 export const ROAR_KNOCK_SPEED = 280;
 export const ROAR_STUN_TICKS = 60;
 export const ROAR_STAMINA = 10;
+/** Ma Chao's summon (西涼鐵騎): number of cavalry riders called with the ball. */
+export const SUMMON_RIDERS = 5;
+/** How long the riders roam: ticks (3 s). */
+export const SUMMON_TICKS = 180;
+/** Rider speed in px per second. */
+export const RIDER_SPEED = 300;
+/** Per-tick steering lerp from the rider's velocity toward its target direction. */
+export const RIDER_TURN = 0.12;
+/** A rider knocks down an opponent whose centre is within this many px of its own, plus the opponent's radius. */
+export const RIDER_HIT_RADIUS = 18;
+/** Riders appear on a circle this many px around Ma Chao, starting behind him. */
+export const RIDER_SPAWN_RADIUS = 50;
 
 export const KICKOFF_TICKS = 60;
 export const GOAL_CELEBRATE_TICKS = 150;

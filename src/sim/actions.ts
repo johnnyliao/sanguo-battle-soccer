@@ -37,6 +37,10 @@ import {
   PUNCH_RANGE,
   PUNCH_TICKS,
   RAMPAGE_BUMP_COOLDOWN,
+  RIDER_HIT_RADIUS,
+  RIDER_SPAWN_RADIUS,
+  RIDER_SPEED,
+  RIDER_TURN,
   RAMPAGE_BUMP_SPEED,
   RAMPAGE_BUMP_STAMINA,
   RAMPAGE_SPEED_MULT,
@@ -62,6 +66,8 @@ import {
   SPECIAL_STRAIGHT_SPEED,
   SPECIAL_ZIGZAG_SPEED,
   STAMINA_REGEN,
+  SUMMON_RIDERS,
+  SUMMON_TICKS,
   TACKLE_SPEED_MULT,
   TACKLE_TICKS,
 } from './constants';
@@ -72,6 +78,7 @@ import {
   type GameState,
   type InputFrame,
   type Player,
+  type Rider,
   type SpecialShot,
 } from './types';
 
@@ -418,7 +425,8 @@ function releaseCharge(state: GameState, p: Player, input: InputFrame): void {
 /**
  * Buffered L press: starts the special if a press is buffered, the match is in play, and it is ready (cooldown 0,
  * enough stamina). A rampage, lunge or beam needs the ball and starts at once (a beam also needs the attacking half); a
- * roar (Zhang Fei) works with or without it. A special that cannot start yet keeps the buffer. Returns true if it started.
+ * roar (Zhang Fei) works with or without it. A summon (Ma Chao) needs the ball too, and he keeps it.
+ * A special that cannot start yet keeps the buffer. Returns true if it started.
  */
 function trySpecial(state: GameState, p: Player, input: InputFrame): boolean {
   if (p.specialBuffer === 0 || state.match.phase !== 'play') return false;
@@ -433,6 +441,7 @@ function trySpecial(state: GameState, p: Player, input: InputFrame): boolean {
   p.specialBuffer = 0;
   if (p.specialMode === 'lunge') startLunge(state, p, input);
   else if (p.specialMode === 'beam') startBeamCast(state, p);
+  else if (p.specialMode === 'summon') startSummon(state, p);
   else startRampage(state, p);
   return true;
 }
@@ -566,6 +575,158 @@ function fireBeam(state: GameState, p: Player): void {
   };
   state.events.push({ type: 'specialShot', playerIdx: p.idx, kind: 'beam' });
   state.events.push({ type: 'beamFire', playerIdx: p.idx, x: ball.x, y: ball.y, dirX: aim.x, dirY: aim.y });
+}
+
+/**
+ * Ma Chao's summon (西涼鐵騎): the player keeps the ball and SUMMON_RIDERS riders appear on a circle around him, starting
+ * behind him. Each rider charges a different opponent where possible. The riders are moved by updateRiders.
+ */
+function startSummon(state: GameState, p: Player): void {
+  p.stamina -= SPECIAL_STAMINA_COST;
+  p.specialCooldown = SPECIAL_COOLDOWN_TICKS;
+  state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
+  state.events.push({ type: 'summonStart', playerIdx: p.idx, x: p.x, y: p.y });
+
+  const baseAngle = Math.atan2(-p.facingY, -p.facingX);
+  const claimed: number[] = [];
+  for (let i = 0; i < SUMMON_RIDERS; i++) {
+    const angle = baseAngle + (i * 2 * Math.PI) / SUMMON_RIDERS;
+    const x = Math.min(FIELD_W, Math.max(0, p.x + Math.cos(angle) * RIDER_SPAWN_RADIUS));
+    const y = Math.min(FIELD_D, Math.max(0, p.y + Math.sin(angle) * RIDER_SPAWN_RADIUS));
+    const rider: Rider = {
+      // Unique per summon: one summon per tick at most, and every rider of it gets its own slot.
+      id: state.tick * SUMMON_RIDERS + i,
+      team: p.team,
+      ownerIdx: p.idx,
+      x,
+      y,
+      vx: 0,
+      vy: 0,
+      facingX: p.facingX,
+      targetIdx: -1,
+      ticksLeft: SUMMON_TICKS,
+      hit: [],
+    };
+    rider.targetIdx = pickRiderTarget(state, rider, claimed);
+    if (rider.targetIdx !== -1) claimed.push(rider.targetIdx);
+    // Starts at full speed toward its target (or straight ahead when there is none).
+    const heading = riderHeading(state, rider);
+    rider.vx = heading.x * RIDER_SPEED;
+    rider.vy = heading.y * RIDER_SPEED;
+    state.riders.push(rider);
+    state.events.push({ type: 'riderSpawn', riderId: rider.id, x, y });
+  }
+}
+
+/** Unit direction from the rider to its target, or the summoner's facing when it has none. */
+function riderHeading(state: GameState, r: Rider): { x: number; y: number } {
+  if (r.targetIdx !== -1) {
+    const t = state.players[r.targetIdx];
+    const dx = t.x - r.x;
+    const dy = t.y - r.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len > 0) return { x: dx / len, y: dy / len };
+  }
+  return { x: state.players[r.ownerIdx].facingX, y: state.players[r.ownerIdx].facingY };
+}
+
+/** A rider may charge a player that is an opponent, standing, not invincible, and not already knocked down by it. */
+function isRiderTargetOk(v: Player, r: Rider): boolean {
+  return v.team !== r.team && v.action !== 'down' && !isInvincible(v) && !r.hit.includes(v.idx);
+}
+
+/**
+ * Nearest valid opponent to the rider (ties: lowest idx), skipping the idxs in `claimed`. If every valid opponent is
+ * claimed, the nearest valid one is returned anyway. -1 if no opponent is valid.
+ */
+function pickRiderTarget(state: GameState, r: Rider, claimed: number[]): number {
+  let best = -1;
+  let bestDist = Infinity;
+  for (const v of state.players) {
+    if (!isRiderTargetOk(v, r) || claimed.includes(v.idx)) continue;
+    const d = distance(r.x, r.y, v.x, v.y);
+    if (d < bestDist) {
+      best = v.idx;
+      bestDist = d;
+    }
+  }
+  if (best !== -1 || claimed.length === 0) return best;
+  return pickRiderTarget(state, r, []);
+}
+
+/**
+ * One tick for every rider in play: steer toward its target (re-picking when the target is no longer valid), move and
+ * bounce off the field edges, knock down the first opponents it touches, and vanish when its timer runs out.
+ * Riders never collide with players, cannot be hit, and do not touch the ball except through a knocked-down carrier.
+ */
+export function updateRiders(state: GameState): void {
+  state.riders = state.riders.filter((r) => {
+    advanceRider(state, r);
+    r.ticksLeft--;
+    if (r.ticksLeft > 0) return true;
+    state.events.push({ type: 'riderEnd', riderId: r.id, x: r.x, y: r.y });
+    return false;
+  });
+}
+
+function advanceRider(state: GameState, r: Rider): void {
+  const current = r.targetIdx !== -1 ? state.players[r.targetIdx] : null;
+  if (current === null || !isRiderTargetOk(current, r)) {
+    r.targetIdx = pickRiderTarget(state, r, []);
+  }
+  if (r.targetIdx !== -1) {
+    const heading = riderHeading(state, r);
+    r.vx += (heading.x * RIDER_SPEED - r.vx) * RIDER_TURN;
+    r.vy += (heading.y * RIDER_SPEED - r.vy) * RIDER_TURN;
+  }
+
+  r.x += r.vx * DT;
+  r.y += r.vy * DT;
+  if (r.x < 0) {
+    r.x = 0;
+    r.vx = Math.abs(r.vx);
+  } else if (r.x > FIELD_W) {
+    r.x = FIELD_W;
+    r.vx = -Math.abs(r.vx);
+  }
+  if (r.y < 0) {
+    r.y = 0;
+    r.vy = Math.abs(r.vy);
+  } else if (r.y > FIELD_D) {
+    r.y = FIELD_D;
+    r.vy = -Math.abs(r.vy);
+  }
+  if (r.vx > 0) r.facingX = 1;
+  else if (r.vx < 0) r.facingX = -1;
+
+  const owner = state.players[r.ownerIdx];
+  for (const v of state.players) {
+    if (v.team === r.team || v.action === 'down' || isInvincible(v) || r.hit.includes(v.idx)) continue;
+    if (distance(r.x, r.y, v.x, v.y) >= RIDER_HIT_RADIUS + v.radius) continue;
+    riderKnockDown(state, r, owner, v);
+  }
+}
+
+/**
+ * A rider knocks an opponent down with the same special hit a pierce uses, knocked away along the rider's direction.
+ * A carrier loses the ball, credited to the summoner as the last touch.
+ */
+function riderKnockDown(state: GameState, r: Rider, owner: Player, v: Player): void {
+  const speed = Math.sqrt(r.vx * r.vx + r.vy * r.vy);
+  const dirX = speed > 0 ? r.vx / speed : r.facingX;
+  const dirY = speed > 0 ? r.vy / speed : 0;
+  r.hit.push(v.idx);
+  applySpecialHit(state, owner, v, 'pierce', dirX, dirY);
+  if (state.ball.ownerIdx === v.idx) knockLooseBall(state, owner, v, dirX, dirY);
+  state.events.push({ type: 'riderHit', riderId: r.id, victimIdx: v.idx, x: r.x, y: r.y });
+}
+
+/** Removes every rider, emitting riderEnd for each. Called when the phase leaves play. */
+export function clearRiders(state: GameState): void {
+  for (const r of state.riders) {
+    state.events.push({ type: 'riderEnd', riderId: r.id, x: r.x, y: r.y });
+  }
+  state.riders = [];
 }
 
 /** Counts the special cooldown down while the match is in play. */
@@ -954,7 +1115,7 @@ function applyHit(state: GameState, attacker: Player, victim: Player, kind: Atta
 }
 
 /** A hit knocks the ball out of the victim's control, launched along the hit direction. */
-function knockLooseBall(state: GameState, attacker: Player, victim: Player, dirX: number, dirY: number): void {
+export function knockLooseBall(state: GameState, attacker: Player, victim: Player, dirX: number, dirY: number): void {
   const ball = state.ball;
   ball.ownerIdx = -1;
   // The attacker's hit is the last touch, so a knock-in (even into the victim's own goal) is credited to the attacker.
