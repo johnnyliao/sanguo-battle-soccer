@@ -6,8 +6,11 @@ import type Phaser from 'phaser';
  * copies that JSON, so re-run the tool and update the numbers here if the sheet changes.
  */
 
-/** `rampage` loops while invincible with the ball; `shot` is the special ball's launch pose. */
-export type SpriteAnim = 'idle' | 'run' | 'attack' | 'charge' | 'special' | 'rampage' | 'shot' | 'hitstun' | 'down' | 'dive' | 'recover';
+/** `rampage` loops while invincible with the ball; `shot` is the special ball's launch pose; `lunge` is the dash pose. */
+export type SpriteAnim = 'idle' | 'run' | 'attack' | 'charge' | 'special' | 'rampage' | 'shot' | 'hitstun' | 'down' | 'dive' | 'recover' | 'lunge';
+
+/** Effects played over the character (see MatchScene): a spear thrust, the lunge's dragon, and an impact burst. */
+export type FxAnim = 'thrust' | 'lunge' | 'burst';
 
 export interface SpriteMeta {
   frameWidth: number;
@@ -26,6 +29,15 @@ export interface SpriteAnimDef {
   repeat: number;
 }
 
+/** Effect sheet: frames are played with additive blending, so the black background drops out. Frame indices are row-major. */
+export interface FxSheet {
+  key: string;
+  url: string;
+  frameWidth: number;
+  frameHeight: number;
+  anims: Record<FxAnim, SpriteAnimDef>;
+}
+
 export interface SpriteConfig {
   key: string;
   url: string;
@@ -35,15 +47,21 @@ export interface SpriteConfig {
   /** Shadow width multiplier vs the block figure (wider under Guan Yu's bike). */
   shadowScale: number;
   anims: Record<SpriteAnim, SpriteAnimDef>;
+  /** Optional effect sheet for this character's thrust, lunge and impact burst. */
+  fx?: FxSheet;
 }
 
 const GUANYU_META: SpriteMeta = { frameWidth: 197, frameHeight: 209, cols: 4, rows: 5, anchorX: 106, anchorY: 202 };
 const ZHANGFEI_META: SpriteMeta = { frameWidth: 211, frameHeight: 205, cols: 4, rows: 5, anchorX: 91, anchorY: 198 };
+const ZHAOYUN_META: SpriteMeta = { frameWidth: 211, frameHeight: 204, cols: 4, rows: 5, anchorX: 94, anchorY: 191 };
 
 /** Frame index of a sheet cell (row-major) for a sheet with this meta. */
 const cellAt = (meta: SpriteMeta) => (row: number, col: number): number => row * meta.cols + col;
 const at = cellAt(GUANYU_META);
 const zat = cellAt(ZHANGFEI_META);
+const yat = cellAt(ZHAOYUN_META);
+/** The Zhao Yun effect sheet is 4 columns of 181 px frames. */
+const fxat = (row: number, col: number): number => row * 4 + col;
 
 export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
   guanyu: {
@@ -59,6 +77,7 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
       charge: { frames: [at(3, 0)], fps: 1, repeat: -1 },
       special: { frames: [at(3, 1), at(3, 2), at(3, 3)], fps: 10, repeat: 0 },
       rampage: { frames: [at(3, 1), at(3, 2)], fps: 8, repeat: -1 },
+      lunge: { frames: [at(3, 1), at(3, 2)], fps: 8, repeat: -1 },
       shot: { frames: [at(3, 3)], fps: 1, repeat: -1 },
       dive: { frames: [at(4, 1)], fps: 1, repeat: -1 },
       hitstun: { frames: [at(4, 0)], fps: 1, repeat: -1 },
@@ -79,11 +98,44 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
       charge: { frames: [zat(2, 0)], fps: 1, repeat: -1 },
       special: { frames: [zat(3, 0), zat(3, 1), zat(3, 2), zat(3, 3)], fps: 10, repeat: 0 },
       rampage: { frames: [zat(3, 3)], fps: 1, repeat: -1 },
+      lunge: { frames: [zat(3, 3)], fps: 1, repeat: -1 },
       shot: { frames: [zat(2, 3)], fps: 1, repeat: -1 },
       dive: { frames: [zat(4, 1)], fps: 1, repeat: -1 },
       hitstun: { frames: [zat(4, 0)], fps: 1, repeat: -1 },
       down: { frames: [zat(4, 1), zat(4, 2)], fps: 6, repeat: 0 },
       recover: { frames: [zat(4, 3)], fps: 1, repeat: -1 },
+    },
+  },
+  zhaoyun: {
+    key: 'sprite-zhaoyun',
+    url: 'sprites/zhaoyun.png',
+    meta: ZHAOYUN_META,
+    displayHeight: 58,
+    shadowScale: 1.1,
+    anims: {
+      idle: { frames: [yat(0, 0), yat(0, 1), yat(0, 2), yat(0, 3)], fps: 6, repeat: -1 },
+      run: { frames: [yat(1, 0), yat(1, 1), yat(1, 2), yat(1, 3)], fps: 10, repeat: -1 },
+      attack: { frames: [yat(2, 0), yat(2, 1), yat(2, 2), yat(2, 3)], fps: 14, repeat: 0 },
+      charge: { frames: [yat(3, 0)], fps: 1, repeat: -1 },
+      special: { frames: [yat(3, 0), yat(3, 1), yat(3, 2), yat(3, 3)], fps: 10, repeat: 0 },
+      rampage: { frames: [yat(3, 1), yat(3, 2)], fps: 8, repeat: -1 },
+      lunge: { frames: [yat(3, 1), yat(3, 2)], fps: 8, repeat: -1 },
+      shot: { frames: [yat(2, 3)], fps: 1, repeat: -1 },
+      dive: { frames: [yat(4, 1)], fps: 1, repeat: -1 },
+      hitstun: { frames: [yat(4, 0)], fps: 1, repeat: -1 },
+      down: { frames: [yat(4, 1), yat(4, 2)], fps: 6, repeat: 0 },
+      recover: { frames: [yat(4, 3)], fps: 1, repeat: -1 },
+    },
+    fx: {
+      key: 'fx-zhaoyun',
+      url: 'sprites/zhaoyun-fx.png',
+      frameWidth: 181,
+      frameHeight: 181,
+      anims: {
+        thrust: { frames: [fxat(0, 0), fxat(0, 1), fxat(0, 2), fxat(0, 3)], fps: 20, repeat: 0 },
+        lunge: { frames: [fxat(1, 0), fxat(1, 1), fxat(1, 2), fxat(1, 3)], fps: 16, repeat: 0 },
+        burst: { frames: [fxat(2, 0), fxat(2, 1), fxat(2, 2), fxat(2, 3)], fps: 12, repeat: 0 },
+      },
     },
   },
 };
@@ -92,11 +144,16 @@ export function spriteAnimKey(cfg: SpriteConfig, anim: SpriteAnim): string {
   return `${cfg.key}:${anim}`;
 }
 
-/** Queues every configured sheet. A failed load leaves the texture missing, and the match falls back to block figures. */
+export function fxAnimKey(fx: FxSheet, anim: FxAnim): string {
+  return `${fx.key}:${anim}`;
+}
+
+/** Queues every configured sheet and effect sheet. A failed load leaves the texture missing, and the match falls back to block figures. */
 export function preloadSprites(load: Phaser.Loader.LoaderPlugin): void {
   for (const cfg of Object.values(SPRITE_CONFIGS)) {
     if (!cfg) continue;
     load.spritesheet(cfg.key, cfg.url, { frameWidth: cfg.meta.frameWidth, frameHeight: cfg.meta.frameHeight });
+    if (cfg.fx) load.spritesheet(cfg.fx.key, cfg.fx.url, { frameWidth: cfg.fx.frameWidth, frameHeight: cfg.fx.frameHeight });
   }
 }
 
@@ -111,6 +168,19 @@ export function createSpriteAnims(anims: Phaser.Animations.AnimationManager, tex
       anims.create({
         key,
         frames: anims.generateFrameNumbers(cfg.key, { frames: def.frames }),
+        frameRate: def.fps,
+        repeat: def.repeat,
+      });
+    }
+    const fx = cfg.fx;
+    if (!fx || !textures.exists(fx.key)) continue;
+    for (const name of Object.keys(fx.anims) as FxAnim[]) {
+      const key = fxAnimKey(fx, name);
+      if (anims.exists(key)) continue;
+      const def = fx.anims[name];
+      anims.create({
+        key,
+        frames: anims.generateFrameNumbers(fx.key, { frames: def.frames }),
         frameRate: def.fps,
         repeat: def.repeat,
       });

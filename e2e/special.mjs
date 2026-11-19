@@ -221,7 +221,7 @@ try {
   // a. 大招 quick tap with the ball starts the rampage.
   await ballHome(400, 130);
   await tp.waitForTimeout(300);
-  await quickTap(touch.cdp, await buttonPoint(tp, 119, 92));
+  await quickTap(touch.cdp, await buttonPoint(tp, 128, 92));
   await tp.waitForFunction(() => window.__sg.state().players[window.__sg.humanIdx].rampageTicks > 0, null, {
     timeout: 3000,
   }).catch(() => {});
@@ -247,8 +247,8 @@ try {
     s.ball.vz = 0;
   });
   await tp.waitForTimeout(200);
-  const dimCaption = await tp.evaluate(() => window.__sg.scene.touch.ballHint.visible);
-  await quickTap(touch.cdp, await buttonPoint(tp, 119, 92));
+  const dimCaption = await tp.evaluate(() => window.__sg.scene.touch.blockHint.visible);
+  await quickTap(touch.cdp, await buttonPoint(tp, 128, 92));
   await tp.waitForFunction(() => window.__sg.lastHint() === '需持球', null, { timeout: 2000 }).catch(() => {});
   const hint = await tp.evaluate(() => ({
     text: window.__sg.lastHint(),
@@ -267,7 +267,7 @@ try {
   await resetRampage();
   await ballHome(400, 130);
   await tp.waitForTimeout(300);
-  await quickTap(touch.cdp, await buttonPoint(tp, 55, 92));
+  await quickTap(touch.cdp, await buttonPoint(tp, 48, 92));
   await tp.waitForFunction(() => window.__sg.state().ball.ownerIdx !== window.__sg.humanIdx, null, { timeout: 3000 }).catch(() => {});
   const released = await tp.evaluate(() => {
     const s = window.__sg.state();

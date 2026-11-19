@@ -1,5 +1,5 @@
 // Turns a character sheet (grid of frames on white, with or without black ground lines) into a transparent sprite sheet.
-// Usage: node tools/make-sprite.mjs <input sheet.png> <output sprite.png> [--scale <factor>]
+// Usage: node tools/make-sprite.mjs <input sheet.png> <output sprite.png> [--scale <factor>] [--keep-white]
 // Writes <output>.png (uniform frames, packed, transparent), <output>.json (frameWidth, frameHeight,
 // cols, rows, anchorX, anchorY) and test-results/<name>-preview.png for a visual check.
 // --scale downscales the packed sheet (frame size and anchor in the json are scaled to match).
@@ -22,6 +22,10 @@ const argv = process.argv.slice(2);
 const scaleAt = argv.indexOf('--scale');
 const SCALE = scaleAt >= 0 ? Number(argv[scaleAt + 1]) : 1;
 if (scaleAt >= 0) argv.splice(scaleAt, 2);
+// --keep-white keeps enclosed white areas opaque (white capes / armour) instead of removing large pockets.
+const keepAt = argv.indexOf('--keep-white');
+const KEEP_WHITE = keepAt >= 0;
+if (keepAt >= 0) argv.splice(keepAt, 1);
 const [inArg, outArg] = argv;
 if (!inArg || !outArg || !(SCALE > 0 && SCALE <= 1)) {
   console.error('usage: node tools/make-sprite.mjs <input sheet.png> <output sprite.png> [--scale <0-1>]');
@@ -33,7 +37,7 @@ const metaPath = outPath.replace(/\.png$/, '.json');
 const previewPath = resolve(repoRoot, 'test-results', `${basename(outPath, '.png')}-preview.png`);
 
 // Runs in the page. Everything the pixel work needs is inside this function.
-function processSheet({ dataUrl, cols, rows, pad, scale }) {
+function processSheet({ dataUrl, cols, rows, pad, scale, keepWhite }) {
   return (async () => {
     const img = new Image();
     img.src = dataUrl;
@@ -254,7 +258,7 @@ function processSheet({ dataUrl, cols, rows, pad, scale }) {
     }
     // 6) Enclosed background pockets (white not reachable from the border). Large flat pockets are background
     //    (e.g. the gap between a weapon and a sleeve); small ones stay opaque because they can be eyes or highlights.
-    const POCKET_MIN = 250;
+    const POCKET_MIN = keepWhite ? Infinity : 250;
     const pocketSeen = new Uint8Array(N);
     const pockets = [];
     for (let p0 = 0; p0 < N; p0++) {
@@ -479,7 +483,7 @@ const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--ena
 let result;
 try {
   const page = await browser.newPage();
-  result = await page.evaluate(processSheet, { dataUrl, cols: COLS, rows: ROWS, pad: PAD, scale: SCALE });
+  result = await page.evaluate(processSheet, { dataUrl, cols: COLS, rows: ROWS, pad: PAD, scale: SCALE, keepWhite: KEEP_WHITE });
 } finally {
   await browser.close();
 }

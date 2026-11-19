@@ -98,7 +98,7 @@ const anchors = (v) => ({
   panelShu: { x: v.W / 2, y: v.H / 2 },
   panelWu: { x: v.W / 2 + 190, y: v.H / 2 },
   confirm: { x: v.W - 120, y: v.H - 25 },
-  btnJ: { x: v.W - 55, y: v.H - 92 },
+  btnJ: { x: v.W - 48, y: v.H - 92 },
   stickRest: { x: 70, y: v.H - 90 },
 });
 const ORDER_ROW_Y0 = 98;
@@ -291,8 +291,10 @@ try {
   await page.waitForTimeout(300);
   report('9 pk order overlay open', orderOpen);
   if (!orderOpen) throw new Error('shootout order screen did not open');
+  // The order overlay scales by H / 360 on short touch views (render/MatchScene.ts orderLayout).
+  const orderK = Math.min(1, (await viewOf(page)).H / 360);
   for (let i = 0; i < 5; i++) {
-    await tapLogical(page, A.center.x, ORDER_ROW_Y0 + i * ORDER_ROW_H);
+    await tapLogical(page, A.center.x, (ORDER_ROW_Y0 + i * ORDER_ROW_H) * orderK);
     await page.waitForTimeout(150);
   }
   const submitted = await page

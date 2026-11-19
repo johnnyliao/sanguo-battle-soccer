@@ -18,19 +18,24 @@ export function textResolution(): number {
   return textRes;
 }
 
-/** Fits BASE_W×BASE_H inside the canvas on one axis and fills the rest of the canvas on the other. */
-export function computeView(canvasW: number, canvasH: number): View {
-  const Z = Math.min(canvasH / BASE_H, canvasW / BASE_W);
+/**
+ * Fits a 16:9 base of baseH rows (baseH×16/9 wide, BASE_W×BASE_H by default) inside the canvas on one axis and fills
+ * the rest of the canvas on the other.
+ */
+export function computeView(canvasW: number, canvasH: number, baseH = BASE_H): View {
+  const baseW = (baseH * 16) / 9;
+  const Z = Math.min(canvasH / baseH, canvasW / baseW);
   return { W: canvasW / Z, H: canvasH / Z, Z };
 }
 
 /**
  * Sets the scene's main camera to the window view and keeps it updated on resize.
  * `onChange` runs after each resize so the scene can re-layout. The listener is removed on shutdown.
+ * `baseH` is the scene's base height (BASE_H unless the scene draws bigger on touch devices).
  */
-export function applyView(scene: Phaser.Scene, onChange?: (view: View) => void): View {
+export function applyView(scene: Phaser.Scene, onChange?: (view: View) => void, baseH = BASE_H): View {
   const update = (): View => {
-    const view = computeView(scene.scale.width, scene.scale.height);
+    const view = computeView(scene.scale.width, scene.scale.height, baseH);
     textRes = Math.max(2, Math.round(view.Z));
     scene.cameras.main.setZoom(view.Z).setOrigin(0, 0);
     (window as unknown as { __sgView: View }).__sgView = view;

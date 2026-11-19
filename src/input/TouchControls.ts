@@ -13,6 +13,13 @@ export interface TouchState {
   l: boolean;
 }
 
+/** The human's special as the touch button shows it. `block` = why it cannot be cast now ('需持球' / '體力不足'), or null. */
+export interface SpecialStatus {
+  cooldownTicks: number;
+  cooldownTotal: number;
+  block: string | null;
+}
+
 type ButtonKey = 'j' | 'k' | 'l';
 
 /** Button centre measured from the bottom-right corner of the logical view. */
@@ -27,17 +34,18 @@ interface ButtonDef {
   pkLabel?: string;
 }
 
+/** Buttons sit 10 units from the right edge and from each other (J bottom-right, K above J, L left of J). */
 const BUTTONS: ButtonDef[] = [
-  { key: 'j', offX: 55, offY: 92, r: 32, label: '攻擊\n射門', labelSize: '14px', pkLabel: '射門' },
-  { key: 'k', offX: 55, offY: 156, r: 24, label: '傳球\n叫球', labelSize: '11px', pkLabel: '高球' },
-  { key: 'l', offX: 119, offY: 92, r: 24, label: '大招', labelSize: '12px' },
+  { key: 'j', offX: 48, offY: 92, r: 38, label: '攻擊\n射門', labelSize: '16px', pkLabel: '射門' },
+  { key: 'k', offX: 48, offY: 170, r: 30, label: '傳球\n叫球', labelSize: '14px', pkLabel: '高球' },
+  { key: 'l', offX: 128, offY: 92, r: 32, label: '大招', labelSize: '16px' },
 ];
 
 /** Joystick rest centre: 70 from the left edge, 90 from the bottom. */
 const STICK_REST_X = 70;
 const STICK_REST_OFF_Y = 90;
-const STICK_R = 34;
-const KNOB_R = 14;
+const STICK_R = 40;
+const KNOB_R = 17;
 const STICK_DEADZONE = 10;
 const AXIS_RATIO = 0.38;
 const DASH_RATIO = 0.85;
@@ -48,9 +56,8 @@ const POINTERS_TOTAL = 4;
 const DEPTH = 1100;
 const FONT = '"Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif';
 const GOLD = 0xffd98a;
-const COOLDOWN_FILL = 0x5a5f66;
-const COOLDOWN_LINE = 0xb8bec6;
-const BALL_HINT = '需持球';
+const SPECIAL_DARK = 0x222222;
+const SPECIAL_RING = 0x8a929c;
 
 interface StickClaim {
   kind: 'stick';
@@ -78,13 +85,13 @@ export class TouchControls {
   private enabled: boolean;
   private wanted = true;
   private pk = false;
-  private cooldownTicks = 0;
-  private needsBall = false;
+  private special: SpecialStatus = { cooldownTicks: 0, cooldownTotal: 1, block: null };
   private claims = new Map<Phaser.Input.Pointer, Claim>();
   private pressLatch = new ButtonLatch<ButtonKey>();
   private gfx: Phaser.GameObjects.Graphics;
   private labels: Phaser.GameObjects.Text[];
-  private ballHint: Phaser.GameObjects.Text;
+  private cooldownText: Phaser.GameObjects.Text;
+  private blockHint: Phaser.GameObjects.Text;
   private view: View;
 
   constructor(scene: Phaser.Scene, view: View) {
@@ -110,10 +117,25 @@ export class TouchControls {
         .setScrollFactor(0)
         .setDepth(DEPTH + 1),
     );
-    this.ballHint = scene.add
-      .text(0, 0, BALL_HINT, {
+    this.cooldownText = scene.add
+      .text(0, 0, '', {
         fontFamily: FONT,
-        fontSize: '10px',
+        fontSize: '22px',
+        fontStyle: 'bold',
+        color: '#ffffff',
+        stroke: '#000000',
+        strokeThickness: 4,
+        align: 'center',
+        resolution: textResolution(),
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(DEPTH + 1)
+      .setVisible(false);
+    this.blockHint = scene.add
+      .text(0, 0, '', {
+        fontFamily: FONT,
+        fontSize: '12px',
         color: '#ffffff',
         stroke: '#000000',
         strokeThickness: 2,
@@ -173,14 +195,9 @@ export class TouchControls {
     this.applyVisibility();
   }
 
-  /** Ticks left on the human's special cooldown. 0 = ready (the special button glows). */
-  setSpecialCooldown(ticks: number): void {
-    this.cooldownTicks = ticks;
-  }
-
-  /** True while the special needs the ball and the human does not have it: the special button is dimmed. */
-  setSpecialNeedsBall(on: boolean): void {
-    this.needsBall = on;
+  /** The human's special state: ready (gold) when no cooldown and no block; otherwise dark, with the cooldown sweep. */
+  setSpecialStatus(status: SpecialStatus): void {
+    this.special = status;
   }
 
   /** Shows or hides the controls. Hidden on desktops that never produced a touch. */
@@ -203,7 +220,8 @@ export class TouchControls {
     this.claims.clear();
     this.gfx.destroy();
     this.labels.forEach((t) => t.destroy());
-    this.ballHint.destroy();
+    this.cooldownText.destroy();
+    this.blockHint.destroy();
   }
 
   /** A button is in use in the current mode (the special is hidden during the shootout). */
@@ -217,7 +235,6 @@ export class TouchControls {
 
   private labelText(def: ButtonDef): string {
     if (this.pk) return def.pkLabel ?? '';
-    if (def.key === 'l' && this.cooldownTicks > 0) return `${Math.ceil(this.cooldownTicks / TICK_HZ)}秒`;
     return def.label;
   }
 
@@ -251,7 +268,8 @@ export class TouchControls {
     const special = BUTTONS.find((b) => b.key === 'l');
     if (special) {
       const c = this.buttonAt(special);
-      this.ballHint.setPosition(c.x, c.y + special.r + 4);
+      this.cooldownText.setPosition(c.x, c.y);
+      this.blockHint.setPosition(c.x, c.y + special.r + 4);
     }
   }
 
@@ -314,13 +332,25 @@ export class TouchControls {
 
   private draw = (): void => {
     const g = this.gfx.clear();
+    const shown = this.isShown();
+    const { cooldownTicks, block } = this.special;
+    const cooling = cooldownTicks > 0;
+    const ready = !cooling && block === null;
     this.labels.forEach((t, i) => {
-      const text = this.labelText(BUTTONS[i]);
+      const b = BUTTONS[i];
+      const text = this.labelText(b);
       if (t.text !== text) t.setText(text);
+      // While cooling down the special shows the seconds instead of its label. Not ready = dimmed label.
+      t.setVisible(shown && this.isActive(b) && !(b.key === 'l' && cooling));
+      if (b.key === 'l') t.setAlpha(ready ? 1 : 0.5);
     });
-    // The hint shows under the special while it is dimmed for the missing ball (not while cooling down or in the shootout).
-    this.ballHint.setVisible(this.isShown() && this.needsBall && this.cooldownTicks === 0 && !this.pk);
-    if (!this.isShown()) return;
+    const seconds = `${Math.ceil(cooldownTicks / TICK_HZ)}`;
+    if (this.cooldownText.text !== seconds) this.cooldownText.setText(seconds);
+    this.cooldownText.setVisible(shown && !this.pk && cooling);
+    // Under the special: why it cannot be cast yet (only when not cooling down, and not in the shootout).
+    if (block !== null && this.blockHint.text !== block) this.blockHint.setText(block);
+    this.blockHint.setVisible(shown && !this.pk && !cooling && block !== null);
+    if (!shown) return;
 
     const stick = this.findStick();
     const rest = this.stickRest();
@@ -342,31 +372,52 @@ export class TouchControls {
     for (const b of this.activeButtons()) {
       const pressed = this.isPressed(b.key);
       const c = this.buttonAt(b);
-      if (b.key === 'l' && this.cooldownTicks > 0) {
-        // Cooling down: grey, with the seconds left as the label.
-        g.fillStyle(COOLDOWN_FILL, 0.6);
-        g.fillCircle(c.x, c.y, b.r);
-        g.lineStyle(2, COOLDOWN_LINE, 0.5);
-        g.strokeCircle(c.x, c.y, b.r);
-        continue;
-      }
-      if (b.key === 'l' && this.needsBall) {
-        // No ball for the rampage: dimmed, but still tappable (the hint explains why nothing happens).
-        g.fillStyle(0xffffff, pressed ? 0.3 : 0.08);
-        g.fillCircle(c.x, c.y, b.r);
-        g.lineStyle(2, 0xffffff, 0.3);
-        g.strokeCircle(c.x, c.y, b.r);
-        continue;
-      }
       if (b.key === 'l') {
-        // Ready: a pulsing gold glow around the button.
-        g.fillStyle(GOLD, 0.2 + 0.2 * pulse);
-        g.fillCircle(c.x, c.y, b.r + 6);
+        this.drawSpecial(g, c.x, c.y, b.r, pressed, ready, pulse);
+        continue;
       }
       g.fillStyle(pressed ? 0xffd98a : 0xffffff, pressed ? 0.6 : 0.25);
       g.fillCircle(c.x, c.y, b.r);
-      g.lineStyle(2, b.key === 'l' ? GOLD : 0xffffff, pressed ? 0.9 : 0.5);
+      g.lineStyle(2, 0xffffff, pressed ? 0.9 : 0.5);
       g.strokeCircle(c.x, c.y, b.r);
     }
   };
+
+  /**
+   * The special button. Ready: solid gold with a pulsing glow ring. Otherwise dark, and while cooling down a dark pie
+   * sweeps clockwise from 12 o'clock over the part of the cooldown still to go. Tapping is always accepted.
+   */
+  private drawSpecial(
+    g: Phaser.GameObjects.Graphics,
+    x: number,
+    y: number,
+    r: number,
+    pressed: boolean,
+    ready: boolean,
+    pulse: number,
+  ): void {
+    if (ready) {
+      g.fillStyle(GOLD, 0.25 + 0.15 * pulse);
+      g.fillCircle(x, y, r + 6);
+      g.fillStyle(GOLD, pressed ? 1 : 0.85);
+      g.fillCircle(x, y, r);
+      g.lineStyle(2, 0xffffff, 1);
+      g.strokeCircle(x, y, r);
+      return;
+    }
+    g.fillStyle(SPECIAL_DARK, 0.47);
+    g.fillCircle(x, y, r);
+    g.lineStyle(2, SPECIAL_RING, 0.8);
+    g.strokeCircle(x, y, r);
+    const { cooldownTicks, cooldownTotal } = this.special;
+    if (cooldownTicks > 0 && cooldownTotal > 0) {
+      const frac = Math.min(1, cooldownTicks / cooldownTotal);
+      g.fillStyle(0x000000, 0.5);
+      g.beginPath();
+      g.moveTo(x, y);
+      g.arc(x, y, r, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2, false);
+      g.closePath();
+      g.fillPath();
+    }
+  }
 }

@@ -13,11 +13,13 @@ import {
   GOAL_H,
   EMPTY_INPUT,
   GOAL_HALF_W,
+  LUNGE_TICKS,
   SPECIAL_COOLDOWN_TICKS,
   SPECIAL_STAMINA_COST,
   TICK_HZ,
   autoPkOrders,
   createInitialState,
+  isInvincible,
   pkMeterValue,
   step,
   submitPkOrder,
@@ -30,7 +32,17 @@ import {
 } from '../sim';
 import { DEPTH_SCALE, cameraTargetX, pkCameraX, worldToScreen, FIELD_TOP } from './projection';
 import type { ResultInit, ResultScorer } from './ResultScene';
-import { createSpriteAnims, preloadSprites, SPRITE_CONFIGS, spriteAnimKey, type SpriteAnim, type SpriteConfig } from './sprites';
+import {
+  createSpriteAnims,
+  fxAnimKey,
+  preloadSprites,
+  SPRITE_CONFIGS,
+  spriteAnimKey,
+  type FxAnim,
+  type FxSheet,
+  type SpriteAnim,
+  type SpriteConfig,
+} from './sprites';
 import { applyView, BASE_H, textResolution, type View } from './view';
 
 export interface MatchInit {
@@ -45,7 +57,7 @@ interface PlayerView {
   container: Phaser.GameObjects.Container;
   gfx: Phaser.GameObjects.Graphics;
   label: Phaser.GameObjects.Text;
-  /** Invincibility timer above the name (human rampage only). */
+  /** Invincibility timer above the name (human only, during a rampage or lunge). */
   tag: Phaser.GameObjects.Text;
   /** Set when the character's sheet loaded. The block figure is drawn when this is null. */
   sprite: Phaser.GameObjects.Sprite | null;
@@ -66,6 +78,33 @@ interface RoarWave {
   startMs: number;
 }
 
+/** A playing effect. It is opaque until holdMs, fades out by endMs, then is removed. follow: player idx it stays on. */
+interface FxInstance {
+  sprite: Phaser.GameObjects.Sprite;
+  startMs: number;
+  holdMs: number;
+  endMs: number;
+  follow: number | null;
+  offX: number;
+  offY: number;
+}
+
+/** Where and how playFx places one effect (screen px). holdMs and endMs default to the animation's length. */
+interface FxSpawn {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  depth: number;
+  flip?: boolean;
+  angle?: number;
+  holdMs?: number;
+  endMs?: number;
+  follow?: number;
+  offX?: number;
+  offY?: number;
+}
+
 interface PkOrderRow {
   slot: Phaser.GameObjects.Text;
   role: Phaser.GameObjects.Text;
@@ -75,12 +114,15 @@ interface PkOrderRow {
 
 type HudStyle = (color: string, size: string, stroke?: boolean) => Phaser.Types.GameObjects.Text.TextStyle;
 
-/** Why the human's L press starts no special. Checked before the step that consumes the press. */
-function specialBlockReason(state: GameState, p: Player): string {
-  if (p.specialMode === 'rampage' && state.ball.ownerIdx !== p.idx) return '需持球';
+/**
+ * Why the human's L press starts no special, or null when none of the three reasons applies (the sim then buffers
+ * the press). Checked before the step that consumes the press.
+ */
+function specialBlockReason(state: GameState, p: Player): string | null {
+  if (p.specialMode !== 'roar' && state.ball.ownerIdx !== p.idx) return '需持球';
   if (p.specialCooldown > 0) return `冷卻中 ${Math.ceil(p.specialCooldown / TICK_HZ)} 秒`;
   if (p.stamina < SPECIAL_STAMINA_COST) return '體力不足';
-  return '現在不能放';
+  return null;
 }
 
 const STEP_MS = 1000 / TICK_HZ;
@@ -91,6 +133,13 @@ const TRAIL_LEN = 8;
 const PLAY_AREA_TOP = FIELD_TOP;
 const GRASS_X0 = -60;
 const GRASS_X1 = FIELD_W + 60;
+/** Touch devices draw the match bigger: a 280-row view instead of BASE_H (about 1.29× on a phone). */
+const MATCH_BASE_H_TOUCH = 280;
+/**
+ * Touch layout only: the field band moves down by this much in the shorter view, so its far edge clears the top bar
+ * and the near edge sits just above the bottom bar.
+ */
+const TOUCH_FIELD_SHIFT_Y = 60;
 
 /** Regulation kicks per team in the shootout (sim/pk.ts uses the same count). */
 const PK_ROUNDS = 5;
@@ -103,6 +152,8 @@ const PK_MARK_X0 = 92;
 const PK_MARK_STEP = 18;
 /** Aim box and power meter are anchored to the right / bottom edges of the view. */
 const PK_AIM_RIGHT = 88;
+/** Touch: the aim box moves left of the touch buttons (the K button sits in the top-right corner). */
+const PK_AIM_RIGHT_TOUCH = 170;
 const PK_AIM_Y = 44;
 const PK_CELL_W = 24;
 const PK_CELL_H = 22;
@@ -114,6 +165,9 @@ const PK_METER_H = 10;
 const ORDER_BOX_Y = 40;
 const ORDER_BOX_W = 380;
 const ORDER_BOX_H = 276;
+const ORDER_TITLE_Y = 52;
+const ORDER_HINT_Y = 74;
+const ORDER_COUNT_Y = 292;
 const ORDER_ROW_Y0 = 98;
 const ORDER_ROW_H = 36;
 /** Order overlay x offsets are measured from the box's left edge (the box is centred on the view). */
@@ -124,6 +178,26 @@ const ORDER_UNDO_X = 250;
 const ORDER_UNDO_Y = 280;
 const ORDER_UNDO_W = 120;
 const ORDER_UNDO_H = 26;
+
+/**
+ * Vertical layout of the kicking-order overlay. Everything scales by H / BASE_H, so the overlay fits a short touch view
+ * (H 280) and is unchanged at BASE_H or taller.
+ */
+function orderLayout(H: number) {
+  const k = Math.min(1, H / BASE_H);
+  return {
+    boxY: ORDER_BOX_Y * k,
+    boxH: ORDER_BOX_H * k,
+    titleY: ORDER_TITLE_Y * k,
+    hintY: ORDER_HINT_Y * k,
+    countY: ORDER_COUNT_Y * k,
+    rowY0: ORDER_ROW_Y0 * k,
+    rowH: ORDER_ROW_H * k,
+    rowBoxH: ORDER_ROW_BOX_H * k,
+    undoY: ORDER_UNDO_Y * k,
+    undoH: ORDER_UNDO_H * k,
+  };
+}
 /** Minimap in the top-left band under the top bar: world units scaled to pixels. */
 const MINIMAP_X = 8;
 const MINIMAP_Y = 40;
@@ -144,6 +218,20 @@ const SHOT_POSE_MS = 400;
 const ROAR_WAVE_MS = 400;
 const ROAR_SHAKE_MS = 160;
 const ROAR_SHAKE_INTENSITY = 0.004;
+/** Lunge start: a small shake. The dragon holds for the dash, then fades for LUNGE_FADE_MS. */
+const LUNGE_SHAKE_MS = 120;
+const LUNGE_SHAKE_INTENSITY = 0.002;
+const LUNGE_FADE_MS = 150;
+/** Lunge dragon: on-screen length and height, and how far ahead of his feet it sits. */
+const LUNGE_FX_LEN = 180;
+const LUNGE_FX_H = 120;
+const LUNGE_FX_AHEAD = 40;
+/** Spear thrust streak: length, distance in front of him, and height as a fraction of his sprite height. */
+const THRUST_FX_LEN = 70;
+const THRUST_FX_AHEAD = 30;
+const THRUST_FX_HEIGHT = 0.45;
+/** Impact burst at the lunge start and end. */
+const BURST_FX_SIZE = 60;
 const COOLDOWN_GREY = 0x9aa3ad;
 const HUD_COOLDOWN_W = 120;
 /** Why-not hint above the human's name: shown for HINT_MS, rising HINT_RISE px while it fades. */
@@ -236,6 +324,7 @@ export class MatchScene extends Phaser.Scene {
   private poseAnim: SpriteAnim[] = [];
   private roarWaves: RoarWave[] = [];
   private roarGfx!: Phaser.GameObjects.Graphics;
+  private fx: FxInstance[] = [];
 
   private homeText!: Phaser.GameObjects.Text;
   private awayText!: Phaser.GameObjects.Text;
@@ -248,6 +337,8 @@ export class MatchScene extends Phaser.Scene {
   private arrowText!: Phaser.GameObjects.Text;
   private arrowShown = false;
   private view!: View;
+  /** Base view height for this device: MATCH_BASE_H_TOUCH on touch devices, BASE_H otherwise. */
+  private baseH = BASE_H;
   private clockText!: Phaser.GameObjects.Text;
   private hudNameText!: Phaser.GameObjects.Text;
   private hudSpecialText!: Phaser.GameObjects.Text;
@@ -306,7 +397,8 @@ export class MatchScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.view = applyView(this, (v) => this.layoutHud(v));
+    this.baseH = this.sys.game.device.input.touch ? MATCH_BASE_H_TOUCH : BASE_H;
+    this.view = applyView(this, (v) => this.layoutHud(v), this.baseH);
     this.state = createInitialState(
       {
         seed: this.seed,
@@ -324,6 +416,7 @@ export class MatchScene extends Phaser.Scene {
     this.poseUntil = [];
     this.poseAnim = [];
     this.roarWaves = [];
+    this.fx = [];
     this.scorers = [];
     this.resultQueued = false;
     this.prevHumanL = false;
@@ -349,7 +442,7 @@ export class MatchScene extends Phaser.Scene {
 
     const cam = this.cameras.main;
     cam.scrollX = cameraTargetX(this.state.ball.x, this.view.W);
-    cam.scrollY = (BASE_H - this.view.H) / 2;
+    cam.scrollY = this.fieldScrollY(this.view.H);
 
     (window as unknown as { __sg: unknown }).__sg = {
       state: () => this.state,
@@ -423,12 +516,20 @@ export class MatchScene extends Phaser.Scene {
         this.showBanner(`進球！ ${players[e.scorerIdx].name}`, 2000);
       } else if (e.type === 'special') {
         this.showSpecial(`${e.name}！`, SPECIAL_COLORS[e.kind]);
-        this.playPose(e.playerIdx, 'special', SPECIAL_POSE_MS);
+        // A lunge shows its dash pose for the whole dash (spriteAnimFor), not the activation pose.
+        if (players[e.playerIdx].specialMode !== 'lunge') this.playPose(e.playerIdx, 'special', SPECIAL_POSE_MS);
       } else if (e.type === 'specialShot') {
         this.playPose(e.playerIdx, 'shot', SHOT_POSE_MS);
       } else if (e.type === 'roar') {
         this.roarWaves.push({ x: e.x, y: e.y, radius: e.radius, startMs: this.time.now });
         this.cameras.main.shake(ROAR_SHAKE_MS, ROAR_SHAKE_INTENSITY);
+      } else if (e.type === 'attack') {
+        if (e.kind === 'punch') this.thrustFx(e.playerIdx);
+      } else if (e.type === 'lungeStart') {
+        this.cameras.main.shake(LUNGE_SHAKE_MS, LUNGE_SHAKE_INTENSITY);
+        this.lungeFx(e);
+      } else if (e.type === 'lungeEnd') {
+        this.burstFx(e.playerIdx, e.x, e.y);
       } else if (e.type === 'pkResult') {
         const text = e.outcome === 'goal' ? '進球！' : e.outcome === 'save' ? '撲救！' : '射偏！';
         this.showBanner(text, PK_RESULT_BANNER_MS);
@@ -505,15 +606,21 @@ export class MatchScene extends Phaser.Scene {
     } else {
       cam.scrollX += (cameraTargetX(this.state.ball.x, W) - cam.scrollX) * CAMERA_LERP;
     }
-    // Centre the field band vertically when the window is taller than the 360 base height.
-    cam.scrollY = (BASE_H - H) / 2;
+    cam.scrollY = this.fieldScrollY(H);
 
     this.state.players.forEach((p, i) => this.drawPlayer(this.playerViews[i], p, time));
     this.drawBall();
     this.drawRoarWaves();
+    this.drawFx();
     this.drawHud();
     this.drawMinimap();
     this.drawArrow();
+  }
+
+  /** Camera scrollY: centres the field band vertically when the window is taller than the base height. */
+  private fieldScrollY(H: number): number {
+    const shift = this.baseH === BASE_H ? 0 : TOUCH_FIELD_SHIFT_Y;
+    return (this.baseH - H) / 2 + shift;
   }
 
   /** Expanding shockwave rings for roars, on the ground plane (squashed by DEPTH_SCALE). */
@@ -528,6 +635,113 @@ export class MatchScene extends Phaser.Scene {
       g.lineStyle(1 + 4 * (1 - t), 0xffe9a8, 1 - t);
       g.strokeEllipse(sx, sy, R * 2, R * 2 * DEPTH_SCALE);
     }
+  }
+
+  /** The character's effect sheet, when its sprite config has one that loaded. */
+  private fxOwner(idx: number): { cfg: SpriteConfig; fx: FxSheet } | null {
+    const cfg = this.playerViews[idx].spriteCfg;
+    if (!cfg?.fx || !this.textures.exists(cfg.fx.key)) return null;
+    return { cfg, fx: cfg.fx };
+  }
+
+  /** Adds one effect (additive blend) to the scene and tracks it in this.fx until it is removed. */
+  private playFx(fx: FxSheet, name: FxAnim, s: FxSpawn): void {
+    const def = fx.anims[name];
+    const durMs = (def.frames.length / def.fps) * 1000;
+    const holdMs = s.holdMs ?? durMs;
+    const sprite = this.add
+      .sprite(s.x, s.y, fx.key)
+      .setName(`fx:${name}`)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setDisplaySize(s.w, s.h)
+      .setDepth(s.depth)
+      .setFlipX(s.flip ?? false)
+      .setRotation(s.angle ?? 0)
+      .play(fxAnimKey(fx, name));
+    this.fx.push({
+      sprite,
+      startMs: this.time.now,
+      holdMs,
+      endMs: s.endMs ?? holdMs,
+      follow: s.follow ?? null,
+      offX: s.offX ?? 0,
+      offY: s.offY ?? 0,
+    });
+  }
+
+  /** Zhao Yun's spear thrust: a short streak in front of him at spear height. */
+  private thrustFx(idx: number): void {
+    const owner = this.fxOwner(idx);
+    if (!owner) return;
+    const p = this.state.players[idx];
+    const feet = worldToScreen(p.x, p.y, 0);
+    const dir = p.facingX < 0 ? -1 : 1;
+    this.playFx(owner.fx, 'thrust', {
+      x: feet.sx + dir * THRUST_FX_AHEAD,
+      y: feet.sy - owner.cfg.displayHeight * THRUST_FX_HEIGHT,
+      w: THRUST_FX_LEN,
+      h: THRUST_FX_LEN,
+      depth: p.y + 0.5,
+      flip: dir < 0,
+    });
+  }
+
+  /** Zhao Yun's lunge: the dragon along the dash, following him for the lunge's length, and a burst where he starts. */
+  private lungeFx(e: Extract<SimEvent, { type: 'lungeStart' }>): void {
+    this.burstFx(e.playerIdx, e.x, e.y);
+    const owner = this.fxOwner(e.playerIdx);
+    if (!owner) return;
+    // Screen direction of the dash: y is depth, so it is squashed like the field.
+    const from = worldToScreen(e.x, e.y, 0);
+    const to = worldToScreen(e.x + e.dirX * 100, e.y + e.dirY * 100, 0);
+    const len = Math.hypot(to.sx - from.sx, to.sy - from.sy) || 1;
+    const ux = (to.sx - from.sx) / len;
+    const uy = (to.sy - from.sy) / len;
+    // The art faces right. A leftward dash is mirrored, so its angle is taken from the reversed direction.
+    const flip = e.dirX < 0;
+    const angle = flip ? Math.atan2(-uy, -ux) : Math.atan2(uy, ux);
+    const holdMs = (LUNGE_TICKS / TICK_HZ) * 1000;
+    this.playFx(owner.fx, 'lunge', {
+      x: from.sx + ux * LUNGE_FX_AHEAD,
+      y: from.sy + uy * LUNGE_FX_AHEAD,
+      w: LUNGE_FX_LEN,
+      h: LUNGE_FX_H,
+      depth: e.y + 0.5,
+      flip,
+      angle,
+      holdMs,
+      endMs: holdMs + LUNGE_FADE_MS,
+      follow: e.playerIdx,
+      offX: ux * LUNGE_FX_AHEAD,
+      offY: uy * LUNGE_FX_AHEAD,
+    });
+  }
+
+  /** An impact burst on the ground at (x, y) in sim space. */
+  private burstFx(idx: number, x: number, y: number): void {
+    const owner = this.fxOwner(idx);
+    if (!owner) return;
+    const pt = worldToScreen(x, y, 0);
+    this.playFx(owner.fx, 'burst', { x: pt.sx, y: pt.sy, w: BURST_FX_SIZE, h: BURST_FX_SIZE, depth: y + 0.5 });
+  }
+
+  /** Keeps the attached effects on their player and removes each effect once its end time has passed. */
+  private drawFx(): void {
+    const now = this.time.now;
+    this.fx = this.fx.filter((f) => {
+      const t = now - f.startMs;
+      if (t >= f.endMs) {
+        f.sprite.destroy();
+        return false;
+      }
+      f.sprite.setAlpha(t < f.holdMs ? 1 : 1 - (t - f.holdMs) / (f.endMs - f.holdMs));
+      if (f.follow !== null) {
+        const p = this.state.players[f.follow];
+        const feet = worldToScreen(p.x, p.y, 0);
+        f.sprite.setPosition(feet.sx + f.offX, feet.sy + f.offY).setDepth(p.y + 0.5);
+      }
+      return true;
+    });
   }
 
   /** Field overview in the top-left: players, ball, goals and the camera's x range. Hidden during the shootout. */
@@ -746,6 +960,7 @@ export class MatchScene extends Phaser.Scene {
       case 'down':
       case 'dive':
       case 'recover':
+      case 'lunge':
         return p.action;
       case 'charge':
         return 'charge';
@@ -822,8 +1037,8 @@ export class MatchScene extends Phaser.Scene {
       g.strokeEllipse(0, 0, R * 2, R * 2 * DEPTH_SCALE);
     }
 
-    // Rampage aura: a pulsing gold ring over an orange glow, under the sprite.
-    if (p.rampageTicks > 0) {
+    // Invincible aura (rampage or lunge): a pulsing gold ring over an orange glow, under the sprite.
+    if (isInvincible(p)) {
       const pulse = 0.5 + 0.5 * Math.sin(time / 90);
       const R = r * 2.7 + r * 0.45 * pulse;
       g.fillStyle(0xff8c1a, 0.22 + 0.14 * pulse);
@@ -891,9 +1106,12 @@ export class MatchScene extends Phaser.Scene {
     // Name label above the top of the figure; human marker above the name.
     const labelY = topY - 2;
     view.label.setPosition(0, labelY);
-    const invincible = p.idx === this.humanIdx && p.rampageTicks > 0;
+    const invincible = p.idx === this.humanIdx && isInvincible(p);
     view.tag.setVisible(invincible);
-    if (invincible) view.tag.setPosition(0, labelY - 20).setText(`無敵 ${(p.rampageTicks / TICK_HZ).toFixed(1)}`);
+    if (invincible) {
+      const ticks = p.action === 'lunge' ? p.actionTimer : p.rampageTicks;
+      view.tag.setPosition(0, labelY - 20).setText(`無敵 ${(ticks / TICK_HZ).toFixed(1)}`);
+    }
     if (p.idx === this.humanIdx) {
       const tipY = labelY - 13;
       g.fillStyle(HUMAN_MARK, 1);
@@ -1048,12 +1266,13 @@ export class MatchScene extends Phaser.Scene {
     this.pkMeterLabel.setPosition(W - PK_METER_RIGHT - 6, H - PK_METER_BOTTOM + PK_METER_H / 2);
 
     const left = orderLeft(W);
-    this.pkOrderTitle.setPosition(W / 2, 52);
-    this.pkOrderHint.setPosition(W / 2, 74);
-    this.pkOrderCount.setPosition(W / 2, 292);
-    this.pkOrderUndo.setPosition(left + ORDER_UNDO_X + ORDER_UNDO_W / 2, ORDER_UNDO_Y + ORDER_UNDO_H / 2);
+    const o = orderLayout(H);
+    this.pkOrderTitle.setPosition(W / 2, o.titleY);
+    this.pkOrderHint.setPosition(W / 2, o.hintY);
+    this.pkOrderCount.setPosition(W / 2, o.countY);
+    this.pkOrderUndo.setPosition(left + ORDER_UNDO_X + ORDER_UNDO_W / 2, o.undoY + o.undoH / 2);
     this.pkOrderRows.forEach((row, i) => {
-      const y = ORDER_ROW_Y0 + i * ORDER_ROW_H;
+      const y = o.rowY0 + i * o.rowH;
       row.slot.setPosition(left + ORDER_ROW_X + 20, y);
       row.role.setPosition(left + ORDER_ROW_X + 54, y);
       row.name.setPosition(left + ORDER_ROW_X + 80, y);
@@ -1158,15 +1377,16 @@ export class MatchScene extends Phaser.Scene {
     const x = pointer.x / this.view.Z;
     const y = pointer.y / this.view.Z;
     const left = orderLeft(this.view.W);
+    const o = orderLayout(this.view.H);
     const undoX = left + ORDER_UNDO_X;
-    if (x >= undoX && x < undoX + ORDER_UNDO_W && y >= ORDER_UNDO_Y && y < ORDER_UNDO_Y + ORDER_UNDO_H) {
+    if (x >= undoX && x < undoX + ORDER_UNDO_W && y >= o.undoY && y < o.undoY + o.undoH) {
       this.pkOrderTap = 'undo';
       return;
     }
     const rowX = left + ORDER_ROW_X;
     for (let i = 0; i < this.pkOrderRows.length; i++) {
-      const top = ORDER_ROW_Y0 + i * ORDER_ROW_H - ORDER_ROW_BOX_H / 2;
-      if (x >= rowX && x < rowX + ORDER_ROW_W && y >= top && y < top + ORDER_ROW_BOX_H) {
+      const top = o.rowY0 + i * o.rowH - o.rowBoxH / 2;
+      if (x >= rowX && x < rowX + ORDER_ROW_W && y >= top && y < top + o.rowBoxH) {
         this.pkOrderTap = i;
         return;
       }
@@ -1205,8 +1425,13 @@ export class MatchScene extends Phaser.Scene {
     this.clockText.setText(`${match.half === 1 ? '上半場' : '下半場'} ${mm}:${ss}`);
 
     const p = players[this.humanIdx];
-    this.touch.setSpecialCooldown(p.specialCooldown);
-    this.touch.setSpecialNeedsBall(p.specialMode === 'rampage' && this.state.ball.ownerIdx !== p.idx);
+    const block =
+      p.specialMode !== 'roar' && this.state.ball.ownerIdx !== p.idx
+        ? '需持球'
+        : p.stamina < SPECIAL_STAMINA_COST
+          ? '體力不足'
+          : null;
+    this.touch.setSpecialStatus({ cooldownTicks: p.specialCooldown, cooldownTotal: SPECIAL_COOLDOWN_TICKS, block });
     this.hudNameText.setText(p.name);
     this.hudSpecialText.setText(`必殺：${p.specialName}`);
 
@@ -1242,6 +1467,7 @@ export class MatchScene extends Phaser.Scene {
   private drawPkHud(pk: PkState): void {
     const { players } = this.state;
     const { W, H } = this.view;
+    const aimRight = this.touch.isShown() ? PK_AIM_RIGHT_TOUCH : PK_AIM_RIGHT;
     const sudden = pk.kicks[0].length >= PK_ROUNDS && pk.kicks[1].length >= PK_ROUNDS;
     this.clockText.setText(sudden ? 'PK 大戰　驟死' : 'PK 大戰');
     this.pkScoreText.setText(`PK ${pk.score[0]} - ${pk.score[1]}`);
@@ -1284,13 +1510,13 @@ export class MatchScene extends Phaser.Scene {
       const boxW = 3 * PK_CELL_W + 2 * PK_CELL_GAP;
       const boxH = 2 * PK_CELL_H + PK_CELL_GAP;
       aim.fillStyle(0x000000, 0.55);
-      aim.fillRect((W - PK_AIM_RIGHT) - 6, PK_AIM_Y - 6, boxW + 12, boxH + 12);
+      aim.fillRect((W - aimRight) - 6, PK_AIM_Y - 6, boxW + 12, boxH + 12);
       for (let row = 0; row < 2; row++) {
         for (let col = 0; col < 3; col++) {
           const on = col === selCol && (row === 0) === selHigh;
           aim.fillStyle(on ? highlight : 0x2b333d, 1);
           aim.fillRect(
-            (W - PK_AIM_RIGHT) + col * (PK_CELL_W + PK_CELL_GAP),
+            (W - aimRight) + col * (PK_CELL_W + PK_CELL_GAP),
             PK_AIM_Y + row * (PK_CELL_H + PK_CELL_GAP),
             PK_CELL_W,
             PK_CELL_H,
@@ -1403,14 +1629,15 @@ export class MatchScene extends Phaser.Scene {
   private refreshPkOrder(): void {
     const roster = this.humanRoster();
     const left = orderLeft(this.view.W);
+    const o = orderLayout(this.view.H);
     const g = this.pkOrderGfx.clear();
     g.fillStyle(0x000000, 0.8);
-    g.fillRect(left, ORDER_BOX_Y, ORDER_BOX_W, ORDER_BOX_H);
+    g.fillRect(left, o.boxY, ORDER_BOX_W, o.boxH);
     roster.forEach((idx, i) => {
       const p = this.state.players[idx];
       const pos = this.pkOrderPicks.indexOf(idx);
       g.fillStyle(i === this.pkOrderCursor ? 0x3a5a7a : 0x1d2630, 1);
-      g.fillRect(left + ORDER_ROW_X, ORDER_ROW_Y0 + i * ORDER_ROW_H - ORDER_ROW_BOX_H / 2, ORDER_ROW_W, ORDER_ROW_BOX_H);
+      g.fillRect(left + ORDER_ROW_X, o.rowY0 + i * o.rowH - o.rowBoxH / 2, ORDER_ROW_W, o.rowBoxH);
       const row = this.pkOrderRows[i];
       row.slot.setText(pos >= 0 ? String(pos + 1) : '-');
       row.role.setText(p.role);
@@ -1418,7 +1645,7 @@ export class MatchScene extends Phaser.Scene {
       row.stats.setText(`力量 ${p.stats.power}　技巧 ${p.stats.technique}`);
     });
     g.fillStyle(0x3a5a7a, 1);
-    g.fillRect(left + ORDER_UNDO_X, ORDER_UNDO_Y, ORDER_UNDO_W, ORDER_UNDO_H);
+    g.fillRect(left + ORDER_UNDO_X, o.undoY, ORDER_UNDO_W, o.undoH);
     this.pkOrderCount.setText(`已選 ${this.pkOrderPicks.length} / ${PK_ROUNDS}`);
   }
 
