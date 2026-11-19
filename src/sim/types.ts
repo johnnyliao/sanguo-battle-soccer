@@ -107,8 +107,14 @@ export interface Rider {
   vx: number;
   vy: number;
   facingX: number;
-  /** Idx of the opponent being charged, or -1 when none is valid (the rider roams straight). */
+  /** Idx of the opponent being charged, or -1 when none is valid (the rider roams). */
   targetIdx: number;
+  /** Spawn slot 0..SUMMON_RIDERS-1: sets the spawn angle and which side the rider curves in from. */
+  slot: number;
+  /** Direction of roaming, in radians. Used only while targetIdx is -1. */
+  wanderAngle: number;
+  /** Ticks until the roaming direction is picked again. */
+  wanderTicks: number;
   /** Ticks left before the rider vanishes. */
   ticksLeft: number;
   /** Victim idxs this rider has already knocked down. */

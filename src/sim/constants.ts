@@ -100,8 +100,20 @@ export const RIDER_SPEED = 300;
 export const RIDER_TURN = 0.12;
 /** A rider knocks down an opponent whose centre is within this many px of its own, plus the opponent's radius. */
 export const RIDER_HIT_RADIUS = 18;
-/** Riders appear on a circle this many px around Ma Chao, starting behind him. */
-export const RIDER_SPAWN_RADIUS = 50;
+/** Riders appear on a circle this many px around Ma Chao, spread evenly all round it. */
+export const RIDER_SPAWN_RADIUS = 110;
+/** A rider charging a target aims at a point this far to its side (scaled by slot), capped at RIDER_LATERAL_MAX. */
+export const RIDER_LATERAL_MAX = 70;
+/** Lateral aim offset per px of distance to the target, before the cap. The offset shrinks as the rider closes in. */
+export const RIDER_LATERAL_RATIO = 0.5;
+/** Extra lateral aim per slot: slot n scales the offset by 1 + n * this. */
+export const RIDER_LATERAL_SLOT_GROWTH = 0.25;
+/** Riders closer than this many px push each other apart. */
+export const RIDER_SEPARATION_DIST = 45;
+/** Separation acceleration in px per second squared, at zero distance (it fades linearly to 0 at RIDER_SEPARATION_DIST). */
+export const RIDER_SEPARATION_ACCEL = 600;
+/** A roaming rider (no valid target) picks a new direction every this many ticks. */
+export const RIDER_WANDER_TICKS = 40;
 
 export const KICKOFF_TICKS = 60;
 export const GOAL_CELEBRATE_TICKS = 150;

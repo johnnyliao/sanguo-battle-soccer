@@ -38,9 +38,15 @@ import {
   PUNCH_TICKS,
   RAMPAGE_BUMP_COOLDOWN,
   RIDER_HIT_RADIUS,
+  RIDER_LATERAL_MAX,
+  RIDER_LATERAL_RATIO,
+  RIDER_LATERAL_SLOT_GROWTH,
+  RIDER_SEPARATION_ACCEL,
+  RIDER_SEPARATION_DIST,
   RIDER_SPAWN_RADIUS,
   RIDER_SPEED,
   RIDER_TURN,
+  RIDER_WANDER_TICKS,
   RAMPAGE_BUMP_SPEED,
   RAMPAGE_BUMP_STAMINA,
   RAMPAGE_SPEED_MULT,
@@ -604,12 +610,15 @@ function startSummon(state: GameState, p: Player): void {
       vy: 0,
       facingX: p.facingX,
       targetIdx: -1,
+      slot: i,
+      wanderAngle: rngNext(state) * 2 * Math.PI,
+      wanderTicks: RIDER_WANDER_TICKS,
       ticksLeft: SUMMON_TICKS,
       hit: [],
     };
     rider.targetIdx = pickRiderTarget(state, rider, claimed);
     if (rider.targetIdx !== -1) claimed.push(rider.targetIdx);
-    // Starts at full speed toward its target (or straight ahead when there is none).
+    // Starts at full speed toward its aim point (or in its roaming direction when there is no target).
     const heading = riderHeading(state, rider);
     rider.vx = heading.x * RIDER_SPEED;
     rider.vy = heading.y * RIDER_SPEED;
@@ -618,16 +627,30 @@ function startSummon(state: GameState, p: Player): void {
   }
 }
 
-/** Unit direction from the rider to its target, or the summoner's facing when it has none. */
+/**
+ * Unit direction the rider steers along. With a target it aims at the target plus a lateral offset to the side of the
+ * rider's slot (the offset shrinks as the rider closes in), so riders curve in from different sides. Without one it
+ * follows the roaming direction.
+ */
 function riderHeading(state: GameState, r: Rider): { x: number; y: number } {
   if (r.targetIdx !== -1) {
     const t = state.players[r.targetIdx];
     const dx = t.x - r.x;
     const dy = t.y - r.y;
-    const len = Math.sqrt(dx * dx + dy * dy);
-    if (len > 0) return { x: dx / len, y: dy / len };
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > 0) {
+      const side = r.slot % 2 === 0 ? 1 : -1;
+      const lateral =
+        side * (1 + r.slot * RIDER_LATERAL_SLOT_GROWTH) * Math.min(RIDER_LATERAL_MAX, dist * RIDER_LATERAL_RATIO);
+      const perpX = -dy / dist;
+      const perpY = dx / dist;
+      const aimX = t.x + perpX * lateral - r.x;
+      const aimY = t.y + perpY * lateral - r.y;
+      const aimLen = Math.sqrt(aimX * aimX + aimY * aimY);
+      if (aimLen > 0) return { x: aimX / aimLen, y: aimY / aimLen };
+    }
   }
-  return { x: state.players[r.ownerIdx].facingX, y: state.players[r.ownerIdx].facingY };
+  return { x: Math.cos(r.wanderAngle), y: Math.sin(r.wanderAngle) };
 }
 
 /** A rider may charge a player that is an opponent, standing, not invincible, and not already knocked down by it. */
@@ -660,6 +683,7 @@ function pickRiderTarget(state: GameState, r: Rider, claimed: number[]): number 
  * Riders never collide with players, cannot be hit, and do not touch the ball except through a knocked-down carrier.
  */
 export function updateRiders(state: GameState): void {
+  separateRiders(state.riders);
   state.riders = state.riders.filter((r) => {
     advanceRider(state, r);
     r.ticksLeft--;
@@ -669,16 +693,52 @@ export function updateRiders(state: GameState): void {
   });
 }
 
+/** Pushes every pair of riders closer than RIDER_SEPARATION_DIST apart in velocity, harder the closer they are. */
+function separateRiders(riders: Rider[]): void {
+  for (let i = 0; i < riders.length; i++) {
+    for (let j = i + 1; j < riders.length; j++) {
+      const a = riders[i];
+      const b = riders[j];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist >= RIDER_SEPARATION_DIST) continue;
+      // Exactly on top of each other: split along x, so the push is still defined.
+      const nx = dist > 0 ? dx / dist : 1;
+      const ny = dist > 0 ? dy / dist : 0;
+      const push = RIDER_SEPARATION_ACCEL * (1 - dist / RIDER_SEPARATION_DIST) * DT;
+      a.vx -= nx * push;
+      a.vy -= ny * push;
+      b.vx += nx * push;
+      b.vy += ny * push;
+    }
+  }
+}
+
+/** Opponents already targeted by the other riders, so a rider can prefer a different one. */
+function claimedTargets(state: GameState, r: Rider): number[] {
+  const claimed: number[] = [];
+  for (const o of state.riders) {
+    if (o !== r && o.targetIdx !== -1) claimed.push(o.targetIdx);
+  }
+  return claimed;
+}
+
 function advanceRider(state: GameState, r: Rider): void {
   const current = r.targetIdx !== -1 ? state.players[r.targetIdx] : null;
   if (current === null || !isRiderTargetOk(current, r)) {
-    r.targetIdx = pickRiderTarget(state, r, []);
+    r.targetIdx = pickRiderTarget(state, r, claimedTargets(state, r));
   }
-  if (r.targetIdx !== -1) {
-    const heading = riderHeading(state, r);
-    r.vx += (heading.x * RIDER_SPEED - r.vx) * RIDER_TURN;
-    r.vy += (heading.y * RIDER_SPEED - r.vy) * RIDER_TURN;
+  if (r.targetIdx === -1) {
+    r.wanderTicks--;
+    if (r.wanderTicks <= 0) {
+      r.wanderAngle = rngNext(state) * 2 * Math.PI;
+      r.wanderTicks = RIDER_WANDER_TICKS;
+    }
   }
+  const heading = riderHeading(state, r);
+  r.vx += (heading.x * RIDER_SPEED - r.vx) * RIDER_TURN;
+  r.vy += (heading.y * RIDER_SPEED - r.vy) * RIDER_TURN;
 
   r.x += r.vx * DT;
   r.y += r.vy * DT;

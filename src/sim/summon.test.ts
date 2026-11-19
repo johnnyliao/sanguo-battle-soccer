@@ -27,6 +27,7 @@ const SIZE_PARAMS: Record<BodySize, SizeParams> = {
 
 const ROLES: Role[] = ['GK', 'DF', 'MF', 'MF', 'FW'];
 const MACHAO_IDX = 3;
+const OPPONENT_IDXS = [5, 6, 7, 8, 9];
 
 function makeDef(id: string, role: Role, size: BodySize): CharacterDef {
   return {
@@ -271,4 +272,66 @@ describe('Ma Chao summon (西涼鐵騎)', () => {
     };
     expect(run()).toBe(run());
   });
+
+  it('five riders against a tight group of opponents stay apart: pairwise minimum over 30 px after 30 ticks', () => {
+    const state = summonerState(600);
+    OPPONENT_IDXS.forEach((idx, i) => {
+      state.players[idx].x = 820 + (i % 2) * 4;
+      state.players[idx].y = 120 + i * 4;
+    });
+
+    step(state, inputFor(MACHAO_IDX, { l: true }));
+    runIdle(state, 30);
+
+    expect(state.riders).toHaveLength(SUMMON_RIDERS);
+    expect(minRiderGap(state)).toBeGreaterThan(30);
+  });
+
+  it('with five opponents spread out, the five riders start on five distinct targets', () => {
+    const state = summonerState(600);
+    const spots = [
+      [760, 40],
+      [760, 100],
+      [760, 160],
+      [760, 220],
+      [900, 130],
+    ];
+    OPPONENT_IDXS.forEach((idx, i) => {
+      state.players[idx].x = spots[i][0];
+      state.players[idx].y = spots[i][1];
+    });
+
+    step(state, inputFor(MACHAO_IDX, { l: true }));
+
+    const targets = state.riders.map((r) => r.targetIdx);
+    expect(new Set(targets).size).toBe(SUMMON_RIDERS);
+    for (const t of targets) expect(OPPONENT_IDXS).toContain(t);
+  });
+
+  it('the spread-out riders hash the same across two identical runs', () => {
+    const run = (): string => {
+      const state = summonerState(600, 4);
+      OPPONENT_IDXS.forEach((idx, i) => {
+        state.players[idx].x = 820 + (i % 2) * 4;
+        state.players[idx].y = 120 + i * 4;
+      });
+      step(state, inputFor(MACHAO_IDX, { l: true }));
+      runIdle(state, 60);
+      return hashState(state);
+    };
+    expect(run()).toBe(run());
+  });
 });
+
+/** Smallest distance between any two riders in the state. */
+function minRiderGap(state: GameState): number {
+  let best = Infinity;
+  for (let i = 0; i < state.riders.length; i++) {
+    for (let j = i + 1; j < state.riders.length; j++) {
+      const a = state.riders[i];
+      const b = state.riders[j];
+      best = Math.min(best, Math.hypot(a.x - b.x, a.y - b.y));
+    }
+  }
+  return best;
+}
