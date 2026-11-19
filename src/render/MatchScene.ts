@@ -15,6 +15,7 @@ import {
   EMPTY_INPUT,
   GOAL_HALF_W,
   LUNGE_TICKS,
+  RIDER_HIT_RADIUS,
   SPECIAL_COOLDOWN_TICKS,
   SPECIAL_STAMINA_COST,
   TICK_HZ,
@@ -30,6 +31,7 @@ import {
   type MatchPhase,
   type PkState,
   type Player,
+  type Rider,
   type SimEvent,
 } from '../sim';
 import { DEPTH_SCALE, cameraTargetX, pkCameraX, worldToScreen, FIELD_TOP } from './projection';
@@ -38,6 +40,8 @@ import {
   createSpriteAnims,
   fxAnimKey,
   preloadSprites,
+  RIDER_SHEET,
+  riderAnimKey,
   SPRITE_CONFIGS,
   spriteAnimKey,
   type FxAnim,
@@ -64,6 +68,13 @@ interface PlayerView {
   /** Set when the character's sheet loaded. The block figure is drawn when this is null. */
   sprite: Phaser.GameObjects.Sprite | null;
   spriteCfg: SpriteConfig | null;
+}
+
+/** A cavalry rider on screen: its container (team shadow and sprite) on the rider's ground point, and its summoner. */
+interface RiderView {
+  container: Phaser.GameObjects.Container;
+  sprite: Phaser.GameObjects.Sprite;
+  ownerIdx: number;
 }
 
 interface TrailPoint {
@@ -245,6 +256,14 @@ const THRUST_FX_AHEAD = 30;
 const THRUST_FX_HEIGHT = 0.45;
 /** Impact burst at the lunge start and end. */
 const BURST_FX_SIZE = 60;
+/** Ma Chao's summon: the call's width and its small camera shake. */
+const SUMMON_FX_SIZE = 110;
+const SUMMON_SHAKE_MS = 120;
+const SUMMON_SHAKE_INTENSITY = 0.002;
+/** Ma Chao's riders: the burst where a rider appears or hits, the smoke where it vanishes, and the sprite's alpha. */
+const RIDER_BURST_FX_SIZE = 70;
+const RIDER_SMOKE_FX_SIZE = 80;
+const RIDER_ALPHA = 0.95;
 /** Zhuge Liang's beam: channel circle over his body (its size), energy ball size, impact size, and the impact height over a victim's feet. */
 const BEAM_CHARGE_FX_SIZE = 80;
 const BEAM_BALL_FX_SIZE = 56;
@@ -347,6 +366,7 @@ export class MatchScene extends Phaser.Scene {
   private roarWaves: RoarWave[] = [];
   private roarGfx!: Phaser.GameObjects.Graphics;
   private fx: FxInstance[] = [];
+  private riderViews = new Map<number, RiderView>();
   /** Zhuge Liang's energy ball in flight (hidden otherwise). */
   private beamBall: Phaser.GameObjects.Sprite | null = null;
   /** The ball's special kind before this tick's step, so a goal in this tick can tell a beam scored. */
@@ -454,6 +474,7 @@ export class MatchScene extends Phaser.Scene {
     this.events.once('shutdown', () => {
       this.localInput.destroy();
       this.touch.destroy();
+      this.clearRiders();
     });
 
     this.drawField();
@@ -575,6 +596,25 @@ export class MatchScene extends Phaser.Scene {
         this.lungeFx(e);
       } else if (e.type === 'lungeEnd') {
         this.burstFx(e.playerIdx, e.x, e.y);
+      } else if (e.type === 'summonStart') {
+        this.cameras.main.shake(SUMMON_SHAKE_MS, SUMMON_SHAKE_INTENSITY);
+        this.summonFx(e.playerIdx);
+      } else if (e.type === 'riderSpawn') {
+        const rider = this.state.riders.find((r) => r.id === e.riderId);
+        if (rider) {
+          this.riderView(rider);
+          this.groundFx(rider.ownerIdx, 'burst', e.x, e.y, RIDER_BURST_FX_SIZE);
+        }
+      } else if (e.type === 'riderHit') {
+        const view = this.riderViews.get(e.riderId);
+        if (view) {
+          view.sprite.play(riderAnimKey('charge'));
+          const victim = players[e.victimIdx];
+          this.groundFx(view.ownerIdx, 'burst', victim.x, victim.y, RIDER_BURST_FX_SIZE);
+        }
+      } else if (e.type === 'riderEnd') {
+        const view = this.riderViews.get(e.riderId);
+        if (view) this.groundFx(view.ownerIdx, 'smoke', e.x, e.y, RIDER_SMOKE_FX_SIZE);
       } else if (e.type === 'pkResult') {
         const text = e.outcome === 'goal' ? '進球！' : e.outcome === 'save' ? '撲救！' : '射偏！';
         this.showBanner(text, PK_RESULT_BANNER_MS);
@@ -654,6 +694,7 @@ export class MatchScene extends Phaser.Scene {
     cam.scrollY = this.fieldScrollY(H);
 
     this.state.players.forEach((p, i) => this.drawPlayer(this.playerViews[i], p, time));
+    this.drawRiders();
     this.drawBall();
     this.drawRoarWaves();
     this.drawFx();
@@ -722,14 +763,93 @@ export class MatchScene extends Phaser.Scene {
     const p = this.state.players[idx];
     const feet = worldToScreen(p.x, p.y, 0);
     const dir = p.facingX < 0 ? -1 : 1;
+    const len = owner.fx.punchWidth ?? THRUST_FX_LEN;
     this.playFx(owner.fx, owner.fx.punch, {
       x: feet.sx + dir * THRUST_FX_AHEAD,
       y: feet.sy - owner.cfg.displayHeight * THRUST_FX_HEIGHT,
-      w: THRUST_FX_LEN,
-      h: (THRUST_FX_LEN * owner.fx.frameHeight) / owner.fx.frameWidth,
+      w: len,
+      h: (len * owner.fx.frameHeight) / owner.fx.frameWidth,
       depth: p.y + 0.5,
       flip: dir < 0,
     });
+  }
+
+  /** One of an owner's effects on the ground at sim point (x, y), `size` px wide, keeping the sheet's proportions. */
+  private groundFx(idx: number, name: FxAnim, x: number, y: number, size: number): void {
+    const owner = this.fxOwner(idx);
+    if (!owner) return;
+    const pt = worldToScreen(x, y, 0);
+    this.playFx(owner.fx, name, {
+      x: pt.sx,
+      y: pt.sy,
+      w: size,
+      h: (size * owner.fx.frameHeight) / owner.fx.frameWidth,
+      depth: y + 0.5,
+    });
+  }
+
+  /** Ma Chao's summon call: the banner effect at his feet, following him, from the summon start. */
+  private summonFx(idx: number): void {
+    const owner = this.fxOwner(idx);
+    if (!owner) return;
+    const p = this.state.players[idx];
+    const feet = worldToScreen(p.x, p.y, 0);
+    this.playFx(owner.fx, 'summon', {
+      x: feet.sx,
+      y: feet.sy,
+      w: SUMMON_FX_SIZE,
+      h: (SUMMON_FX_SIZE * owner.fx.frameHeight) / owner.fx.frameWidth,
+      depth: p.y + 0.5,
+      follow: idx,
+    });
+  }
+
+  /** The rider's sprite view, created the first time it is seen. */
+  private riderView(r: Rider): RiderView {
+    const existing = this.riderViews.get(r.id);
+    if (existing) return existing;
+    const shadow = this.add.graphics();
+    shadow.fillStyle(this.teamColors[r.team], 0.45);
+    shadow.fillEllipse(0, 0, RIDER_HIT_RADIUS * 2.4, RIDER_HIT_RADIUS * 1.2);
+    const sprite = this.add.sprite(0, 0, RIDER_SHEET.key).play(riderAnimKey('gallop'));
+    const container = this.add.container(0, 0, [shadow, sprite]).setName(`rider:${r.id}`);
+    const view: RiderView = { container, sprite, ownerIdx: r.ownerIdx };
+    this.riderViews.set(r.id, view);
+    return view;
+  }
+
+  /**
+   * One sprite per live rider, on its ground point and depth-sorted with the players by y. A rider whose charge has
+   * finished returns to the gallop. Views of riders that are gone are destroyed.
+   */
+  private drawRiders(): void {
+    const live = new Set(this.state.riders.map((r) => r.id));
+    for (const [id, view] of this.riderViews) {
+      if (live.has(id)) continue;
+      view.container.destroy();
+      this.riderViews.delete(id);
+    }
+    const { meta, displayHeight } = RIDER_SHEET;
+    const ax = meta.anchorX / meta.frameWidth;
+    const ay = meta.anchorY / meta.frameHeight;
+    for (const r of this.state.riders) {
+      const view = this.riderView(r);
+      const { sx, sy } = worldToScreen(r.x, r.y, 0);
+      const flip = r.facingX < 0;
+      view.container.setPosition(sx, sy).setDepth(r.y);
+      view.sprite
+        .setOrigin(flip ? 1 - ax : ax, ay)
+        .setFlipX(flip)
+        .setScale(displayHeight / meta.frameHeight)
+        .setAlpha(RIDER_ALPHA);
+      if (!view.sprite.anims.isPlaying) view.sprite.play(riderAnimKey('gallop'));
+    }
+  }
+
+  /** Removes every rider sprite (scene shutdown). */
+  private clearRiders(): void {
+    for (const view of this.riderViews.values()) view.container.destroy();
+    this.riderViews.clear();
   }
 
   /** Zhuge Liang's effect sheet (channel, energy ball, impact), when it loaded. */

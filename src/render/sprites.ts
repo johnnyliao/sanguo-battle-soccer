@@ -11,9 +11,10 @@ export type SpriteAnim = 'idle' | 'run' | 'attack' | 'charge' | 'special' | 'cas
 
 /**
  * Effects played over the character (see MatchScene): a spear thrust or fan slash, the lunge's dragon, an impact burst,
- * and for Zhuge Liang's beam the channel circle, the energy ball and the impact.
+ * for Zhuge Liang's beam the channel circle, the energy ball and the impact, and for Ma Chao's summon the call and the
+ * smoke a rider leaves when it vanishes.
  */
-export type FxAnim = 'thrust' | 'lunge' | 'burst' | 'slash' | 'charge' | 'ball' | 'impact';
+export type FxAnim = 'thrust' | 'lunge' | 'burst' | 'slash' | 'charge' | 'ball' | 'impact' | 'summon' | 'smoke';
 
 export interface SpriteMeta {
   frameWidth: number;
@@ -40,6 +41,8 @@ export interface FxSheet {
   frameHeight: number;
   /** The effect a punch (J without the ball) plays in front of him. */
   punch: FxAnim;
+  /** Width in px of the punch effect. Defaults to MatchScene's spear thrust width. */
+  punchWidth?: number;
   anims: Partial<Record<FxAnim, SpriteAnimDef>>;
 }
 
@@ -56,10 +59,27 @@ export interface SpriteConfig {
   fx?: FxSheet;
 }
 
+/**
+ * Ma Chao's cavalry rider sheet (summon). Not a player config: MatchScene draws one sprite per live rider.
+ * Row 0 is the gallop loop, row 1 the lance charge that plays once after a knock-down and then returns to the gallop.
+ */
+export type RiderAnim = 'gallop' | 'charge';
+
+export interface RiderSheet {
+  key: string;
+  url: string;
+  meta: SpriteMeta;
+  /** Logical px for the whole frame height. */
+  displayHeight: number;
+  anims: Record<RiderAnim, SpriteAnimDef>;
+}
+
 const GUANYU_META: SpriteMeta = { frameWidth: 197, frameHeight: 209, cols: 4, rows: 5, anchorX: 106, anchorY: 202 };
 const ZHANGFEI_META: SpriteMeta = { frameWidth: 211, frameHeight: 205, cols: 4, rows: 5, anchorX: 91, anchorY: 198 };
 const ZHAOYUN_META: SpriteMeta = { frameWidth: 211, frameHeight: 204, cols: 4, rows: 5, anchorX: 94, anchorY: 191 };
 const ZHUGELIANG_META: SpriteMeta = { frameWidth: 211, frameHeight: 197, cols: 4, rows: 5, anchorX: 98, anchorY: 188 };
+const MACHAO_META: SpriteMeta = { frameWidth: 211, frameHeight: 195, cols: 4, rows: 5, anchorX: 91, anchorY: 191 };
+const MACHAO_CAVALRY_META: SpriteMeta = { frameWidth: 280, frameHeight: 206, cols: 4, rows: 2, anchorX: 145, anchorY: 156 };
 
 /** Frame index of a sheet cell (row-major) for a sheet with this meta. */
 const cellAt = (meta: SpriteMeta) => (row: number, col: number): number => row * meta.cols + col;
@@ -67,8 +87,21 @@ const at = cellAt(GUANYU_META);
 const zat = cellAt(ZHANGFEI_META);
 const yat = cellAt(ZHAOYUN_META);
 const gat = cellAt(ZHUGELIANG_META);
+const mat = cellAt(MACHAO_META);
+const cat = cellAt(MACHAO_CAVALRY_META);
 /** The Zhao Yun and Zhuge Liang effect sheets are 4 columns of 181 px frames. */
 const fxat = (row: number, col: number): number => row * 4 + col;
+
+export const RIDER_SHEET: RiderSheet = {
+  key: 'sprite-machao-cavalry',
+  url: 'sprites/machao-cavalry.png',
+  meta: MACHAO_CAVALRY_META,
+  displayHeight: 70,
+  anims: {
+    gallop: { frames: [cat(0, 0), cat(0, 1), cat(0, 2), cat(0, 3)], fps: 12, repeat: -1 },
+    charge: { frames: [cat(1, 0), cat(1, 1), cat(1, 2), cat(1, 3)], fps: 12, repeat: 0 },
+  },
+};
 
 export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
   guanyu: {
@@ -184,6 +217,42 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
       },
     },
   },
+  machao: {
+    key: 'sprite-machao',
+    url: 'sprites/machao.png',
+    meta: MACHAO_META,
+    displayHeight: 58,
+    shadowScale: 1.1,
+    anims: {
+      idle: { frames: [mat(0, 0), mat(0, 1), mat(0, 2), mat(0, 3)], fps: 6, repeat: -1 },
+      run: { frames: [mat(1, 0), mat(1, 1), mat(1, 2), mat(1, 3)], fps: 10, repeat: -1 },
+      attack: { frames: [mat(2, 0), mat(2, 1), mat(2, 2), mat(2, 3)], fps: 14, repeat: 0 },
+      charge: { frames: [mat(2, 0)], fps: 1, repeat: -1 },
+      special: { frames: [mat(3, 0), mat(3, 1), mat(3, 2)], fps: 6, repeat: 0 },
+      cast: { frames: [mat(3, 1), mat(3, 2)], fps: 6, repeat: -1 },
+      rampage: { frames: [mat(3, 1), mat(3, 2)], fps: 6, repeat: -1 },
+      lunge: { frames: [mat(3, 1), mat(3, 2)], fps: 6, repeat: -1 },
+      shot: { frames: [mat(2, 3)], fps: 1, repeat: -1 },
+      dive: { frames: [mat(4, 1)], fps: 1, repeat: -1 },
+      hitstun: { frames: [mat(4, 0)], fps: 1, repeat: -1 },
+      down: { frames: [mat(4, 1), mat(4, 2)], fps: 6, repeat: 0 },
+      recover: { frames: [mat(4, 3)], fps: 1, repeat: -1 },
+    },
+    fx: {
+      key: 'fx-machao',
+      url: 'sprites/machao-fx.png',
+      frameWidth: 181,
+      frameHeight: 136,
+      punch: 'slash',
+      punchWidth: 80,
+      anims: {
+        slash: { frames: [fxat(0, 0), fxat(0, 1), fxat(0, 2), fxat(0, 3)], fps: 20, repeat: 0 },
+        summon: { frames: [fxat(1, 0), fxat(1, 1), fxat(1, 2), fxat(1, 3)], fps: 10, repeat: 0 },
+        burst: { frames: [fxat(2, 0), fxat(2, 1), fxat(2, 2), fxat(2, 3)], fps: 12, repeat: 0 },
+        smoke: { frames: [fxat(3, 0), fxat(3, 1), fxat(3, 2), fxat(3, 3)], fps: 12, repeat: 0 },
+      },
+    },
+  },
 };
 
 export function spriteAnimKey(cfg: SpriteConfig, anim: SpriteAnim): string {
@@ -194,6 +263,10 @@ export function fxAnimKey(fx: FxSheet, anim: FxAnim): string {
   return `${fx.key}:${anim}`;
 }
 
+export function riderAnimKey(anim: RiderAnim): string {
+  return `rider-${anim}`;
+}
+
 /** Queues every configured sheet and effect sheet. A failed load leaves the texture missing, and the match falls back to block figures. */
 export function preloadSprites(load: Phaser.Loader.LoaderPlugin): void {
   for (const cfg of Object.values(SPRITE_CONFIGS)) {
@@ -201,6 +274,7 @@ export function preloadSprites(load: Phaser.Loader.LoaderPlugin): void {
     load.spritesheet(cfg.key, cfg.url, { frameWidth: cfg.meta.frameWidth, frameHeight: cfg.meta.frameHeight });
     if (cfg.fx) load.spritesheet(cfg.fx.key, cfg.fx.url, { frameWidth: cfg.fx.frameWidth, frameHeight: cfg.fx.frameHeight });
   }
+  load.spritesheet(RIDER_SHEET.key, RIDER_SHEET.url, { frameWidth: RIDER_SHEET.meta.frameWidth, frameHeight: RIDER_SHEET.meta.frameHeight });
 }
 
 /** Registers the animations of every loaded sheet. Animations are global to the game, so existing keys are kept. */
@@ -228,6 +302,19 @@ export function createSpriteAnims(anims: Phaser.Animations.AnimationManager, tex
       anims.create({
         key,
         frames: anims.generateFrameNumbers(fx.key, { frames: def.frames }),
+        frameRate: def.fps,
+        repeat: def.repeat,
+      });
+    }
+  }
+  if (textures.exists(RIDER_SHEET.key)) {
+    for (const name of Object.keys(RIDER_SHEET.anims) as RiderAnim[]) {
+      const key = riderAnimKey(name);
+      if (anims.exists(key)) continue;
+      const def = RIDER_SHEET.anims[name];
+      anims.create({
+        key,
+        frames: anims.generateFrameNumbers(RIDER_SHEET.key, { frames: def.frames }),
         frameRate: def.fps,
         repeat: def.repeat,
       });

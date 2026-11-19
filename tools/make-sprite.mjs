@@ -1,5 +1,5 @@
 // Turns a character sheet (grid of frames on white, with or without black ground lines) into a transparent sprite sheet.
-// Usage: node tools/make-sprite.mjs <input sheet.png> <output sprite.png> [--scale <factor>] [--keep-white]
+// Usage: node tools/make-sprite.mjs <input sheet.png> <output sprite.png> [--scale <factor>] [--keep-white] [--rows <n>]
 // Writes <output>.png (uniform frames, packed, transparent), <output>.json (frameWidth, frameHeight,
 // cols, rows, anchorX, anchorY) and test-results/<name>-preview.png for a visual check.
 // --scale downscales the packed sheet (frame size and anchor in the json are scaled to match).
@@ -14,7 +14,7 @@ const require = createRequire('/home/safe3admin/mountain-race-dev/node_modules/'
 const { chromium } = require('playwright');
 
 const COLS = 4;
-const ROWS = 5;
+let ROWS = 5;
 const PAD = 3;
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -26,6 +26,12 @@ if (scaleAt >= 0) argv.splice(scaleAt, 2);
 const keepAt = argv.indexOf('--keep-white');
 const KEEP_WHITE = keepAt >= 0;
 if (keepAt >= 0) argv.splice(keepAt, 1);
+// --rows <n> for sheets with a different number of rows (default 5).
+const rowsAt = argv.indexOf('--rows');
+if (rowsAt >= 0) {
+  ROWS = Number(argv[rowsAt + 1]);
+  argv.splice(rowsAt, 2);
+}
 const [inArg, outArg] = argv;
 if (!inArg || !outArg || !(SCALE > 0 && SCALE <= 1)) {
   console.error('usage: node tools/make-sprite.mjs <input sheet.png> <output sprite.png> [--scale <0-1>]');
