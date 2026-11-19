@@ -154,11 +154,11 @@ const MAX_FRAME_MS = 100;
 const CAMERA_LERP = 0.15;
 const TRAIL_LEN = 8;
 /** The ball sprite's display diameter, and its frame advance: one of the 8 rotation frames per this many px rolled. */
-const BALL_DISPLAY_D = BALL_RADIUS * 7.2;
+const BALL_DISPLAY_D = BALL_RADIUS * 4.8;
 /** The ball art sits on the ground: its centre is drawn this far above the sim ball point. */
 const BALL_LIFT = BALL_DISPLAY_D * 0.45;
 const BALL_SPIN_FRAMES = 8;
-const BALL_SPIN_PX = 8;
+const BALL_SPIN_PX = 5;
 /** A ball moving farther than this in one draw is a reposition (kickoff, restart), not a roll. */
 const BALL_SPIN_MAX_STEP = 30;
 /** Touch devices draw the match bigger: a 280-row view instead of BASE_H (about 1.29× on a phone). */
@@ -1352,7 +1352,7 @@ export class MatchScene extends Phaser.Scene {
     const scale = Math.min(1, Math.max(0.35, 1 - ball.z / 140));
     this.ballShadowGfx.clear().setDepth(ball.y);
     this.ballShadowGfx.fillStyle(0x000000, 0.35 * scale);
-    this.ballShadowGfx.fillEllipse(shadow.sx, shadow.sy, 26 * scale, 9 * scale);
+    this.ballShadowGfx.fillEllipse(shadow.sx, shadow.sy, 18 * scale, 6.5 * scale);
 
     this.trailGfx.clear().setDepth(ball.y);
     const kind = ball.special?.kind;
