@@ -76,6 +76,10 @@ export const LUNGE_TICKS = 15;
 export const LUNGE_DISTANCE = 200;
 /** Constant lunge speed in px per second (distance per tick, times TICK_HZ). */
 export const LUNGE_SPEED = (LUNGE_DISTANCE / LUNGE_TICKS) * TICK_HZ;
+/** Zhuge Liang's beam (破魔光彈): channel time with the ball at his feet before the energy ball fires (0.5 s). */
+export const BEAM_CAST_TICKS = 30;
+/** Speed of the beam energy ball in px per second. The beam flies straight at the centre of the goal mouth. */
+export const BEAM_SPEED = 560;
 /** Ticks before any special can be used again (12 s). */
 export const SPECIAL_COOLDOWN_TICKS = 720;
 /** An L press made during a busy action stays buffered this long (0.3 s) and fires once the player can act. */

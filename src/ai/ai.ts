@@ -8,6 +8,7 @@ import {
   ROAR_RADIUS,
   SPECIAL_STAMINA_COST,
   attackDir,
+  inAttackingHalf,
   opponentGoalX,
   ownGoalX,
   type GameState,
@@ -160,6 +161,19 @@ function ownerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPla
   const goalX = opponentGoalX(state, team);
 
   if (hasCaller(state, p)) return passFrame(p, null);
+
+  // Zhuge Liang's beam: channelled from the attacking half on the same per-tick chance as the other specials.
+  if (
+    p.specialMode === 'beam' &&
+    inAttackingHalf(state, p) &&
+    !p.prevInput.l &&
+    p.specialCooldown === 0 &&
+    p.stamina >= SHOT_MIN_STAMINA &&
+    nextRandom(ai) < SHOT_FULL_CHANCE
+  ) {
+    s.intent = 'beam';
+    return frame(NO_MOVE, { l: true });
+  }
 
   const goalDist = Math.abs(goalX - p.x);
   const shotRange = p.role === 'DF' ? SHOT_RANGE_DF : SHOT_RANGE_FWD;

@@ -258,6 +258,7 @@ function advanceSpecial(state: GameState): boolean {
  * Opponents of the shooter that the special ball passes over are hit once each (idx order).
  * A defending goalkeeper in its own area first gets one save roll per special, when the ball is in its pickup reach.
  * Returns true if the special ended on a save (the keeper now owns the ball).
+ * A beam has no save roll and ignores height: every standing, non-invincible opponent it passes is knocked down.
  */
 function resolveSpecialContacts(state: GameState, sp: SpecialShot): boolean {
   const b = state.ball;
@@ -266,6 +267,15 @@ function resolveSpecialContacts(state: GameState, sp: SpecialShot): boolean {
     const dx = b.x - p.x;
     const dy = b.y - p.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (sp.kind === 'beam') {
+      if (sp.hit.includes(p.idx) || isInvincible(p)) continue;
+      if (dist >= p.radius + BALL_RADIUS + SPECIAL_CONTACT_PAD) continue;
+      sp.hit.push(p.idx);
+      applySpecialHit(state, state.players[sp.shooterIdx], p, sp.kind, sp.dirX, sp.dirY);
+      state.events.push({ type: 'beamHit', playerIdx: p.idx, x: p.x, y: p.y });
+      continue;
+    }
 
     if (p.role === 'GK' && inOwnArea(state, p) && !sp.rolled.includes(p.idx)) {
       const reach = pickupReach(state, p);
@@ -341,10 +351,12 @@ function parryFastBall(state: GameState, gk: Player): void {
 /**
  * Unowned ball within reach of a free player is picked up by the nearest one (ties: lowest idx).
  * Pickups only happen in live play. A goalkeeper taking a fast ball first rolls a catch; a miss is a parry.
+ * A ball already past a goal line is in the net and scores in updateMatch, so nobody may pick it up first.
  */
 function updatePickup(state: GameState): void {
   const ball = state.ball;
-  if (state.match.phase === 'play' && ball.ownerIdx === -1 && ball.special === null) {
+  const inNet = ball.x < 0 || ball.x > FIELD_W;
+  if (state.match.phase === 'play' && ball.ownerIdx === -1 && ball.special === null && !inNet) {
     let best = -1;
     let bestDist = Infinity;
     for (let i = 0; i < state.players.length; i++) {

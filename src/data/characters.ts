@@ -11,7 +11,7 @@ function ch(
   stats: [number, number, number, number, number],
   specialName: string,
   specialKind: SpecialKind,
-  specialMode: 'rampage' | 'roar' | 'lunge' = 'rampage',
+  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' = 'rampage',
 ): CharacterDef {
   const [power, speed, stamina, technique, defense] = stats;
   return {
@@ -28,7 +28,7 @@ function ch(
 export const RAW_CHARACTERS: CharacterDef[] = [
   ch('zhangfei', '張飛', 'shu', 'GK', 'L', [9, 3, 10, 2, 9], '當陽怒吼', 'pierce', 'roar'),
   ch('guanyu', '關羽', 'shu', 'DF', 'L', [9, 5, 8, 4, 8], '青龍偃月', 'lob'),
-  ch('zhugeliang', '諸葛亮', 'shu', 'MF', 'S', [3, 5, 4, 10, 4], '八陣圖', 'zigzag'),
+  ch('zhugeliang', '諸葛亮', 'shu', 'MF', 'S', [3, 5, 4, 10, 4], '破魔光彈', 'beam', 'beam'),
   ch('machao', '馬超', 'shu', 'MF', 'M', [7, 9, 6, 6, 4], '西涼鐵騎', 'straight'),
   ch('zhaoyun', '趙雲', 'shu', 'FW', 'M', [7, 9, 6, 8, 2], '遊龍穿刺', 'pierce', 'lunge'),
   ch('xuchu', '許褚', 'wei', 'GK', 'L', [9, 3, 10, 2, 9], '虎痴裸衣', 'pierce'),

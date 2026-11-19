@@ -2,8 +2,8 @@
 export type Country = 'wei' | 'shu' | 'wu';
 export type Role = 'GK' | 'DF' | 'MF' | 'FW';
 export type BodySize = 'S' | 'M' | 'L';
-/** Special shot behaviour: straight fast / zigzag / high lob that drops / pierce (knocks down players it hits). */
-export type SpecialKind = 'straight' | 'zigzag' | 'lob' | 'pierce';
+/** Special shot behaviour: straight fast / zigzag / high lob that drops / pierce (knocks down players it hits) / beam (flat, knocks down every opponent in its path, cannot be saved). */
+export type SpecialKind = 'straight' | 'zigzag' | 'lob' | 'pierce' | 'beam';
 
 export interface Stats {
   power: number;
@@ -20,8 +20,8 @@ export interface CharacterDef {
   role: Role;
   size: BodySize;
   stats: Stats;
-  /** 'rampage' (L with the ball: invincible run), 'roar' (L with or without the ball: shockwave), or 'lunge' (L with the ball: invincible long dash). */
-  special: { name: string; kind: SpecialKind; mode?: 'rampage' | 'roar' | 'lunge' };
+  /** 'rampage' (L with the ball: invincible run), 'roar' (L with or without the ball: shockwave), 'lunge' (L with the ball: invincible long dash), or 'beam' (L with the ball in the attacking half: channel, then a flat energy ball at goal). */
+  special: { name: string; kind: SpecialKind; mode?: 'rampage' | 'roar' | 'lunge' | 'beam' };
 }
 
 export interface SizeParams {

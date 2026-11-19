@@ -28,7 +28,8 @@ export type PlayerAction =
   | 'recover'
   | 'charge'
   | 'dive'
-  | 'lunge';
+  | 'lunge'
+  | 'cast';
 
 export type AttackKind = 'punch' | 'tackle' | 'special';
 
@@ -68,8 +69,8 @@ export interface Player {
   rampageTicks: number;
   /** Ticks during which this player cannot be bumped by a rampaging opponent again. */
   bumpCooldown: number;
-  /** What the special button (L) does: a rampage, a roar (shockwave) for Zhang Fei, or a lunge (long dash) for Zhao Yun. */
-  specialMode: 'rampage' | 'roar' | 'lunge';
+  /** What the special button (L) does: a rampage, a roar (shockwave) for Zhang Fei, a lunge (long dash) for Zhao Yun, or a beam (channel, then energy ball) for Zhuge Liang. */
+  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam';
   /** Ticks until the special can be used again. Set when a rampage starts or a roar fires. */
   specialCooldown: number;
   /** Ticks left on a buffered L press. A press made while busy waits here and fires once the player can act. 0 = none. */
@@ -132,6 +133,12 @@ export type SimEvent =
   | { type: 'lungeStart'; playerIdx: number; x: number; y: number; dirX: number; dirY: number }
   /** A lunge ends (timer, field edge, or phase change). */
   | { type: 'lungeEnd'; playerIdx: number; x: number; y: number }
+  /** A beam channel starts (the player stands still and holds the ball). */
+  | { type: 'beamCharge'; playerIdx: number }
+  /** The beam ball is fired: the release point and unit direction. */
+  | { type: 'beamFire'; playerIdx: number; x: number; y: number; dirX: number; dirY: number }
+  /** The beam knocks down an opponent in its path (x, y is the victim's position). */
+  | { type: 'beamHit'; playerIdx: number; x: number; y: number }
   | { type: 'specialEnd' }
   | { type: 'whistle'; reason: 'kickoff' | 'half' | 'full' }
   | { type: 'goal'; team: 0 | 1; scorerIdx: number }

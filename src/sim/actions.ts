@@ -1,5 +1,7 @@
 import type { SpecialKind } from '../data/types';
 import {
+  BEAM_CAST_TICKS,
+  BEAM_SPEED,
   CALL_PASS_TICKS,
   CHARGE_FULL,
   CHARGE_MOVE_MULT,
@@ -147,6 +149,9 @@ export function updateAction(state: GameState, p: Player, input: InputFrame): vo
     case 'lunge':
       updateLunge(state, p);
       break;
+    case 'cast':
+      updateCast(state, p);
+      break;
   }
 }
 
@@ -240,8 +245,8 @@ function updateNormal(state: GameState, p: Player, input: InputFrame): void {
     p.facingY = dir.y;
   }
 
-  // A lunge takes over the whole tick: its movement is set by startLunge and updateLunge.
-  if (trySpecial(state, p, input) && p.action === 'lunge') return;
+  // A lunge or beam cast takes over the whole tick: its movement is set by startLunge / startBeamCast and their updates.
+  if (trySpecial(state, p, input) && p.action !== 'normal') return;
 
   // A rampage replaces the dash: no dash drain, and the rampage speed applies instead.
   const rampaging = p.rampageTicks > 0;
@@ -412,8 +417,8 @@ function releaseCharge(state: GameState, p: Player, input: InputFrame): void {
 
 /**
  * Buffered L press: starts the special if a press is buffered, the match is in play, and it is ready (cooldown 0,
- * enough stamina). A rampage or lunge needs the ball and starts at once; a roar (Zhang Fei) works with or without it.
- * A special that cannot start yet keeps the buffer. Returns true if the special started.
+ * enough stamina). A rampage, lunge or beam needs the ball and starts at once (a beam also needs the attacking half); a
+ * roar (Zhang Fei) works with or without it. A special that cannot start yet keeps the buffer. Returns true if it started.
  */
 function trySpecial(state: GameState, p: Player, input: InputFrame): boolean {
   if (p.specialBuffer === 0 || state.match.phase !== 'play') return false;
@@ -424,10 +429,17 @@ function trySpecial(state: GameState, p: Player, input: InputFrame): boolean {
     return true;
   }
   if (state.ball.ownerIdx !== p.idx) return false;
+  if (p.specialMode === 'beam' && !inAttackingHalf(state, p)) return false;
   p.specialBuffer = 0;
   if (p.specialMode === 'lunge') startLunge(state, p, input);
+  else if (p.specialMode === 'beam') startBeamCast(state, p);
   else startRampage(state, p);
   return true;
+}
+
+/** True if the player is past the halfway line, on the side of the goal it attacks this half. */
+export function inAttackingHalf(state: GameState, p: Player): boolean {
+  return (p.x - FIELD_W / 2) * attackDir(state, p.team) > 0;
 }
 
 /** Special L with the ball: the player keeps the ball and rampages. The special ball flies on the next J press. */
@@ -489,6 +501,71 @@ function endLunge(state: GameState, p: Player): void {
   }
   toNormal(p);
   state.events.push({ type: 'lungeEnd', playerIdx: p.idx, x: p.x, y: p.y });
+}
+
+/** Unit direction from (x, y) to the centre of the goal the team attacks. Falls back to the attack direction on the line. */
+function aimAtGoalCentre(state: GameState, team: 0 | 1, x: number, y: number): { x: number; y: number } {
+  const dx = opponentGoalX(state, team) - x;
+  const dy = FIELD_D / 2 - y;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  return len > 0 ? { x: dx / len, y: dy / len } : { x: attackDir(state, team), y: 0 };
+}
+
+/**
+ * Zhuge Liang's beam (破魔光彈): the player turns to the goal, stands still and channels for BEAM_CAST_TICKS with the ball
+ * at his feet. The energy ball fires when the channel ends (see updateCast).
+ */
+function startBeamCast(state: GameState, p: Player): void {
+  const aim = aimAtGoalCentre(state, p.team, p.x, p.y);
+  p.facingX = aim.x;
+  p.facingY = aim.y;
+  p.stamina -= SPECIAL_STAMINA_COST;
+  p.specialCooldown = SPECIAL_COOLDOWN_TICKS;
+  p.chargeTicks = 0;
+  p.vx = 0;
+  p.vy = 0;
+  p.action = 'cast';
+  p.actionTimer = BEAM_CAST_TICKS;
+  state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
+  state.events.push({ type: 'beamCharge', playerIdx: p.idx });
+}
+
+/**
+ * One beam channel tick: the player stands still, keeps the ball and ignores input (invincible via isInvincible). The
+ * channel ends in fireBeam when its timer runs out, or back to normal if the phase leaves play.
+ */
+function updateCast(state: GameState, p: Player): void {
+  if (state.match.phase !== 'play') {
+    toNormal(p);
+    return;
+  }
+  p.vx = 0;
+  p.vy = 0;
+  p.actionTimer--;
+  if (p.actionTimer <= 0) fireBeam(state, p);
+}
+
+/**
+ * The channel is done: the ball leaves the player as a beam aimed at the centre of the goal mouth. Like other special shots
+ * it flies unowned, and resolveSpecialContacts handles it.
+ */
+function fireBeam(state: GameState, p: Player): void {
+  const ball = state.ball;
+  const aim = aimAtGoalCentre(state, p.team, ball.x, ball.y);
+  releaseBall(state, p, aim.x * BEAM_SPEED, aim.y * BEAM_SPEED, 0);
+  ball.special = {
+    kind: 'beam',
+    shooterIdx: p.idx,
+    team: p.team,
+    ticks: 0,
+    dirX: aim.x,
+    dirY: aim.y,
+    speed: BEAM_SPEED,
+    hit: [],
+    rolled: [],
+  };
+  state.events.push({ type: 'specialShot', playerIdx: p.idx, kind: 'beam' });
+  state.events.push({ type: 'beamFire', playerIdx: p.idx, x: ball.x, y: ball.y, dirX: aim.x, dirY: aim.y });
 }
 
 /** Counts the special cooldown down while the match is in play. */
@@ -581,6 +658,8 @@ export function specialSpeed(kind: SpecialKind): number {
       return SPECIAL_LOB_SPEED;
     case 'pierce':
       return SPECIAL_PIERCE_SPEED;
+    case 'beam':
+      return BEAM_SPEED;
   }
 }
 
@@ -719,7 +798,7 @@ function passBall(state: GameState, p: Player): void {
   state.events.push({ type: 'kick', playerIdx: p.idx, kind: 'pass', targetIdx: idx });
 }
 
-/** Special-ball hit: flat stamina cost; pierce knocks down, other kinds hitstun. Knockback follows the ball's direction. */
+/** Special-ball hit: flat stamina cost; pierce and beam knock down, other kinds hitstun. Knockback follows the ball's direction. */
 export function applySpecialHit(
   state: GameState,
   shooter: Player,
@@ -741,7 +820,7 @@ export function applySpecialHit(
   if (victim.stamina <= 0) {
     setDown(victim, DOWN_TICKS_EXHAUSTED);
     down = true;
-  } else if (kind === 'pierce') {
+  } else if (kind === 'pierce' || kind === 'beam') {
     setDown(victim, DOWN_TICKS_KNOCKED);
     down = true;
   } else {
@@ -772,9 +851,9 @@ function findVictim(
   return undefined;
 }
 
-/** Invincible players (rampaging or lunging) cannot be hit, tackled, stolen from, roared at, or pierced by a special. */
+/** Invincible players (rampaging, lunging or channelling a beam) cannot be hit, tackled, stolen from, roared at, or pierced by a special. */
 export function isInvincible(p: Player): boolean {
-  return p.rampageTicks > 0 || p.action === 'lunge';
+  return p.rampageTicks > 0 || p.action === 'lunge' || p.action === 'cast';
 }
 
 /**
