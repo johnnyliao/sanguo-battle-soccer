@@ -99,6 +99,8 @@ interface FxInstance {
   follow: number | null;
   offX: number;
   offY: number;
+  /** Player idx whose beam channel this effect is, so a cancelled channel can stop it. */
+  castOf: number | null;
 }
 
 /** Where and how playFx places one effect (screen px). holdMs and endMs default to the animation's length. */
@@ -115,6 +117,7 @@ interface FxSpawn {
   follow?: number;
   offX?: number;
   offY?: number;
+  castOf?: number;
 }
 
 interface PkOrderRow {
@@ -610,6 +613,8 @@ export class MatchScene extends Phaser.Scene {
         this.playPose(e.playerIdx, 'shot', SHOT_POSE_MS);
       } else if (e.type === 'beamCharge') {
         this.beamChargeFx(e.playerIdx);
+      } else if (e.type === 'beamCancel') {
+        this.beamCancelFx(e.playerIdx);
       } else if (e.type === 'beamFire') {
         this.cameras.main.shake(BEAM_SHAKE_MS, BEAM_SHAKE_INTENSITY);
       } else if (e.type === 'beamHit') {
@@ -782,6 +787,7 @@ export class MatchScene extends Phaser.Scene {
       follow: s.follow ?? null,
       offX: s.offX ?? 0,
       offY: s.offY ?? 0,
+      castOf: s.castOf ?? null,
     });
   }
 
@@ -906,7 +912,18 @@ export class MatchScene extends Phaser.Scene {
       follow: idx,
       offX: 0,
       offY: -lift,
+      castOf: idx,
     });
+  }
+
+  /** A cut-short channel: its bagua circle stops at once and fades out from there. */
+  private beamCancelFx(idx: number): void {
+    const now = this.time.now;
+    for (const f of this.fx) {
+      if (f.castOf !== idx) continue;
+      f.holdMs = now - f.startMs;
+      f.endMs = f.holdMs + BEAM_FADE_MS;
+    }
   }
 
   /** Beam impact burst at sim point (x, y) with height z. */
@@ -1318,7 +1335,7 @@ export class MatchScene extends Phaser.Scene {
     const invincible = p.idx === this.humanIdx && isInvincible(p);
     view.tag.setVisible(invincible);
     if (invincible) {
-      const ticks = p.action === 'lunge' || p.action === 'cast' ? p.actionTimer : p.rampageTicks;
+      const ticks = p.action === 'lunge' ? p.actionTimer : p.rampageTicks;
       view.tag.setPosition(0, labelY - 20).setText(`無敵 ${(ticks / TICK_HZ).toFixed(1)}`);
     }
     if (p.idx === this.humanIdx) {

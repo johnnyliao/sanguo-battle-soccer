@@ -569,11 +569,12 @@ function startBeamCast(state: GameState, p: Player): void {
 }
 
 /**
- * One beam channel tick: the player stands still, keeps the ball and ignores input (invincible via isInvincible). The
- * channel ends in fireBeam when its timer runs out, or back to normal if the phase leaves play.
+ * One beam channel tick: the player stands still, keeps the ball and ignores input. The channel ends in fireBeam when its
+ * timer runs out. A hit interrupts it (see reportCastCancel), and it also ends back to normal if the phase leaves play.
  */
 function updateCast(state: GameState, p: Player): void {
   if (state.match.phase !== 'play') {
+    reportCastCancel(state, p);
     toNormal(p);
     return;
   }
@@ -587,6 +588,12 @@ function updateCast(state: GameState, p: Player): void {
  * The channel is done: the ball leaves the player as a beam aimed at the centre of the goal mouth. Like other special shots
  * it flies unowned, and resolveSpecialContacts handles it.
  */
+/** A channel that is cut short (the caster is hit, or the phase leaves play) reports beamCancel. Call before the action changes. */
+function reportCastCancel(state: GameState, p: Player): void {
+  if (p.action !== 'cast') return;
+  state.events.push({ type: 'beamCancel', playerIdx: p.idx });
+}
+
 function fireBeam(state: GameState, p: Player): void {
   const ball = state.ball;
   const aim = aimAtGoalCentre(state, p.team, ball.x, ball.y);
@@ -838,6 +845,7 @@ function castRoar(state: GameState, p: Player): void {
 
 /** One roar victim: pushed away from the roarer, stunned, loses stamina (down when empty), drops the ball if holding it. */
 function roarKnock(state: GameState, p: Player, v: Player): void {
+  reportCastCancel(state, v);
   const dist = distance(p.x, p.y, v.x, v.y);
   const dirX = dist > 0 ? (v.x - p.x) / dist : p.facingX;
   const dirY = dist > 0 ? (v.y - p.y) / dist : p.facingY;
@@ -1052,6 +1060,7 @@ export function applySpecialHit(
   dirY: number,
 ): void {
   if (isInvincible(victim)) return;
+  reportCastCancel(state, victim);
   victim.stamina = Math.max(0, victim.stamina - SPECIAL_HIT_STAMINA);
   victim.chargeTicks = 0;
 
@@ -1095,9 +1104,9 @@ function findVictim(
   return undefined;
 }
 
-/** Invincible players (rampaging, lunging or channelling a beam) cannot be hit, tackled, stolen from, roared at, or pierced by a special. */
+/** Invincible players (rampaging or lunging) cannot be hit, tackled, stolen from, roared at, or pierced by a special. */
 export function isInvincible(p: Player): boolean {
-  return p.rampageTicks > 0 || p.action === 'lunge' || p.action === 'cast';
+  return p.rampageTicks > 0 || p.action === 'lunge';
 }
 
 /**
@@ -1119,6 +1128,7 @@ export function applyRampageBumps(state: GameState): void {
 }
 
 function rampageBump(state: GameState, rampager: Player, victim: Player, dist: number): void {
+  reportCastCancel(state, victim);
   const dirX = dist > 0 ? (victim.x - rampager.x) / dist : rampager.facingX;
   const dirY = dist > 0 ? (victim.y - rampager.y) / dist : rampager.facingY;
   const massMult = Math.min(1.5, Math.max(0.7, rampager.mass / victim.mass));
@@ -1151,6 +1161,7 @@ function applyHit(state: GameState, attacker: Player, victim: Player, kind: Atta
   attacker.hitDone = true;
   // An invincible victim (rampaging or lunging): the attack is spent and nothing else changes.
   if (isInvincible(victim)) return;
+  reportCastCancel(state, victim);
   victim.chargeTicks = 0;
 
   let damage = Math.max(3, Math.round(8 + attacker.stats.power * 1.2 - victim.stats.defense * 0.5));

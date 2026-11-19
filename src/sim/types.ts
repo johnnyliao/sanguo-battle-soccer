@@ -168,6 +168,8 @@ export type SimEvent =
   | { type: 'lungeEnd'; playerIdx: number; x: number; y: number }
   /** A beam channel starts (the player stands still and holds the ball). */
   | { type: 'beamCharge'; playerIdx: number }
+  /** The channel is cut short without firing (the caster was hit, or the phase left play). */
+  | { type: 'beamCancel'; playerIdx: number }
   /** The beam ball is fired: the release point and unit direction. */
   | { type: 'beamFire'; playerIdx: number; x: number; y: number; dirX: number; dirY: number }
   /** The beam knocks down an opponent in its path (x, y is the victim's position). */

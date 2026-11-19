@@ -9,7 +9,6 @@ import {
   PUNCH_TICKS,
   SPECIAL_COOLDOWN_TICKS,
   SPECIAL_STAMINA_COST,
-  TACKLE_TICKS,
   createInitialState,
   step,
   type GameState,
@@ -247,7 +246,7 @@ describe('beam flight', () => {
 });
 
 describe('beam cast protection and end', () => {
-  it('a punch during the cast does nothing to the caster', () => {
+  it('an opponent punch during the cast interrupts it: the caster is stunned, loses the ball, and no beam fires', () => {
     const state = beamerState(800);
     const victim = state.players[6];
     pressL(state);
@@ -255,35 +254,25 @@ describe('beam cast protection and end', () => {
     victim.y = FIELD_D / 2;
     victim.facingX = -1;
     victim.facingY = 0;
-    victim.bumpCooldown = 10000;
     const owner = state.players[0];
-    const stamina0 = owner.stamina;
 
-    const events = run(state, PUNCH_TICKS, inputFor(6, { j: true }));
+    const seen: SimEvent[] = [...step(state, inputFor(6, { j: true })).events];
+    for (let t = 0; t < PUNCH_TICKS && !seen.some((e) => e.type === 'beamCancel'); t++) {
+      step(state, []);
+      seen.push(...state.events);
+    }
 
-    expect(events).toContainEqual({ type: 'attack', playerIdx: 6, kind: 'punch' });
-    expect(events.some((e) => e.type === 'hit' || e.type === 'looseBall')).toBe(false);
-    expect(owner.action).toBe('cast');
-    expect(owner.stamina).toBe(stamina0);
-    expect(state.ball.ownerIdx).toBe(0);
-  });
+    expect(seen).toContainEqual({ type: 'attack', playerIdx: 6, kind: 'punch' });
+    expect(seen).toContainEqual(expect.objectContaining({ type: 'hit', attackerIdx: 6, victimIdx: 0, kind: 'punch' }));
+    expect(seen).toContainEqual({ type: 'beamCancel', playerIdx: 0 });
+    expect(seen).toContainEqual({ type: 'looseBall', playerIdx: 0 });
+    expect(['hitstun', 'down']).toContain(owner.action);
+    expect(state.ball.ownerIdx).not.toBe(0);
 
-  it('a tackle during the cast does nothing to the caster', () => {
-    const state = beamerState(800);
-    const victim = state.players[6];
-    pressL(state);
-    victim.x = 830;
-    victim.y = FIELD_D / 2;
-    victim.facingX = -1;
-    victim.facingY = 0;
-    victim.bumpCooldown = 10000;
-
-    const events = run(state, TACKLE_TICKS, inputFor(6, { j: true, dash: true, moveX: -1 }));
-
-    expect(events).toContainEqual({ type: 'attack', playerIdx: 6, kind: 'tackle' });
-    expect(events.some((e) => e.type === 'hit' || e.type === 'looseBall')).toBe(false);
-    expect(state.players[0].action).toBe('cast');
-    expect(state.ball.ownerIdx).toBe(0);
+    const rest = run(state, BEAM_CAST_TICKS + PUNCH_TICKS);
+    const all = [...seen, ...rest];
+    expect(all.some((e) => e.type === 'beamFire' || (e.type === 'specialShot' && e.playerIdx === 0))).toBe(false);
+    expect(owner.specialCooldown).toBeGreaterThan(0);
   });
 
   it('leaving the play phase mid-cast returns the caster to normal and keeps the ball', () => {
