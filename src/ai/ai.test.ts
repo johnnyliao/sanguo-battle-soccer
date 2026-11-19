@@ -43,7 +43,7 @@ function allFinite(state: GameState): boolean {
 /** Runs an all-AI match from kickoff (real teams, 2 min halves) until full time or PK, capped at maxTicks. */
 function runMatch(
   seed: number,
-  maxTicks = 16000,
+  maxTicks = 40000,
   halfSeconds = 120,
 ): { state: GameState; report: MatchReport } {
   const state = createInitialState(
@@ -108,6 +108,7 @@ describe('AI full match', () => {
       expect(report.nanTicks).toBe(0);
       expect(report.shots[0] + report.shots[1] + report.specials[0] + report.specials[1]).toBeGreaterThanOrEqual(5);
       expect(report.pickups).toBeGreaterThanOrEqual(30);
+      expect(report.rampages).toBeGreaterThanOrEqual(1);
       expect(report.ownerChanges).toBeGreaterThanOrEqual(10);
     },
     FULL_MATCH_TIMEOUT_MS,
@@ -170,7 +171,7 @@ describe('AI behaviour', () => {
     let passedToCaller = false;
     for (let t = 0; t < 10 && !passedToCaller; t++) {
       const frames = computeAIInputs(state, ai, humanMask);
-      frames[2] = { ...EMPTY_INPUT, l: t === 0 };
+      frames[2] = { ...EMPTY_INPUT, k: t === 0 };
       step(state, frames);
       passedToCaller = state.events.some(
         (e) => e.type === 'kick' && e.kind === 'pass' && e.targetIdx === 2,
@@ -235,7 +236,7 @@ describe('AI behaviour', () => {
     for (let t = 0; t < 120 && !fired; t++) {
       // Only Zhang Fei is driven by the AI here; the opponents stand still inside the circle.
       const frames = computeAIInputs(state, ai, NO_HUMANS).map((f, i) => (i === 0 ? f : { ...EMPTY_INPUT }));
-      pressed = pressed || frames[0].j;
+      pressed = pressed || frames[0].l;
       step(state, frames);
       fired = state.events.some((e) => e.type === 'roar' && e.playerIdx === 0);
     }

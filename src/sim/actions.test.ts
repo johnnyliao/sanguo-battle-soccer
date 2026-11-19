@@ -218,40 +218,35 @@ describe('stamina', () => {
   });
 });
 
-describe('jump', () => {
-  it('K leaves the ground and the player lands back in normal', () => {
+describe('J without the ball', () => {
+  it('a goalkeeper in its own area dives on J and recovers', () => {
     const state = createInitialState(makeSetup(1), SIZE_PARAMS);
     parkPlayers(state);
-    const p = state.players[0];
-    p.x = 300;
-    p.y = 130;
+    const gk = state.players[0];
+    gk.x = 40;
+    gk.y = 130;
 
-    const events = run(state, 1, inputFor(0, { k: true }));
-    expect(events).toContainEqual({ type: 'jump', playerIdx: 0 });
-    expect(p.action).toBe('jump');
+    const events = run(state, 1, inputFor(0, { j: true, moveY: 1 }));
 
-    let maxZ = 0;
-    let ticks = 0;
-    while (p.action === 'jump' && ticks < 120) {
-      step(state, []);
-      maxZ = Math.max(maxZ, p.z);
-      ticks++;
-    }
-    expect(maxZ).toBeGreaterThan(0);
-    expect(p.action).toBe('normal');
-    expect(p.z).toBe(0);
-    expect(p.vz).toBe(0);
+    expect(events).toContainEqual({ type: 'dive', playerIdx: 0 });
+    expect(events.some((e) => e.type === 'attack')).toBe(false);
+    expect(gk.action).toBe('dive');
   });
 
-  it('a flykick in the air hits an opponent and knocks them down', () => {
-    const state = duelState();
-    const b = state.players[5];
+  it('a field player punches on J, and a goalkeeper outside its own area punches too', () => {
+    const state = createInitialState(makeSetup(1), SIZE_PARAMS);
+    parkPlayers(state);
+    state.players[1].x = 300;
+    state.players[1].y = 130;
+    state.players[0].x = 300;
+    state.players[0].y = 200;
 
-    run(state, 1, inputFor(0, { k: true }));
-    const events = runUntilEvent(state, 'hit', 30, inputFor(0, { j: true }));
+    const field = run(state, 1, inputFor(1, { j: true }));
+    expect(field).toContainEqual({ type: 'attack', playerIdx: 1, kind: 'punch' });
 
-    expect(events.find((e) => e.type === 'hit')).toMatchObject({ victimIdx: 5, kind: 'flykick' });
-    expect(b.action).toBe('down');
+    const gk = run(state, 1, inputFor(0, { j: true }));
+    expect(gk).toContainEqual({ type: 'attack', playerIdx: 0, kind: 'punch' });
+    expect(gk.some((e) => e.type === 'dive')).toBe(false);
   });
 
   it('J with the ball does not start an attack', () => {
@@ -264,12 +259,12 @@ describe('jump', () => {
 });
 
 describe('call pass', () => {
-  it('L sets callPassTicks, emits callPass, and decays to zero', () => {
+  it('K without the ball sets callPassTicks, emits callPass, and decays to zero', () => {
     const state = createInitialState(makeSetup(1), SIZE_PARAMS);
     parkPlayers(state);
     const p = state.players[0];
 
-    const events = run(state, 1, inputFor(0, { l: true }));
+    const events = run(state, 1, inputFor(0, { k: true }));
     expect(events).toContainEqual({ type: 'callPass', playerIdx: 0 });
     expect(p.callPassTicks).toBe(CALL_PASS_TICKS);
 
@@ -279,12 +274,13 @@ describe('call pass', () => {
     expect(p.callPassTicks).toBe(0);
   });
 
-  it('L works while the player owns the ball', () => {
+  it('K while owning the ball passes and does not call for a pass', () => {
     const state = createInitialState(makeSetup(1), SIZE_PARAMS);
     parkPlayers(state);
     state.ball.ownerIdx = 0;
 
-    const events = run(state, 1, inputFor(0, { l: true }));
-    expect(events).toContainEqual({ type: 'callPass', playerIdx: 0 });
+    const events = run(state, 1, inputFor(0, { k: true }));
+    expect(events.some((e) => e.type === 'callPass')).toBe(false);
+    expect(events.some((e) => e.type === 'kick' && e.kind === 'pass')).toBe(true);
   });
 });

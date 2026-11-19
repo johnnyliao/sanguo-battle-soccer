@@ -35,12 +35,12 @@ export function soundsForEvent(e: SimEvent): SoundCue[] {
     case 'attack':
       return [{ name: 'whoosh', volume: 1 }];
     case 'hit':
-      return [e.kind === 'tackle' || e.kind === 'flykick' || e.kind === 'special'
+      return [e.kind === 'tackle' || e.kind === 'special'
         ? { name: 'heavyHit', volume: 1 }
         : { name: 'punch', volume: 1 }];
     case 'down':
       return [{ name: 'down', volume: 1 }];
-    case 'jump':
+    case 'dive':
       return [{ name: 'jump', volume: 1 }];
     case 'chargeFull':
       return [{ name: 'chargeFull', volume: 1 }];

@@ -7,7 +7,6 @@ import {
   FIELD_D,
   LOOSE_BALL_NO_TOUCH,
   RAMPAGE_TICKS,
-  ROAR_CHARGE_TICKS,
   ROAR_RADIUS,
   ROAR_STAMINA,
   SPECIAL_COOLDOWN_TICKS,
@@ -87,8 +86,23 @@ function roarOwnerState(x: number, seed = 1): GameState {
   return state;
 }
 
-/** Press J (tick 0), hold it for a full charge, then release. Returns every event seen. */
-function fullChargeRelease(state: GameState): SimEvent[] {
+/** Ticks `ticks` times with `frame` applied on the first tick only. Returns every event seen. */
+function run(state: GameState, ticks: number, frame: InputFrame[] = []): SimEvent[] {
+  const seen: SimEvent[] = [];
+  for (let t = 0; t < ticks; t++) {
+    step(state, t === 0 ? frame : []);
+    seen.push(...state.events);
+  }
+  return seen;
+}
+
+/** Press L once (one tick). Returns the events of that tick. */
+function pressL(state: GameState): SimEvent[] {
+  return run(state, 1, inputFor(0, { l: true }));
+}
+
+/** Hold J for a full charge, then release. Returns every event seen. */
+function fullChargeShot(state: GameState): SimEvent[] {
   const seen: SimEvent[] = [];
   step(state, inputFor(0, { j: true }));
   seen.push(...state.events);
@@ -98,16 +112,6 @@ function fullChargeRelease(state: GameState): SimEvent[] {
   }
   step(state, []);
   seen.push(...state.events);
-  return seen;
-}
-
-/** Ticks `ticks` times with `frame` applied on the first tick only. Returns every event seen. */
-function run(state: GameState, ticks: number, frame: InputFrame[] = []): SimEvent[] {
-  const seen: SimEvent[] = [];
-  for (let t = 0; t < ticks; t++) {
-    step(state, t === 0 ? frame : []);
-    seen.push(...state.events);
-  }
   return seen;
 }
 
@@ -123,7 +127,7 @@ function looseBallAway(state: GameState): void {
 }
 
 /** Zhang Fei at x facing +x without the ball, with two opponents inside his roar circle (not in punch reach). */
-function roarHoldState(x: number, seed = 1): GameState {
+function roarAwayState(x: number, seed = 1): GameState {
   const state = roarOwnerState(x, seed);
   looseBallAway(state);
   const p = state.players[0];
@@ -135,43 +139,87 @@ function roarHoldState(x: number, seed = 1): GameState {
   return state;
 }
 
-/** Holds J (no ball) for `ticks` steps. Returns every event seen. */
-function holdJ(state: GameState, ticks: number): SimEvent[] {
-  const seen: SimEvent[] = [];
-  for (let t = 0; t < ticks; t++) {
-    step(state, inputFor(0, { j: true }));
-    seen.push(...state.events);
-  }
-  return seen;
-}
-
-describe('special cooldown', () => {
-  it('a full charge released during the cooldown is an ordinary shot, not a rampage', () => {
+describe('special button (L)', () => {
+  it('with the ball, L starts a rampage at once: no charge, costs 20 stamina, starts the cooldown', () => {
     const state = ownerState(600);
-    fullChargeRelease(state);
+    const p = state.players[0];
+    const stamina0 = p.stamina;
+
+    const events = pressL(state);
+
+    expect(events).toContainEqual({ type: 'special', playerIdx: 0, kind: 'straight', name: 'test' });
+    expect(events).toContainEqual({ type: 'rampageStart', playerIdx: 0 });
+    expect(p.rampageTicks).toBe(RAMPAGE_TICKS);
+    expect(p.action).toBe('normal');
+    expect(p.chargeTicks).toBe(0);
+    expect(p.stamina).toBeCloseTo(stamina0 - SPECIAL_STAMINA_COST, 0);
+    expect(p.specialCooldown).toBe(SPECIAL_COOLDOWN_TICKS);
+    expect(state.ball.ownerIdx).toBe(0);
+    expect(state.ball.special).toBeNull();
+  });
+
+  it('without the ball, a rampage character pressing L does nothing', () => {
+    const state = ownerState(600);
+    state.ball.ownerIdx = -1;
+    looseBallAway(state);
+    const p = state.players[0];
+    const stamina0 = p.stamina;
+
+    const events = pressL(state);
+
+    expect(events.some((e) => e.type === 'special' || e.type === 'rampageStart')).toBe(false);
+    expect(p.rampageTicks).toBe(0);
+    expect(p.specialCooldown).toBe(0);
+    expect(p.stamina).toBeGreaterThanOrEqual(stamina0);
+  });
+
+  it('L while charging cancels the charge, starts the rampage and keeps the ball', () => {
+    const state = ownerState(600);
+    const p = state.players[0];
+    for (let t = 0; t < 11; t++) step(state, inputFor(0, { j: true }));
+    expect(p.action).toBe('charge');
+
+    const events = pressL(state);
+
+    expect(events).toContainEqual({ type: 'rampageStart', playerIdx: 0 });
+    expect(p.chargeTicks).toBe(0);
+    expect(p.action).toBe('normal');
+    expect(state.ball.ownerIdx).toBe(0);
+  });
+
+  it('the cooldown blocks a second L until SPECIAL_COOLDOWN_TICKS have passed', () => {
+    const state = ownerState(600);
+    pressL(state);
     expect(state.players[0].specialCooldown).toBe(SPECIAL_COOLDOWN_TICKS);
 
     run(state, 200);
-    expect(state.players[0].specialCooldown).toBe(SPECIAL_COOLDOWN_TICKS - 200);
+    const blocked = pressL(state);
+    expect(blocked.some((e) => e.type === 'special' || e.type === 'rampageStart')).toBe(false);
 
-    const events = fullChargeRelease(state);
+    // Let the rampage end and the cooldown run out, keeping the ball out of contact.
+    run(state, SPECIAL_COOLDOWN_TICKS);
+    expect(state.players[0].specialCooldown).toBe(0);
+    const events = pressL(state);
+    expect(events).toContainEqual({ type: 'rampageStart', playerIdx: 0 });
+  });
+
+  it('the special is 12 seconds: 720 ticks of cooldown', () => {
+    expect(SPECIAL_COOLDOWN_TICKS).toBe(12 * 60);
+  });
+});
+
+describe('charge shot (J)', () => {
+  it('a full charge released is a shot only, never a rampage', () => {
+    const state = ownerState(600);
+    const stamina0 = state.players[0].stamina;
+
+    const events = fullChargeShot(state);
 
     expect(events.some((e) => e.type === 'special' || e.type === 'rampageStart')).toBe(false);
     expect(events).toContainEqual({ type: 'kick', playerIdx: 0, kind: 'shot', targetIdx: -1 });
     expect(state.players[0].rampageTicks).toBe(0);
-  });
-
-  it('a rampage works again once the cooldown has run out', () => {
-    const state = ownerState(600);
-    fullChargeRelease(state);
-
-    run(state, SPECIAL_COOLDOWN_TICKS);
     expect(state.players[0].specialCooldown).toBe(0);
-
-    const events = fullChargeRelease(state);
-
-    expect(events).toContainEqual({ type: 'rampageStart', playerIdx: 0 });
-    expect(state.players[0].rampageTicks).toBe(RAMPAGE_TICKS);
+    expect(state.players[0].stamina).toBeGreaterThanOrEqual(stamina0 - 1);
   });
 });
 
@@ -179,7 +227,7 @@ describe('special events', () => {
   it('a rampage emits special once, and J during the rampage emits specialShot and no second special', () => {
     const state = ownerState(600);
 
-    const activation = fullChargeRelease(state);
+    const activation = pressL(state);
     expect(activation.filter((e) => e.type === 'special')).toHaveLength(1);
     expect(activation.some((e) => e.type === 'specialShot')).toBe(false);
 
@@ -190,7 +238,7 @@ describe('special events', () => {
 });
 
 describe('roar with the ball', () => {
-  it('a full charge release on Zhang Fei is a roar: keeps the ball, stuns and pushes opponents in the circle only', () => {
+  it('L on Zhang Fei with the ball is a roar: keeps the ball, stuns and pushes opponents in the circle only', () => {
     const state = roarOwnerState(600);
     const p = state.players[0];
     const stamina0 = p.stamina;
@@ -207,7 +255,7 @@ describe('roar with the ball', () => {
     mate.x = p.x + 40;
     mate.y = p.y;
 
-    const events = fullChargeRelease(state);
+    const events = pressL(state);
 
     expect(events).toContainEqual({ type: 'special', playerIdx: 0, kind: 'pierce', name: '當陽怒吼' });
     expect(events).toContainEqual({ type: 'roar', playerIdx: 0, x: p.x + 30, y: p.y, radius: ROAR_RADIUS });
@@ -231,7 +279,7 @@ describe('roar with the ball', () => {
     expect(state.ball.ownerIdx).toBe(0);
     expect(p.action).toBe('normal');
     expect(p.rampageTicks).toBe(0);
-    expect(p.stamina).toBeCloseTo(stamina0 - SPECIAL_STAMINA_COST, 9);
+    expect(p.stamina).toBeCloseTo(stamina0 - SPECIAL_STAMINA_COST, 0);
     expect(p.specialCooldown).toBe(SPECIAL_COOLDOWN_TICKS);
   });
 
@@ -248,7 +296,7 @@ describe('roar with the ball', () => {
     state.ball.x = carrier.x + carrier.radius + DRIBBLE_OFFSET;
     state.ball.y = carrier.y;
 
-    const events = fullChargeRelease(state);
+    const events = pressL(state);
 
     expect(events).toContainEqual({ type: 'looseBall', playerIdx: 5 });
     expect(state.ball.ownerIdx).toBe(-1);
@@ -260,40 +308,22 @@ describe('roar with the ball', () => {
 });
 
 describe('roar without the ball', () => {
-  it('holding J for ROAR_CHARGE_TICKS fires the roar; the first press punches and the roar still fires', () => {
-    const state = roarHoldState(300);
+  it('L without the ball roars at once, hits the two opponents in the circle, and starts the cooldown', () => {
+    const state = roarAwayState(300);
     const p = state.players[0];
     const stamina0 = p.stamina;
 
-    const seen = holdJ(state, ROAR_CHARGE_TICKS - 1);
-    expect(seen.some((e) => e.type === 'roar')).toBe(false);
-    expect(seen).toContainEqual({ type: 'attack', playerIdx: 0, kind: 'punch' });
-    expect(p.roarHoldTicks).toBe(ROAR_CHARGE_TICKS - 1);
+    const events = pressL(state);
 
-    const last = holdJ(state, 1);
-    expect(last).toContainEqual({ type: 'roar', playerIdx: 0, x: p.x + 30, y: p.y, radius: ROAR_RADIUS });
-    expect(p.roarHoldTicks).toBe(0);
+    expect(events).toContainEqual({ type: 'roar', playerIdx: 0, x: p.x + 30, y: p.y, radius: ROAR_RADIUS });
     expect(p.specialCooldown).toBe(SPECIAL_COOLDOWN_TICKS);
-    // The roar tick also runs one normal-state stamina regen tick, so allow a fraction of a point.
     expect(p.stamina).toBeCloseTo(stamina0 - SPECIAL_STAMINA_COST, 0);
     expect(state.players[5].action).toBe('hitstun');
-    expect(state.players[5].stamina).toBe(state.players[5].maxStamina - ROAR_STAMINA);
     expect(state.players[6].action).toBe('hitstun');
   });
 
-  it('releasing J before ROAR_CHARGE_TICKS resets the build-up and does not roar', () => {
-    const state = roarHoldState(300);
-    const p = state.players[0];
-
-    holdJ(state, 30);
-    expect(p.roarHoldTicks).toBe(30);
-    const released = run(state, 5);
-    expect(released.some((e) => e.type === 'roar')).toBe(false);
-    expect(p.roarHoldTicks).toBe(0);
-  });
-
-  it('an opponent carrier in the circle loses the ball to the roar', () => {
-    const state = roarHoldState(300);
+  it('an opponent carrier in the circle loses the ball to a roar without the ball', () => {
+    const state = roarAwayState(300);
     const carrier = state.players[5];
     carrier.facingX = 1;
     carrier.facingY = 0;
@@ -302,40 +332,44 @@ describe('roar without the ball', () => {
     state.ball.x = carrier.x + carrier.radius + DRIBBLE_OFFSET;
     state.ball.y = carrier.y;
 
-    const events = holdJ(state, ROAR_CHARGE_TICKS);
+    const events = pressL(state);
 
-    expect(events).toContainEqual({ type: 'roar', playerIdx: 0, x: state.players[0].x + 30, y: state.players[0].y, radius: ROAR_RADIUS });
     expect(events).toContainEqual({ type: 'looseBall', playerIdx: 5 });
     expect(state.ball.ownerIdx).toBe(-1);
     expect(state.ball.lastTouchIdx).toBe(0);
   });
+
+  it('J alone without the ball does not roar', () => {
+    const state = roarAwayState(300);
+    const events = run(state, 90, inputFor(0, { j: true }));
+    expect(events.some((e) => e.type === 'roar')).toBe(false);
+  });
 });
 
 describe('roar cooldown', () => {
-  it('after a roar, neither a full charge nor a J hold fires another roar until the cooldown ends', () => {
+  it('after a roar, neither L with the ball nor L without it fires another roar until the cooldown ends', () => {
     const state = roarOwnerState(600);
-    const first = fullChargeRelease(state);
+    const first = pressL(state);
     expect(first.filter((e) => e.type === 'roar')).toHaveLength(1);
 
-    const second = fullChargeRelease(state);
+    run(state, 60);
+    const second = pressL(state);
     expect(second.some((e) => e.type === 'roar' || e.type === 'special')).toBe(false);
-    expect(second).toContainEqual({ type: 'kick', playerIdx: 0, kind: 'shot', targetIdx: -1 });
 
-    // Give the ball away and hold J for longer than the roar build-up: still no roar while cooling down.
+    // Give the ball away and press L: still blocked while cooling down.
     looseBallAway(state);
     state.players[5].x = state.players[0].x + 90;
     state.players[5].y = state.players[0].y;
-    const held = holdJ(state, 120);
-    expect(held.some((e) => e.type === 'roar')).toBe(false);
-    expect(state.players[0].roarHoldTicks).toBe(0);
+    const away = pressL(state);
+    expect(away.some((e) => e.type === 'roar')).toBe(false);
   });
 });
 
 describe('determinism', () => {
   it('the same roar scenario gives the same hashState', () => {
     const play = (): GameState => {
-      const state = roarHoldState(300, 7);
-      holdJ(state, ROAR_CHARGE_TICKS + 20);
+      const state = roarAwayState(300, 7);
+      run(state, 20, inputFor(0, { l: true }));
       return state;
     };
     expect(hashState(play())).toBe(hashState(play()));

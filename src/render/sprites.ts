@@ -7,7 +7,7 @@ import type Phaser from 'phaser';
  */
 
 /** `rampage` loops while invincible with the ball; `shot` is the special ball's launch pose. */
-export type SpriteAnim = 'idle' | 'run' | 'attack' | 'charge' | 'special' | 'rampage' | 'shot' | 'jump' | 'hitstun' | 'down' | 'dive' | 'recover';
+export type SpriteAnim = 'idle' | 'run' | 'attack' | 'charge' | 'special' | 'rampage' | 'shot' | 'hitstun' | 'down' | 'dive' | 'recover';
 
 export interface SpriteMeta {
   frameWidth: number;
@@ -54,7 +54,6 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
       special: { frames: [at(3, 1), at(3, 2), at(3, 3)], fps: 10, repeat: 0 },
       rampage: { frames: [at(3, 1), at(3, 2)], fps: 8, repeat: -1 },
       shot: { frames: [at(3, 3)], fps: 1, repeat: -1 },
-      jump: { frames: [at(3, 1)], fps: 1, repeat: -1 },
       dive: { frames: [at(4, 1)], fps: 1, repeat: -1 },
       hitstun: { frames: [at(4, 0)], fps: 1, repeat: -1 },
       down: { frames: [at(4, 1), at(4, 2)], fps: 6, repeat: 0 },

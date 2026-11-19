@@ -297,9 +297,9 @@ describe('goalkeeper catching', () => {
     gk.y = FIELD_D / 2;
     const y0 = gk.y;
 
-    const first = run(state, 1, inputFor(0, { k: true, moveY: 1 }));
+    const first = run(state, 1, inputFor(0, { j: true, moveY: 1 }));
     expect(gk.action).toBe('dive');
-    expect(first).toContainEqual({ type: 'jump', playerIdx: 0 });
+    expect(first).toContainEqual({ type: 'dive', playerIdx: 0 });
 
     run(state, 19, inputFor(0, { moveY: 1 }));
     expect(gk.action).toBe('dive');
@@ -322,7 +322,7 @@ describe('goalkeeper catching', () => {
       s.players[0].x = 40;
       s.players[0].y = FIELD_D / 2;
     }
-    run(dive, 1, inputFor(0, { k: true, moveY: 1 }));
+    run(dive, 1, inputFor(0, { j: true, moveY: 1 }));
     run(dive, 19, inputFor(0, { moveY: 1 }));
     run(walk, 20, inputFor(0, { moveY: 1 }));
     expect(Math.abs(dive.players[0].y - FIELD_D / 2)).toBeGreaterThan(

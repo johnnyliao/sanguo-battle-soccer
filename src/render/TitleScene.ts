@@ -78,9 +78,8 @@ export class TitleScene extends Phaser.Scene {
 
     const helpStyle = style('11px', '#d0d8e0', false);
     this.add
-      .text(cx, cy + 116, 'WASD 移動（連按兩下衝刺）　J 射門／攻擊（按住蓄力必殺）', helpStyle)
+      .text(cx, cy + 116, 'WASD 移動（連按兩下衝刺）　J 攻擊/射門（持球按住加力）　K 傳球/叫球　L 大招', helpStyle)
       .setOrigin(0.5);
-    this.add.text(cx, cy + 136, 'K 傳球／跳躍　L 叫傳球', helpStyle).setOrigin(0.5);
   }
 
   private go(): void {

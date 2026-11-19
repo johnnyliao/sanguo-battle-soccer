@@ -13,7 +13,6 @@ import {
   GOAL_H,
   EMPTY_INPUT,
   GOAL_HALF_W,
-  ROAR_CHARGE_TICKS,
   SPECIAL_COOLDOWN_TICKS,
   TICK_HZ,
   autoPkOrders,
@@ -708,9 +707,6 @@ export class MatchScene extends Phaser.Scene {
       case 'punch':
       case 'tackle':
         return 'attack';
-      case 'jump':
-      case 'flykick':
-        return 'jump';
       case 'hitstun':
       case 'down':
       case 'dive':
@@ -801,25 +797,6 @@ export class MatchScene extends Phaser.Scene {
       g.strokeEllipse(0, 0, R * 2, R * 2 * DEPTH_SCALE);
     }
 
-    // Roar build-up (no ball): a ring fills clockwise from the top while the human holds J.
-    if (p.idx === this.humanIdx && p.roarHoldTicks > 0) {
-      const ratio = Math.min(1, p.roarHoldTicks / ROAR_CHARGE_TICKS);
-      const R = r * 1.6;
-      g.lineStyle(1, 0xffffff, 0.3);
-      g.strokeEllipse(0, 0, R * 2, R * 2 * DEPTH_SCALE);
-      const segs = Math.max(2, Math.ceil(36 * ratio));
-      g.lineStyle(3, ratio >= 1 ? GOLD : SPECIAL_COLORS[p.specialKind], 0.95);
-      g.beginPath();
-      for (let i = 0; i <= segs; i++) {
-        const a = -Math.PI / 2 + (2 * Math.PI * ratio * i) / segs;
-        const ex = Math.cos(a) * R;
-        const ey = Math.sin(a) * R * DEPTH_SCALE;
-        if (i === 0) g.moveTo(ex, ey);
-        else g.lineTo(ex, ey);
-      }
-      g.strokePath();
-    }
-
     let topY: number;
     if (view.sprite && view.spriteCfg) {
       topY = this.drawSpritePlayer(view.sprite, view.spriteCfg, p, time, hitFlicker);
@@ -859,12 +836,6 @@ export class MatchScene extends Phaser.Scene {
         g.lineBetween(facingX * r * 0.3, shoulderY, facingX * r * 2.2, shoulderY + facingY * r * 1.2);
         g.lineStyle(3, SKIN, 1);
         g.lineBetween(facingX * r * 0.3, shoulderY, facingX * r * 2.2, shoulderY + facingY * r * 1.2);
-      } else if (p.action === 'flykick') {
-        const hipY = -lift - bodyHgt * 0.35;
-        g.lineStyle(5, outline, 1);
-        g.lineBetween(0, hipY, facingX * r * 2.6, -lift - r * 0.4);
-        g.lineStyle(3, darken(bodyColor, 0.8), 1);
-        g.lineBetween(0, hipY, facingX * r * 2.6, -lift - r * 0.4);
       }
 
       // Body.
@@ -1156,6 +1127,7 @@ export class MatchScene extends Phaser.Scene {
     this.awayText.setText(`${s1} ${away.name}`);
 
     const pk = match.pk;
+    this.touch.setPk(pk !== null);
     // The order overlay covers the PK panel, so the panel waits until the order is set.
     this.pkObjs.forEach((o) => o.setVisible(pk !== null && pk.stage !== 'order'));
     if (pk !== null) {
@@ -1178,6 +1150,7 @@ export class MatchScene extends Phaser.Scene {
     this.clockText.setText(`${match.half === 1 ? '上半場' : '下半場'} ${mm}:${ss}`);
 
     const p = players[this.humanIdx];
+    this.touch.setSpecialCooldown(p.specialCooldown);
     this.hudNameText.setText(p.name);
     this.hudSpecialText.setText(`必殺：${p.specialName}`);
 

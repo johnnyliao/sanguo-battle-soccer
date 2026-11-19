@@ -26,7 +26,6 @@ export const PICKUP_MAX_Z = 20;
 export const DRIBBLE_OFFSET = 4;
 
 export const PLAYER_GRAVITY = 900;
-export const JUMP_VZ = 230;
 export const STAMINA_BASE = 40;
 export const STAMINA_PER_STAT = 6;
 export const STAMINA_REGEN = 4;
@@ -43,7 +42,6 @@ export const PUNCH_RANGE = 8;
 export const PUNCH_HIT_RADIUS = 10;
 export const TACKLE_TICKS = 24;
 export const TACKLE_SPEED_MULT = 1.6;
-export const FLYKICK_SPEED = 200;
 export const RECOVER_TICKS = 12;
 export const CALL_PASS_TICKS = 45;
 export const LOOSE_BALL_NO_TOUCH = 30;
@@ -73,16 +71,14 @@ export const RAMPAGE_SPEED_MULT = 1.35;
 export const RAMPAGE_BUMP_SPEED = 220;
 export const RAMPAGE_BUMP_STAMINA = 8;
 export const RAMPAGE_BUMP_COOLDOWN = 30;
-/** Ticks before any special can be used again (10 s). */
-export const SPECIAL_COOLDOWN_TICKS = 600;
+/** Ticks before any special can be used again (12 s). */
+export const SPECIAL_COOLDOWN_TICKS = 720;
 /** Roar shockwave: circle radius, and how far in front of the roarer its centre sits. */
 export const ROAR_RADIUS = 105;
 export const ROAR_FORWARD = 30;
 export const ROAR_KNOCK_SPEED = 280;
 export const ROAR_STUN_TICKS = 60;
 export const ROAR_STAMINA = 10;
-/** Ticks J must be held without the ball before the roar fires (1 s). */
-export const ROAR_CHARGE_TICKS = 60;
 
 export const KICKOFF_TICKS = 60;
 export const GOAL_CELEBRATE_TICKS = 150;

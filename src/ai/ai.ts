@@ -1,5 +1,4 @@
 import {
-  CHARGE_FULL,
   EMPTY_INPUT,
   FIELD_D,
   FIELD_W,
@@ -42,16 +41,14 @@ const TACKLE_CHANCE = 0.05;
 const OPPORTUNIST_RANGE = 18;
 const OPPORTUNIST_CHANCE = 0.01;
 
-const HEADER_RANGE = 30;
-const HEADER_MIN_Z = 20;
-const HEADER_MAX_Z = 55;
-
 const SHOT_RANGE_FWD = 330;
 const SHOT_RANGE_DF = 250;
 const SHOT_CLEAR_RANGE = 40;
-const SHOT_FULL_CHANCE = 0.6;
+/** Per-tick chance to use the special while eligible (the button fires instantly, so keep it rare). */
+const SHOT_FULL_CHANCE = 0.005;
+const SPECIAL_RANGE = 400;
 const SHOT_MIN_STAMINA = 25;
-/** A full charge (rampage) is started from this far out, whatever the role. */
+/** A special (rampage) is started from this far out, whatever the role. */
 const CHARGE_SHOT_RANGE = 560;
 /** A rampaging owner fires its special once this close to the goal (lob kinds from further out). */
 const RAMPAGE_FIRE_RANGE = 260;
@@ -117,7 +114,7 @@ function decide(state: GameState, ai: AIState, p: Player): InputFrame {
 
   const roar = roarFrame(state, p, s);
   if (roar !== null) return roar;
-  if (p.action !== 'normal') return busyFrame(state, p, s);
+  if (p.action !== 'normal') return { ...EMPTY_INPUT };
   if (state.ball.ownerIdx === p.idx) {
     if (p.rampageTicks > 0) return rampageFrame(state, p, s);
     return p.role === 'GK' ? gkOwnerFrame(state, ai, p, s) : ownerFrame(state, ai, p, s);
@@ -126,21 +123,14 @@ function decide(state: GameState, ai: AIState, p: Player): InputFrame {
 }
 
 /**
- * Zhang Fei's roar (the one special that is not a rampage). While the roar is worth it, J is pressed: with the ball
- * that starts a charge, without it the hold builds the roar (the first press still punches). A roar charge is held
- * to full, so releasing never falls back to a plain shot or clear.
+ * Zhang Fei's roar (the one special that is not a rampage). While the roar is worth it, L is pressed; the roar fires at
+ * once, with or without the ball.
  */
 function roarFrame(state: GameState, p: Player, s: AIState['perPlayer'][number]): InputFrame | null {
   if (p.specialMode !== 'roar') return null;
-  if (p.action === 'charge' && s.intent === 'roar' && p.chargeTicks < CHARGE_FULL) {
-    return frame(NO_MOVE, { j: true });
-  }
-  if (!roarWanted(state, p)) return null;
-  if (p.action === 'normal' || (p.action === 'punch' && s.intent === 'roar')) {
-    s.intent = 'roar';
-    return frame(NO_MOVE, { j: true });
-  }
-  return null;
+  if (p.action !== 'normal' || !roarWanted(state, p)) return null;
+  s.intent = 'roar';
+  return frame(NO_MOVE, { l: !p.prevInput.l });
 }
 
 /**
@@ -164,14 +154,6 @@ function roarWanted(state: GameState, p: Player): boolean {
   return inCircle >= 2 || carrierInCircle || (inCircle >= 1 && ballNearOwnGoal);
 }
 
-/** Non-normal actions send nothing, except keeping J held while a shot is charging. */
-function busyFrame(state: GameState, p: Player, s: AIState['perPlayer'][number]): InputFrame {
-  if (p.action === 'charge' && s.intent === 'charge' && p.chargeTicks < CHARGE_FULL) {
-    return frame(steerTo(p, opponentGoalX(state, p.team), CENTER_Y), { j: true });
-  }
-  return { ...EMPTY_INPUT };
-}
-
 function ownerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPlayer'][number]): InputFrame {
   const team = p.team;
   const dir = attackDir(state, team);
@@ -183,15 +165,21 @@ function ownerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPla
   const shotRange = p.role === 'DF' ? SHOT_RANGE_DF : SHOT_RANGE_FWD;
   const inShotRange = goalDist < shotRange;
   const inChargeRange = goalDist < CHARGE_SHOT_RANGE;
-  if (inChargeRange && p.facingX * dir > 0 && !p.prevInput.j) {
-    const full =
+  if (inChargeRange && p.facingX * dir > 0) {
+    const special =
+      p.specialMode === 'rampage' &&
+      !p.prevInput.l &&
       p.stamina >= SHOT_MIN_STAMINA &&
       p.specialCooldown === 0 &&
+      goalDist < SPECIAL_RANGE &&
       nearestOpponent(state, team, p.x, p.y, SHOT_CLEAR_RANGE) === null &&
       nextRandom(ai) < SHOT_FULL_CHANCE;
-    // Outside its role range a player only shoots when the charge is full (a rampage).
-    if (full || inShotRange) {
-      s.intent = full ? 'charge' : 'tap';
+    if (special) {
+      s.intent = 'special';
+      return frame(steerTo(p, goalX, CENTER_Y), { l: true });
+    }
+    if (inShotRange && !p.prevInput.j) {
+      s.intent = 'tap';
       return frame(steerTo(p, goalX, CENTER_Y), { j: true });
     }
   }
@@ -240,18 +228,6 @@ function gkOwnerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perP
 function freeFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPlayer'][number]): InputFrame {
   const ball = state.ball;
 
-  if (
-    p.z === 0 &&
-    p.vz === 0 &&
-    ball.z > HEADER_MIN_Z &&
-    ball.z < HEADER_MAX_Z &&
-    dist(p.x, p.y, ball.x, ball.y) < HEADER_RANGE &&
-    !p.prevInput.k
-  ) {
-    s.intent = 'header';
-    return frame(steerTo(p, ball.x, ball.y), { k: true });
-  }
-
   const victim = nearestOpponent(state, p.team, p.x, p.y, OPPORTUNIST_RANGE);
   if (
     victim !== null &&
@@ -287,9 +263,9 @@ function gkFreeFrame(state: GameState, p: Player, s: AIState['perPlayer'][number
     if (towardGoal && speed > DIVE_MIN_SPEED && Math.abs(ball.x - goalX) < DIVE_MAX_DIST_X) {
       const t = (goalX - ball.x) / ball.vx;
       const projY = ball.y + ball.vy * t;
-      if (Math.abs(projY - p.y) > DIVE_MIN_DY && p.z === 0 && p.vz === 0 && !p.prevInput.k) {
+      if (Math.abs(projY - p.y) > DIVE_MIN_DY && p.z === 0 && p.vz === 0 && !p.prevInput.j) {
         s.intent = 'dive';
-        return frame(steerTo(p, p.x, projY), { k: true });
+        return frame(steerTo(p, p.x, projY), { j: true });
       }
     }
     if (Math.abs(ball.x - goalX) < GK_AREA_DEPTH && isClosestToBall(state, p)) {

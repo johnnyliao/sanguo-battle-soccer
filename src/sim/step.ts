@@ -319,8 +319,6 @@ function pickupReach(state: GameState, p: Player): number {
   if (inArea) reach += GK_EXTRA_REACH;
   if (p.action === 'normal') {
     if (ball.z >= (inArea ? GK_PICKUP_MAX_Z : PICKUP_MAX_Z)) return -1;
-  } else if (p.action === 'jump') {
-    if (Math.abs(ball.z - p.z) >= PICKUP_MAX_Z) return -1;
   } else if (p.action === 'dive') {
     if (!gk || Math.abs(ball.z - p.z) >= GK_PICKUP_MAX_Z) return -1;
     reach += GK_DIVE_EXTRA_REACH;

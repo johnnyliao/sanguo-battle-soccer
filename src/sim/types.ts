@@ -23,15 +23,13 @@ export type PlayerAction =
   | 'normal'
   | 'punch'
   | 'tackle'
-  | 'jump'
-  | 'flykick'
   | 'hitstun'
   | 'down'
   | 'recover'
   | 'charge'
   | 'dive';
 
-export type AttackKind = 'punch' | 'tackle' | 'flykick' | 'special';
+export type AttackKind = 'punch' | 'tackle' | 'special';
 
 export interface Player {
   idx: number;
@@ -69,12 +67,10 @@ export interface Player {
   rampageTicks: number;
   /** Ticks during which this player cannot be bumped by a rampaging opponent again. */
   bumpCooldown: number;
-  /** What a full-charge release does: a rampage, or a roar (shockwave) for Zhang Fei. */
+  /** What the special button (L) does: a rampage, or a roar (shockwave) for Zhang Fei. */
   specialMode: 'rampage' | 'roar';
   /** Ticks until the special can be used again. Set when a rampage starts or a roar fires. */
   specialCooldown: number;
-  /** Ticks J has been held without the ball (roar build-up). 0 = not building. */
-  roarHoldTicks: number;
   specialKind: SpecialKind;
   specialName: string;
   prevInput: InputFrame;
@@ -116,7 +112,7 @@ export type SimEvent =
   | { type: 'attack'; playerIdx: number; kind: AttackKind }
   | { type: 'hit'; attackerIdx: number; victimIdx: number; kind: AttackKind; damage: number }
   | { type: 'down'; playerIdx: number }
-  | { type: 'jump'; playerIdx: number }
+  | { type: 'dive'; playerIdx: number }
   | { type: 'callPass'; playerIdx: number }
   | { type: 'looseBall'; playerIdx: number }
   | { type: 'kick'; playerIdx: number; kind: 'pass' | 'shot' | 'clear'; targetIdx: number }

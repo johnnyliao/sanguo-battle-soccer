@@ -1,5 +1,5 @@
-// Special check. Guan Yu (shu DF, human=1) charges a full shot and releases it into a rampage (aura + fire sprite).
-// Zhang Fei (shu GK, human=0) holds J without the ball next to an opponent until the roar fires (shockwave, stun, HUD cooldown).
+// Special check. Guan Yu (shu DF, human=1) presses L with the ball and rampages at once (aura + fire sprite).
+// Zhang Fei (shu GK, human=0) presses L without the ball next to two opponents: the roar fires at once (shockwave, stun, HUD cooldown).
 // Test-only state edits (ball owner, positions, stamina) go through window.__sg. Usage: node e2e/special.mjs <url>
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
@@ -70,7 +70,6 @@ const human = (page) =>
       hasSprite: view.sprite !== null,
       action: p.action,
       rampageTicks: p.rampageTicks,
-      roarHoldTicks: p.roarHoldTicks,
       specialCooldown: p.specialCooldown,
       stamina: p.stamina,
       maxStamina: p.maxStamina,
@@ -107,19 +106,19 @@ const browser = await chromium.launch({
   args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 });
 try {
-  // Rampage: Guan Yu charges with the ball, releases at full charge.
+  // Rampage: Guan Yu holds the ball and taps L (no charge).
   const guan = await openMatch(browser, 1);
   await giveBall(guan, 400, 130);
   await guan.waitForTimeout(400);
-  await guan.keyboard.down('j');
-  await guan.waitForTimeout(1200);
-  await guan.keyboard.up('j');
+  await guan.keyboard.down('l');
+  await guan.waitForTimeout(120);
+  await guan.keyboard.up('l');
   await guan.waitForFunction(() => window.__sg.state().players[window.__sg.humanIdx].rampageTicks > 0, null, {
     timeout: 3000,
   }).catch(() => {});
   const r0 = await human(guan);
-  report('rampage starts on full charge release', r0.rampageTicks > 0 && r0.ownsBall, `rampageTicks ${r0.rampageTicks}, ownsBall ${r0.ownsBall}`);
-  report('rampage starts the special cooldown', r0.specialCooldown > 0, `specialCooldown ${r0.specialCooldown}`);
+  report('rampage starts at once on L with the ball', r0.rampageTicks > 0 && r0.ownsBall, `rampageTicks ${r0.rampageTicks}, ownsBall ${r0.ownsBall}`);
+  report('rampage starts the 12 s special cooldown', r0.specialCooldown > 0 && r0.specialCooldown <= 720, `specialCooldown ${r0.specialCooldown}`);
   await guan.waitForFunction(() => window.__sg.scene.playerViews[window.__sg.humanIdx].sprite?.anims.currentAnim?.key === 'sprite-guanyu:rampage', null, {
     timeout: 3000,
   }).catch(() => {});
@@ -128,7 +127,7 @@ try {
   await guan.screenshot({ path: shot('special-rampage.png') });
   await guan.close();
 
-  // Roar: Zhang Fei holds J without the ball, with two opponents inside the roar circle (out of punch reach).
+  // Roar: Zhang Fei taps L without the ball, with two opponents inside the roar circle (out of punch reach).
   const zhang = await openMatch(browser, 0);
   await zhang.evaluate(() => {
     const s = window.__sg.state();
@@ -155,11 +154,9 @@ try {
   });
   const opponentBefore = await zhang.evaluate(() => window.__sg.state().players[5].stamina);
   await zhang.waitForTimeout(300);
-  await zhang.keyboard.down('j');
-  await zhang.waitForTimeout(600);
-  const mid = await human(zhang);
-  await zhang.screenshot({ path: shot('special-roar-hold.png') });
-  await zhang.waitForTimeout(600);
+  await zhang.keyboard.down('l');
+  await zhang.waitForTimeout(120);
+  await zhang.keyboard.up('l');
   await zhang.waitForFunction(() => window.__sg.state().players[window.__sg.humanIdx].specialCooldown > 0, null, {
     timeout: 3000,
   }).catch(() => {});
@@ -169,14 +166,12 @@ try {
     const h = s.players[window.__sg.humanIdx];
     const v = s.players[5];
     return {
-      roared: { specialCooldown: h.specialCooldown, roarHoldTicks: h.roarHoldTicks },
+      roared: { specialCooldown: h.specialCooldown, ownsBall: s.ball.ownerIdx === h.idx },
       victim: { action: v.action, stamina: v.stamina },
     };
   });
   await zhang.screenshot({ path: shot('special-roar.png') });
-  await zhang.keyboard.up('j');
-  report('roar builds while J is held without the ball', mid.roarHoldTicks > 0 && mid.roarHoldTicks < 60, `roarHoldTicks mid-hold ${mid.roarHoldTicks}`);
-  report('roar fires after the hold and starts the cooldown', roared.specialCooldown > 0, `specialCooldown ${roared.specialCooldown}`);
+  report('roar fires at once on L without the ball and starts the cooldown', roared.specialCooldown > 0 && roared.specialCooldown <= 720, `specialCooldown ${roared.specialCooldown}`);
   report(
     'roar stuns the opponent in the circle',
     victim.action === 'hitstun' || victim.action === 'down',

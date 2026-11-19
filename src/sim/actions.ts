@@ -10,7 +10,6 @@ import {
   DT,
   FIELD_D,
   FIELD_W,
-  FLYKICK_SPEED,
   GETUP_STAMINA_RATIO,
   GK_DIVE_RECOVER_TICKS,
   GK_DIVE_SPEED,
@@ -18,7 +17,6 @@ import {
   GOAL_H,
   GRAVITY,
   HITSTUN_TICKS,
-  JUMP_VZ,
   KICK_NO_TOUCH,
   KICK_RECOVER_TICKS,
   KNOCKBACK_SPEED,
@@ -40,7 +38,6 @@ import {
   RAMPAGE_SPEED_MULT,
   RAMPAGE_TICKS,
   RECOVER_TICKS,
-  ROAR_CHARGE_TICKS,
   ROAR_FORWARD,
   ROAR_KNOCK_SPEED,
   ROAR_RADIUS,
@@ -84,7 +81,6 @@ const TACKLE_DAMP = 0.96;
 const HITSTUN_DAMP = 0.88;
 const DOWN_DAMP = 0.85;
 const RECOVER_DAMP = 0.85;
-const AIR_CONTROL = 0.05;
 const HIT_VZ = 80;
 const LOOSE_BALL_SPEED = 90;
 const LOOSE_BALL_SPREAD = 30;
@@ -112,10 +108,9 @@ const LOB_OVERSHOOT = 10;
 /** Runs one tick of the player's current action. Mutates the player and may mutate the ball and events. */
 export function updateAction(state: GameState, p: Player, input: InputFrame): void {
   if (p.callPassTicks > 0) p.callPassTicks--;
-  const landed = applyGravity(p);
+  applyGravity(p);
   tickRampage(state, p);
   tickSpecialCooldown(state, p);
-  updateRoarHold(state, p, input);
   switch (p.action) {
     case 'normal':
       updateNormal(state, p, input);
@@ -126,14 +121,8 @@ export function updateAction(state: GameState, p: Player, input: InputFrame): vo
     case 'tackle':
       updateTackle(state, p);
       break;
-    case 'jump':
-      updateJump(state, p, input, landed);
-      break;
     case 'dive':
       updateDive(p);
-      break;
-    case 'flykick':
-      updateFlykick(state, p, landed);
       break;
     case 'hitstun':
       if (coast(p, HITSTUN_DAMP)) toNormal(p);
@@ -171,17 +160,15 @@ export function clampPlayerToField(p: Player): void {
   }
 }
 
-/** Applies gravity to airborne players. Returns true on the tick the player lands. */
-function applyGravity(p: Player): boolean {
-  if (p.z <= 0 && p.vz === 0) return false;
+/** Applies gravity to airborne players (knocked-back players are airborne briefly). */
+function applyGravity(p: Player): void {
+  if (p.z <= 0 && p.vz === 0) return;
   p.vz -= PLAYER_GRAVITY * DT;
   p.z += p.vz * DT;
   if (p.z <= 0) {
     p.z = 0;
     p.vz = 0;
-    return true;
   }
-  return false;
 }
 
 function integrate(p: Player): void {
@@ -208,14 +195,6 @@ function inputDir(input: InputFrame): { x: number; y: number } {
   if (input.moveX === 0 && input.moveY === 0) return { x: 0, y: 0 };
   const len = Math.sqrt(input.moveX * input.moveX + input.moveY * input.moveY);
   return { x: input.moveX / len, y: input.moveY / len };
-}
-
-function clampSpeed(p: Player, max: number): void {
-  const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
-  if (speed > max) {
-    p.vx *= max / speed;
-    p.vy *= max / speed;
-  }
 }
 
 function toNormal(p: Player): void {
@@ -253,6 +232,8 @@ function updateNormal(state: GameState, p: Player, input: InputFrame): void {
     p.facingY = dir.y;
   }
 
+  trySpecial(state, p, input);
+
   // A rampage replaces the dash: no dash drain, and the rampage speed applies instead.
   const rampaging = p.rampageTicks > 0;
   const dashHeld = !rampaging && input.dash && p.stamina > 0;
@@ -262,11 +243,6 @@ function updateNormal(state: GameState, p: Player, input: InputFrame): void {
     p.stamina += STAMINA_REGEN * DT;
   }
   p.stamina = Math.min(p.maxStamina, Math.max(0, p.stamina));
-
-  if (input.l && !p.prevInput.l) {
-    p.callPassTicks = CALL_PASS_TICKS;
-    state.events.push({ type: 'callPass', playerIdx: p.idx });
-  }
 
   const ownsBall = state.ball.ownerIdx === p.idx;
   const baseSpeed = maxSpeedOf(p);
@@ -291,29 +267,24 @@ function updateNormal(state: GameState, p: Player, input: InputFrame): void {
     }
   }
 
+  if (input.k && !p.prevInput.k) {
+    p.callPassTicks = CALL_PASS_TICKS;
+    state.events.push({ type: 'callPass', playerIdx: p.idx });
+  }
+
   if (input.j && !p.prevInput.j && !ownsBall) {
     if (dashHeld) {
       startAttack(state, p, 'tackle', TACKLE_TICKS);
       p.vx = p.facingX * baseSpeed * TACKLE_SPEED_MULT;
       p.vy = p.facingY * baseSpeed * TACKLE_SPEED_MULT;
+    } else if (p.role === 'GK' && inOwnArea(state, p) && p.z === 0 && p.vz === 0) {
+      startDive(state, p, input);
+      return;
     } else {
       startAttack(state, p, 'punch', PUNCH_TICKS);
       p.vx *= PUNCH_WALK_MULT;
       p.vy *= PUNCH_WALK_MULT;
     }
-    integrate(p);
-    return;
-  }
-
-  if (input.k && !p.prevInput.k && !ownsBall && p.z === 0 && p.vz === 0) {
-    if (p.role === 'GK' && inOwnArea(state, p)) {
-      startDive(state, p, input);
-      return;
-    }
-    p.action = 'jump';
-    p.actionTimer = 0;
-    p.vz = JUMP_VZ;
-    state.events.push({ type: 'jump', playerIdx: p.idx });
     integrate(p);
     return;
   }
@@ -355,30 +326,6 @@ function updateTackle(state: GameState, p: Player): void {
   if (done) startRecover(p);
 }
 
-function updateJump(state: GameState, p: Player, input: InputFrame, landed: boolean): void {
-  if (landed) {
-    toNormal(p);
-    return;
-  }
-
-  const dir = inputDir(input);
-  if (dir.x !== 0 || dir.y !== 0) {
-    p.facingX = dir.x;
-    p.facingY = dir.y;
-    const maxSpeed = maxSpeedOf(p);
-    p.vx += dir.x * maxSpeed * AIR_CONTROL;
-    p.vy += dir.y * maxSpeed * AIR_CONTROL;
-    clampSpeed(p, maxSpeed);
-  }
-
-  if (input.j && !p.prevInput.j && state.ball.ownerIdx !== p.idx) {
-    startAttack(state, p, 'flykick', 0);
-    p.vx = p.facingX * FLYKICK_SPEED;
-    p.vy = p.facingY * FLYKICK_SPEED;
-  }
-  integrate(p);
-}
-
 /** Goalkeeper dive: a fast slide along the held direction (or facing) with a small hop. */
 function startDive(state: GameState, p: Player, input: InputFrame): void {
   const dir = inputDir(input);
@@ -391,7 +338,7 @@ function startDive(state: GameState, p: Player, input: InputFrame): void {
   p.vx = p.facingX * GK_DIVE_SPEED;
   p.vy = p.facingY * GK_DIVE_SPEED;
   p.vz = GK_DIVE_VZ;
-  state.events.push({ type: 'jump', playerIdx: p.idx });
+  state.events.push({ type: 'dive', playerIdx: p.idx });
   integrate(p);
 }
 
@@ -407,25 +354,15 @@ function updateDive(p: Player): void {
   }
 }
 
-function updateFlykick(state: GameState, p: Player, landed: boolean): void {
-  if (landed) {
-    startRecover(p);
-    return;
-  }
-  integrate(p);
-  if (!p.hitDone) {
-    const victim = findVictim(state, p, (v) => {
-      return Math.abs(v.z - p.z) < AIR_HIT_Z && distance(p.x, p.y, v.x, v.y) < p.radius + v.radius;
-    });
-    if (victim) applyHit(state, p, victim, 'flykick');
-  }
-}
-
 /** Ball-carrier charging a shot: slow movement, no dash, no stamina regen. Releasing J shoots. */
 function updateCharge(state: GameState, p: Player, input: InputFrame): void {
   if (state.ball.ownerIdx !== p.idx) {
     p.chargeTicks = 0;
     toNormal(p);
+    return;
+  }
+  if (trySpecial(state, p, input)) {
+    p.chargeTicks = 0;
     return;
   }
   if (!input.j && p.prevInput.j) {
@@ -452,23 +389,35 @@ function moveCharging(p: Player, input: InputFrame): void {
   integrate(p);
 }
 
-/** Picks the shot type on J release: special (full charge, stamina, no cooldown), shot (toward goal), else clear. */
+/** Picks the shot on J release: a shot toward the goal (power by charge), else a clear. */
 function releaseCharge(state: GameState, p: Player, input: InputFrame): void {
-  const full = p.chargeTicks >= CHARGE_FULL;
-  const charge = Math.min(p.chargeTicks, CHARGE_FULL - 1);
+  const charge = p.chargeTicks;
   p.chargeTicks = 0;
   const towardGoal = p.facingX * attackDir(state, p.team) > 0;
-  if (full && p.stamina >= SPECIAL_STAMINA_COST && p.specialCooldown === 0) {
-    if (p.specialMode === 'roar') castRoar(state, p);
-    else startRampage(state, p);
-  } else if (towardGoal) {
+  if (towardGoal) {
     shoot(state, p, input, charge);
   } else {
     kickClear(state, p);
   }
 }
 
-/** Full charge released: the player keeps the ball and rampages. The special ball flies on the next J press. */
+/**
+ * L press: starts the special if it is ready (cooldown 0, enough stamina). A rampage needs the ball and starts at once;
+ * a roar (Zhang Fei) works with or without it. Returns true if the special started.
+ */
+function trySpecial(state: GameState, p: Player, input: InputFrame): boolean {
+  if (!input.l || p.prevInput.l) return false;
+  if (p.specialCooldown > 0 || p.stamina < SPECIAL_STAMINA_COST) return false;
+  if (p.specialMode === 'roar') {
+    castRoar(state, p);
+    return true;
+  }
+  if (state.ball.ownerIdx !== p.idx) return false;
+  startRampage(state, p);
+  return true;
+}
+
+/** Special L with the ball: the player keeps the ball and rampages. The special ball flies on the next J press. */
 function startRampage(state: GameState, p: Player): void {
   p.stamina -= SPECIAL_STAMINA_COST;
   p.rampageTicks = RAMPAGE_TICKS;
@@ -485,33 +434,12 @@ function tickSpecialCooldown(state: GameState, p: Player): void {
 }
 
 /**
- * Roar build-up without the ball (roar specials only): J held while standing or punching builds roarHoldTicks.
- * Releasing J, or losing the option (cooldown, stamina, a non-idle action), resets it. At ROAR_CHARGE_TICKS the roar fires.
- */
-function updateRoarHold(state: GameState, p: Player, input: InputFrame): void {
-  const building =
-    input.j &&
-    p.specialMode === 'roar' &&
-    state.ball.ownerIdx !== p.idx &&
-    (p.action === 'normal' || p.action === 'punch') &&
-    p.specialCooldown === 0 &&
-    p.stamina >= SPECIAL_STAMINA_COST;
-  if (!building) {
-    p.roarHoldTicks = 0;
-    return;
-  }
-  p.roarHoldTicks++;
-  if (p.roarHoldTicks >= ROAR_CHARGE_TICKS) castRoar(state, p);
-}
-
-/**
  * Zhang Fei's roar: a shockwave centred ROAR_FORWARD in front of the player. Every standing opponent in the circle
  * (rampaging ones are immune) is knocked away from the roarer and stunned. The roarer keeps any ball it has.
  */
 function castRoar(state: GameState, p: Player): void {
   p.stamina = Math.max(0, p.stamina - SPECIAL_STAMINA_COST);
   p.specialCooldown = SPECIAL_COOLDOWN_TICKS;
-  p.roarHoldTicks = 0;
   toNormal(p);
   const cx = p.x + p.facingX * ROAR_FORWARD;
   const cy = p.y + p.facingY * ROAR_FORWARD;
