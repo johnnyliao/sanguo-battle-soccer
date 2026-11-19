@@ -9,9 +9,6 @@ import {
   CHARGE_FULL,
   FIELD_D,
   FIELD_W,
-  GK_AREA_DEPTH,
-  GOAL_DEPTH,
-  GOAL_H,
   EMPTY_INPUT,
   GOAL_HALF_W,
   LUNGE_TICKS,
@@ -34,9 +31,10 @@ import {
   type Rider,
   type SimEvent,
 } from '../sim';
-import { DEPTH_SCALE, cameraTargetX, pkCameraX, worldToScreen, FIELD_TOP } from './projection';
+import { DEPTH_SCALE, cameraTargetX, pkCameraX, worldToScreen } from './projection';
 import type { ResultInit, ResultScorer } from './ResultScene';
 import {
+  BALL_SHEET,
   createSpriteAnims,
   fxAnimKey,
   preloadSprites,
@@ -49,6 +47,7 @@ import {
   type SpriteAnim,
   type SpriteConfig,
 } from './sprites';
+import { Stadium } from './stadium';
 import { applyView, BASE_H, textResolution, type View } from './view';
 
 export interface MatchInit {
@@ -154,9 +153,12 @@ const MAX_STEPS_PER_FRAME = 4;
 const MAX_FRAME_MS = 100;
 const CAMERA_LERP = 0.15;
 const TRAIL_LEN = 8;
-const PLAY_AREA_TOP = FIELD_TOP;
-const GRASS_X0 = -60;
-const GRASS_X1 = FIELD_W + 60;
+/** The ball sprite's display diameter, and its frame advance: one of the 8 rotation frames per this many px rolled. */
+const BALL_DISPLAY_D = BALL_RADIUS * 2.4;
+const BALL_SPIN_FRAMES = 8;
+const BALL_SPIN_PX = 3;
+/** A ball moving farther than this in one draw is a reposition (kickoff, restart), not a roll. */
+const BALL_SPIN_MAX_STEP = 30;
 /** Touch devices draw the match bigger: a 280-row view instead of BASE_H (about 1.29× on a phone). */
 const MATCH_BASE_H_TOUCH = 280;
 /**
@@ -366,7 +368,14 @@ export class MatchScene extends Phaser.Scene {
   private accumulator = 0;
   private teamColors: [number, number] = [0, 0];
   private playerViews: PlayerView[] = [];
-  private ballGfx!: Phaser.GameObjects.Graphics;
+  private stadium!: Stadium;
+  private ballSprite!: Phaser.GameObjects.Sprite;
+  /** Ball position at the last draw, and the rotation frame, for the roll animation. */
+  private ballSpinX = 0;
+  private ballSpinY = 0;
+  private ballSpinFrame = 0;
+  private ballSpinAcc = 0;
+  private ballSpinSign = 1;
   private ballShadowGfx!: Phaser.GameObjects.Graphics;
   private trailGfx!: Phaser.GameObjects.Graphics;
   private trail: TrailPoint[] = [];
@@ -487,12 +496,16 @@ export class MatchScene extends Phaser.Scene {
       this.clearRiders();
     });
 
-    this.drawField();
+    this.stadium = new Stadium(this, new URLSearchParams(window.location.search).get('nosoldiers') !== '1');
     createSpriteAnims(this.anims, this.textures);
     this.createPlayerViews();
     this.ballShadowGfx = this.add.graphics();
     this.trailGfx = this.add.graphics();
-    this.ballGfx = this.add.graphics();
+    this.ballSprite = this.add
+      .sprite(0, 0, BALL_SHEET.key, 0)
+      .setScale(BALL_DISPLAY_D / BALL_SHEET.frameWidth);
+    this.ballSpinX = this.state.ball.x;
+    this.ballSpinY = this.state.ball.y;
     const beamFx = this.beamFx();
     if (beamFx) {
       this.beamBall = this.add
@@ -579,8 +592,11 @@ export class MatchScene extends Phaser.Scene {
     }
     for (const e of events) {
       if (e.type === 'goal') {
-        this.scorers.push({ team: e.team, name: players[e.scorerIdx].name, minute: this.elapsedMinute() });
-        this.showBanner(`進球！ ${players[e.scorerIdx].name}`, 2000);
+        // An untouched ball (scorerIdx -1) has no scorer name.
+        const scorerName = players[e.scorerIdx]?.name ?? '';
+        this.scorers.push({ team: e.team, name: scorerName, minute: this.elapsedMinute() });
+        this.showBanner(`進球！ ${scorerName}`, 2000);
+        this.stadium.cheer(this.time.now);
         if (this.specialBeforeStep === 'beam') this.impactFx(this.state.ball.x, this.state.ball.y, this.state.ball.z);
       } else if (e.type === 'special') {
         this.showSpecial(`${e.name}！`, SPECIAL_COLORS[e.kind]);
@@ -702,6 +718,7 @@ export class MatchScene extends Phaser.Scene {
       cam.scrollX += (cameraTargetX(this.state.ball.x, W) - cam.scrollX) * CAMERA_LERP;
     }
     cam.scrollY = this.fieldScrollY(H);
+    this.stadium.update(this.time.now, cam.scrollX, cam.scrollY, H);
 
     this.state.players.forEach((p, i) => this.drawPlayer(this.playerViews[i], p, time));
     this.drawRiders();
@@ -1100,66 +1117,6 @@ export class MatchScene extends Phaser.Scene {
     this.arrowText.setPosition(ex - ux * 18, ey - uy * 18);
   }
 
-  private drawField(): void {
-    const top = PLAY_AREA_TOP;
-    const bottom = FIELD_TOP + FIELD_D * DEPTH_SCALE;
-    const py = (y: number) => worldToScreen(0, y, 0).sy;
-
-    const g = this.add.graphics().setDepth(-20);
-    g.fillStyle(0x12161d, 1);
-    g.fillRect(-400, -1000, FIELD_W + 800, 3000);
-
-    for (let x = GRASS_X0, i = 0; x < GRASS_X1; x += 100, i++) {
-      g.fillStyle(i % 2 === 0 ? 0x2e8b3a : 0x2a8035, 1);
-      g.fillRect(x, top, Math.min(100, GRASS_X1 - x), bottom - top);
-    }
-
-    g.lineStyle(2, 0xffffff, 0.9);
-    g.lineBetween(0, py(0), FIELD_W, py(0));
-    g.lineBetween(0, py(FIELD_D), FIELD_W, py(FIELD_D));
-    g.lineBetween(0, py(0), 0, py(FIELD_D));
-    g.lineBetween(FIELD_W, py(0), FIELD_W, py(FIELD_D));
-    g.lineBetween(FIELD_W / 2, py(0), FIELD_W / 2, py(FIELD_D));
-    g.strokeEllipse(FIELD_W / 2, py(FIELD_D / 2), 120, 120 * DEPTH_SCALE);
-
-    const areaTop = py(FIELD_D / 2 - 90);
-    const areaH = (FIELD_D / 2 + 90 - (FIELD_D / 2 - 90)) * DEPTH_SCALE;
-    g.strokeRect(0, areaTop, GK_AREA_DEPTH, areaH);
-    g.strokeRect(FIELD_W - GK_AREA_DEPTH, areaTop, GK_AREA_DEPTH, areaH);
-
-    this.drawGoal(0, -GOAL_DEPTH);
-    this.drawGoal(FIELD_W, FIELD_W + GOAL_DEPTH);
-  }
-
-  /** Goal at xLine with its net reaching back to xBack. Far post sits behind players, near post in front. */
-  private drawGoal(xLine: number, xBack: number): void {
-    const yFar = FIELD_D / 2 - GOAL_HALF_W;
-    const yNear = FIELD_D / 2 + GOAL_HALF_W;
-    const top = (y: number) => worldToScreen(0, y, GOAL_H).sy;
-    const base = (y: number) => worldToScreen(0, y, 0).sy;
-
-    const netLeft = Math.min(xLine, xBack);
-    const netTop = top(yFar);
-    const netBottom = base(yNear);
-    const netW = GOAL_DEPTH;
-
-    const net = this.add.graphics().setDepth(-5);
-    net.fillStyle(0xcfd8e3, 0.18);
-    net.fillRect(netLeft, netTop, netW, netBottom - netTop);
-    net.lineStyle(1, 0xffffff, 0.35);
-    for (let y = netTop; y <= netBottom; y += 4) net.lineBetween(netLeft, y, netLeft + netW, y);
-    for (let x = netLeft; x <= netLeft + netW; x += 4) net.lineBetween(x, netTop, x, netBottom);
-
-    const far = this.add.graphics().setDepth(60);
-    far.lineStyle(2, 0xffffff, 1);
-    far.lineBetween(xLine, base(yFar), xLine, top(yFar));
-    far.lineBetween(xLine, top(yFar), xLine, top(yNear));
-
-    const near = this.add.graphics().setDepth(300);
-    near.lineStyle(2, 0xffffff, 1);
-    near.lineBetween(xLine, base(yNear), xLine, top(yNear));
-  }
-
   private createPlayerViews(): void {
     const style: Phaser.Types.GameObjects.Text.TextStyle = {
       fontFamily: FONT,
@@ -1409,12 +1366,25 @@ export class MatchScene extends Phaser.Scene {
     }
 
     const pos = worldToScreen(ball.x, ball.y, ball.z);
-    this.ballGfx.clear().setDepth(ball.y + 0.5);
-    this.ballGfx.fillStyle(0xffffff, 1);
-    this.ballGfx.fillCircle(pos.sx, pos.sy, BALL_RADIUS);
-    this.ballGfx.lineStyle(1, 0x333333, 1);
-    this.ballGfx.strokeCircle(pos.sx, pos.sy, BALL_RADIUS);
+    this.spinBall(ball.x, ball.y);
+    this.ballSprite.setPosition(pos.sx, pos.sy).setFrame(this.ballSpinFrame).setDepth(ball.y + 0.5);
     this.drawBeamBall();
+  }
+
+  /** Advances the ball's rotation frame by the ground distance it rolled since the last draw. Reversed when moving left. */
+  private spinBall(x: number, y: number): void {
+    const dx = x - this.ballSpinX;
+    const dy = y - this.ballSpinY;
+    this.ballSpinX = x;
+    this.ballSpinY = y;
+    const step = Math.hypot(dx, dy);
+    if (step > BALL_SPIN_MAX_STEP || step === 0) return;
+    if (dx !== 0) this.ballSpinSign = Math.sign(dx);
+    this.ballSpinAcc += step;
+    const frames = Math.floor(this.ballSpinAcc / BALL_SPIN_PX);
+    if (frames === 0) return;
+    this.ballSpinAcc -= frames * BALL_SPIN_PX;
+    this.ballSpinFrame = (((this.ballSpinFrame + this.ballSpinSign * frames) % BALL_SPIN_FRAMES) + BALL_SPIN_FRAMES) % BALL_SPIN_FRAMES;
   }
 
   // ---------- HUD ----------
@@ -1494,7 +1464,7 @@ export class MatchScene extends Phaser.Scene {
     this.touch.setView(v);
     this.refreshTextResolution();
 
-    this.topBarGfx.clear().fillStyle(0x000000, 0.55).fillRect(0, 0, W, 34);
+    this.topBarGfx.clear().fillStyle(0x000000, 0.25).fillRect(0, 0, W, 34);
     this.homeText.setPosition(W / 2 - 8, 17);
     this.dashText.setPosition(W / 2, 17);
     this.awayText.setPosition(W / 2 + 8, 17);

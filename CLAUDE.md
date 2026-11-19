@@ -28,6 +28,7 @@
 - 連線（之後才做）：房主瀏覽器權威 + 公開 MQTT（同 mountain-race：hivemq 8884 / mosquitto 8081，**不要用 emqx**）。1v1～5v5，缺人 AI 補。
 - 畫面 16:9 橫向，邏輯解析度 640×360，等比放大。
 - 音效：ZzFX 程式產生（踢球、攻擊、倒地、進球、必殺、哨音），原型不做 BGM。
+- 場地（2026-11-19）：src/render/stadium.ts — 草地 TileSprite、遠景營帳（視差）、遠端兩排正面士兵、近端背面士兵＋拒馬前景、金龍門柱球門（橫樑與繩網程式畫）、8 格轉動的球。素材由 tools/make-stadium-assets.mjs 產生。?nosoldiers=1 關掉士兵。
 - 美術：原型用色塊／簡單人形，頭上顯示名字；已有角色圖：關羽、張飛、趙雲、諸葛亮、馬超（含鐵騎）（public/sprites，原圖在 art-src，用 tools/make-sprite.mjs 切；白色衣甲加 --keep-white，非 5 排加 --rows N）。特效圖黑底，用 ADD 混合疊加。
 
 ### 規則

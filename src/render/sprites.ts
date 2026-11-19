@@ -255,6 +255,26 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
   },
 };
 
+/** Stadium art (plain images): tiling backdrop, grass, foreground barricades, and the goal's dragon post (53×160, foot at footX/footY). */
+export const STADIUM_KEYS = {
+  bg: 'stadium-bg',
+  grass: 'stadium-grass',
+  fg: 'stadium-fg',
+  goalPost: 'goal-post',
+} as const;
+
+export const GOAL_POST_META = { width: 53, height: 160, footX: 16, footY: 159 } as const;
+
+/** Cheering soldiers: rows 0-2 face the camera, rows 3-5 are seen from behind. Each row is a 4-frame loop. */
+export const SOLDIER_SHEET = {
+  key: 'soldiers',
+  url: 'sprites/soldiers.png',
+  meta: { frameWidth: 121, frameHeight: 120, cols: 4, rows: 6, anchorX: 58, anchorY: 119 } as SpriteMeta,
+};
+
+/** The match ball: 8 rotation frames in one row. */
+export const BALL_SHEET = { key: 'ball-sheet', url: 'sprites/ball.png', frameWidth: 48, frameHeight: 48 };
+
 export function spriteAnimKey(cfg: SpriteConfig, anim: SpriteAnim): string {
   return `${cfg.key}:${anim}`;
 }
@@ -275,6 +295,12 @@ export function preloadSprites(load: Phaser.Loader.LoaderPlugin): void {
     if (cfg.fx) load.spritesheet(cfg.fx.key, cfg.fx.url, { frameWidth: cfg.fx.frameWidth, frameHeight: cfg.fx.frameHeight });
   }
   load.spritesheet(RIDER_SHEET.key, RIDER_SHEET.url, { frameWidth: RIDER_SHEET.meta.frameWidth, frameHeight: RIDER_SHEET.meta.frameHeight });
+  load.image(STADIUM_KEYS.bg, 'sprites/stadium-bg.png');
+  load.image(STADIUM_KEYS.grass, 'sprites/stadium-grass.png');
+  load.image(STADIUM_KEYS.fg, 'sprites/stadium-fg.png');
+  load.image(STADIUM_KEYS.goalPost, 'sprites/goal-post.png');
+  load.spritesheet(SOLDIER_SHEET.key, SOLDIER_SHEET.url, { frameWidth: SOLDIER_SHEET.meta.frameWidth, frameHeight: SOLDIER_SHEET.meta.frameHeight });
+  load.spritesheet(BALL_SHEET.key, BALL_SHEET.url, { frameWidth: BALL_SHEET.frameWidth, frameHeight: BALL_SHEET.frameHeight });
 }
 
 /** Registers the animations of every loaded sheet. Animations are global to the game, so existing keys are kept. */
