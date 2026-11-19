@@ -150,8 +150,6 @@ const HUD_COOLDOWN_W = 120;
 const HINT_MS = 1000;
 const HINT_RISE = 8;
 const HINT_COLOR = '#fff3b0';
-/** The bike is wider than the block body, so the shadow is widened to match. */
-const SPRITE_SHADOW_SCALE = 1.6;
 const PLAYER_COUNT = 10;
 
 const FONT = '"Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif';
@@ -810,10 +808,10 @@ export class MatchScene extends Phaser.Scene {
     const facingX = p.facingX >= 0 ? 1 : -1;
     const facingY = p.facingY;
 
-    // Shadow on the ground (wider under the bike).
-    const spriteOn = view.sprite !== null && view.spriteCfg !== null;
+    // Shadow on the ground (sprites set their own width, e.g. wider under the bike).
+    const shadowScale = view.sprite !== null && view.spriteCfg !== null ? view.spriteCfg.shadowScale : 1;
     g.fillStyle(0x000000, 0.3);
-    g.fillEllipse(0, 0, r * 2.4 * (spriteOn ? SPRITE_SHADOW_SCALE : 1), r * 1.2);
+    g.fillEllipse(0, 0, r * 2.4 * shadowScale, r * 1.2);
 
     // Charge ring.
     if (p.chargeTicks > 0) {

@@ -1,7 +1,9 @@
-// Turns a character sheet (grid of frames on white, black ground lines) into a transparent sprite sheet.
-// Usage: node tools/make-sprite.mjs <input sheet.png> <output sprite.png>
+// Turns a character sheet (grid of frames on white, with or without black ground lines) into a transparent sprite sheet.
+// Usage: node tools/make-sprite.mjs <input sheet.png> <output sprite.png> [--scale <factor>]
 // Writes <output>.png (uniform frames, packed, transparent), <output>.json (frameWidth, frameHeight,
 // cols, rows, anchorX, anchorY) and test-results/<name>-preview.png for a visual check.
+// --scale downscales the packed sheet (frame size and anchor in the json are scaled to match).
+// Without ground lines, the ground of each row is the median foot row of its frames.
 // Image processing runs in a headless Chromium canvas (Playwright from mountain-race-dev).
 import { createRequire } from 'node:module';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -16,9 +18,13 @@ const ROWS = 5;
 const PAD = 3;
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const [inArg, outArg] = process.argv.slice(2);
-if (!inArg || !outArg) {
-  console.error('usage: node tools/make-sprite.mjs <input sheet.png> <output sprite.png>');
+const argv = process.argv.slice(2);
+const scaleAt = argv.indexOf('--scale');
+const SCALE = scaleAt >= 0 ? Number(argv[scaleAt + 1]) : 1;
+if (scaleAt >= 0) argv.splice(scaleAt, 2);
+const [inArg, outArg] = argv;
+if (!inArg || !outArg || !(SCALE > 0 && SCALE <= 1)) {
+  console.error('usage: node tools/make-sprite.mjs <input sheet.png> <output sprite.png> [--scale <0-1>]');
   process.exit(2);
 }
 const inPath = resolve(process.cwd(), inArg);
@@ -27,7 +33,7 @@ const metaPath = outPath.replace(/\.png$/, '.json');
 const previewPath = resolve(repoRoot, 'test-results', `${basename(outPath, '.png')}-preview.png`);
 
 // Runs in the page. Everything the pixel work needs is inside this function.
-function processSheet({ dataUrl, cols, rows, pad }) {
+function processSheet({ dataUrl, cols, rows, pad, scale }) {
   return (async () => {
     const img = new Image();
     img.src = dataUrl;
@@ -91,7 +97,7 @@ function processSheet({ dataUrl, cols, rows, pad }) {
       }
       return runs;
     };
-    const lines = bands.map(([y0, y1]) => {
+    const lineOf = ([y0, y1]) => {
       let yb = -1;
       for (let y = y1; y >= y0; y--) {
         if (darkRuns(y, LINE_MIN).length > 0) {
@@ -99,7 +105,7 @@ function processSheet({ dataUrl, cols, rows, pad }) {
           break;
         }
       }
-      if (yb < 0) throw new Error(`no ground line in band starting at row ${y0}`);
+      if (yb < 0) return null;
       let yt = yb;
       while (yt - 1 >= y0 && yb - yt < 3 && darkRuns(yt - 1, LINE_MIN).length > 0) yt--;
       const segs = [];
@@ -107,7 +113,12 @@ function processSheet({ dataUrl, cols, rows, pad }) {
         for (const [s, e] of darkRuns(y, 30)) segs.push({ y, s, e });
       }
       return { yt, yb, segs };
-    });
+    };
+    // Ground-line mode only when every row band has its line. Otherwise (no lines, as on hand-drawn sheets) the
+    // ground of each row is the median foot row of its frames; nothing is removed as a line in that mode.
+    const detected = bands.map(lineOf);
+    const lineMode = detected.every((l) => l !== null);
+    let lines = lineMode ? detected : null;
 
     // 3) Column gutters: valleys of the summed art profile near the expected cut positions.
     const colArt = new Array(W).fill(0);
@@ -119,6 +130,11 @@ function processSheet({ dataUrl, cols, rows, pad }) {
     const cuts = [0];
     for (let k = 1; k < cols; k++) {
       const expect = Math.round((W * k) / cols);
+      // Without ground lines the sheet is a regular grid; spear tips reaching into the gutters would move the valley.
+      if (!lineMode) {
+        cuts.push(expect);
+        continue;
+      }
       let best = expect;
       let bestV = Infinity;
       for (let x = expect - 40; x <= expect + 40; x++) {
@@ -137,6 +153,28 @@ function processSheet({ dataUrl, cols, rows, pad }) {
     const FW = Math.max(...cellW);
     const frameX0 = [];
     for (let c = 0; c < cols; c++) frameX0.push(cuts[c] - Math.floor((FW - cellW[c]) / 2));
+
+    // 3b) No ground lines: per row band, the ground is the median foot row of its cells. A foot row is the lowest
+    //     row inside the cell with at least FOOT_MIN art pixels, so a thin spear tip sticking down does not count.
+    if (!lineMode) {
+      const FOOT_MIN = 10;
+      lines = bands.map(([y0, y1], r) => {
+        const feet = [];
+        for (let c = 0; c < cols; c++) {
+          let foot = -1;
+          for (let y = y1; y >= y0 && foot < 0; y--) {
+            let n = 0;
+            for (let x = cuts[c]; x < cuts[c + 1]; x++) if (!isBg(y * W + x)) n++;
+            if (n >= FOOT_MIN) foot = y;
+          }
+          if (foot < 0) throw new Error(`no feet found in row ${r} col ${c}`);
+          feet.push(foot);
+        }
+        feet.sort((a, b) => a - b);
+        const y = feet[Math.floor(feet.length / 2)];
+        return { yt: y, yb: y, segs: [] };
+      });
+    }
 
     // 4) Vertical: same frame height for every row; ground line at the same frame y.
     const above = [];
@@ -314,6 +352,19 @@ function processSheet({ dataUrl, cols, rows, pad }) {
     for (let r = 0; r < rows; r++) {
       const { yt } = lines[r];
       for (let c = 0; c < cols; c++) {
+        if (!lineMode) {
+          // Feet: columns of the strip just above the ground that hold a solid run of art (boots, not the spear).
+          const solid = [];
+          for (let x = cuts[c]; x < cuts[c + 1]; x++) {
+            let n = 0;
+            for (let y = Math.max(0, yt - 6); y <= yt; y++) if (!isBg(y * W + x) && !removed[y * W + x]) n++;
+            if (n >= 3) solid.push(x);
+          }
+          if (solid.length > 0) {
+            candidates.push({ r, c, x: (solid[0] + solid[solid.length - 1]) / 2 - frameX0[c] });
+          }
+          continue;
+        }
         const xs = [];
         for (let y = Math.max(0, yt - 7); y <= yt - 2; y++) {
           for (let x = cuts[c]; x < cuts[c + 1]; x++) {
@@ -355,7 +406,20 @@ function processSheet({ dataUrl, cols, rows, pad }) {
       octx.putImageData(new ImageData(data, w, h), 0, 0);
       return o;
     };
-    const sheetCanvas = toUrl(outW, outH, ob);
+    const fullCanvas = toUrl(outW, outH, ob);
+    // Optional downscale: every frame is resized on its own cell, so the frame size stays an integer.
+    const outFW = Math.round(FW * scale);
+    const outFH = Math.round(FH * scale);
+    const sheetCanvas = document.createElement('canvas');
+    sheetCanvas.width = outFW * cols;
+    sheetCanvas.height = outFH * rows;
+    const sctx = sheetCanvas.getContext('2d');
+    sctx.imageSmoothingQuality = 'high';
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        sctx.drawImage(fullCanvas, c * FW, r * FH, FW, FH, c * outFW, r * outFH, outFW, outFH);
+      }
+    }
     const pw = outW * 2 + 16;
     const pv = document.createElement('canvas');
     pv.width = pw;
@@ -369,8 +433,8 @@ function processSheet({ dataUrl, cols, rows, pad }) {
         pctx.fillRect(outW + 16 + x, y, 12, 12);
       }
     }
-    pctx.drawImage(sheetCanvas, 0, 0);
-    pctx.drawImage(sheetCanvas, outW + 16, 0);
+    pctx.drawImage(fullCanvas, 0, 0);
+    pctx.drawImage(fullCanvas, outW + 16, 0);
     pctx.strokeStyle = '#ff2020';
     pctx.lineWidth = 1;
     for (let r = 0; r < rows; r++) {
@@ -391,7 +455,7 @@ function processSheet({ dataUrl, cols, rows, pad }) {
     return {
       sheetUrl: sheetCanvas.toDataURL('image/png'),
       previewUrl: pv.toDataURL('image/png'),
-      meta: { frameWidth: FW, frameHeight: FH, cols, rows, anchorX, anchorY },
+      meta: { frameWidth: outFW, frameHeight: outFH, cols, rows, anchorX: Math.round(anchorX * scale), anchorY: Math.round(anchorY * scale) },
       debug: {
         size: [W, H],
         bands,
@@ -415,7 +479,7 @@ const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--ena
 let result;
 try {
   const page = await browser.newPage();
-  result = await page.evaluate(processSheet, { dataUrl, cols: COLS, rows: ROWS, pad: PAD });
+  result = await page.evaluate(processSheet, { dataUrl, cols: COLS, rows: ROWS, pad: PAD, scale: SCALE });
 } finally {
   await browser.close();
 }

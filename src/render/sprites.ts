@@ -32,13 +32,18 @@ export interface SpriteConfig {
   meta: SpriteMeta;
   /** Logical px for the whole frame height (the art is shorter than the frame, see meta.anchorY). */
   displayHeight: number;
+  /** Shadow width multiplier vs the block figure (wider under Guan Yu's bike). */
+  shadowScale: number;
   anims: Record<SpriteAnim, SpriteAnimDef>;
 }
 
 const GUANYU_META: SpriteMeta = { frameWidth: 197, frameHeight: 209, cols: 4, rows: 5, anchorX: 106, anchorY: 202 };
+const ZHANGFEI_META: SpriteMeta = { frameWidth: 211, frameHeight: 205, cols: 4, rows: 5, anchorX: 91, anchorY: 198 };
 
-/** Frame index of a sheet cell (row-major). */
-const at = (row: number, col: number): number => row * GUANYU_META.cols + col;
+/** Frame index of a sheet cell (row-major) for a sheet with this meta. */
+const cellAt = (meta: SpriteMeta) => (row: number, col: number): number => row * meta.cols + col;
+const at = cellAt(GUANYU_META);
+const zat = cellAt(ZHANGFEI_META);
 
 export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
   guanyu: {
@@ -46,6 +51,7 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
     url: 'sprites/guanyu.png',
     meta: GUANYU_META,
     displayHeight: 63,
+    shadowScale: 1.6,
     anims: {
       idle: { frames: [at(0, 0), at(0, 1), at(0, 2), at(0, 3)], fps: 6, repeat: -1 },
       run: { frames: [at(1, 0), at(1, 1), at(1, 2), at(1, 3)], fps: 10, repeat: -1 },
@@ -58,6 +64,26 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
       hitstun: { frames: [at(4, 0)], fps: 1, repeat: -1 },
       down: { frames: [at(4, 1), at(4, 2)], fps: 6, repeat: 0 },
       recover: { frames: [at(4, 3)], fps: 1, repeat: -1 },
+    },
+  },
+  zhangfei: {
+    key: 'sprite-zhangfei',
+    url: 'sprites/zhangfei.png',
+    meta: ZHANGFEI_META,
+    displayHeight: 60,
+    shadowScale: 1.1,
+    anims: {
+      idle: { frames: [zat(0, 0), zat(0, 1), zat(0, 2), zat(0, 3)], fps: 6, repeat: -1 },
+      run: { frames: [zat(1, 0), zat(1, 1), zat(1, 2), zat(1, 3)], fps: 10, repeat: -1 },
+      attack: { frames: [zat(2, 0), zat(2, 1), zat(2, 2), zat(2, 3)], fps: 14, repeat: 0 },
+      charge: { frames: [zat(2, 0)], fps: 1, repeat: -1 },
+      special: { frames: [zat(3, 0), zat(3, 1), zat(3, 2), zat(3, 3)], fps: 10, repeat: 0 },
+      rampage: { frames: [zat(3, 3)], fps: 1, repeat: -1 },
+      shot: { frames: [zat(2, 3)], fps: 1, repeat: -1 },
+      dive: { frames: [zat(4, 1)], fps: 1, repeat: -1 },
+      hitstun: { frames: [zat(4, 0)], fps: 1, repeat: -1 },
+      down: { frames: [zat(4, 1), zat(4, 2)], fps: 6, repeat: 0 },
+      recover: { frames: [zat(4, 3)], fps: 1, repeat: -1 },
     },
   },
 };
