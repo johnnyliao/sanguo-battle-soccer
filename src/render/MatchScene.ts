@@ -154,9 +154,11 @@ const MAX_FRAME_MS = 100;
 const CAMERA_LERP = 0.15;
 const TRAIL_LEN = 8;
 /** The ball sprite's display diameter, and its frame advance: one of the 8 rotation frames per this many px rolled. */
-const BALL_DISPLAY_D = BALL_RADIUS * 2.4;
+const BALL_DISPLAY_D = BALL_RADIUS * 7.2;
+/** The ball art sits on the ground: its centre is drawn this far above the sim ball point. */
+const BALL_LIFT = BALL_DISPLAY_D * 0.45;
 const BALL_SPIN_FRAMES = 8;
-const BALL_SPIN_PX = 3;
+const BALL_SPIN_PX = 8;
 /** A ball moving farther than this in one draw is a reposition (kickoff, restart), not a roll. */
 const BALL_SPIN_MAX_STEP = 30;
 /** Touch devices draw the match bigger: a 280-row view instead of BASE_H (about 1.29× on a phone). */
@@ -943,7 +945,7 @@ export class MatchScene extends Phaser.Scene {
     if (sprite.anims.currentAnim?.key !== key) sprite.play(key);
     sprite
       .setVisible(true)
-      .setPosition(from.sx, from.sy)
+      .setPosition(from.sx, from.sy - BALL_LIFT)
       .setDepth(ball.y + 0.6)
       .setFlipX(flip)
       .setRotation(angle);
@@ -1350,7 +1352,7 @@ export class MatchScene extends Phaser.Scene {
     const scale = Math.min(1, Math.max(0.35, 1 - ball.z / 140));
     this.ballShadowGfx.clear().setDepth(ball.y);
     this.ballShadowGfx.fillStyle(0x000000, 0.35 * scale);
-    this.ballShadowGfx.fillEllipse(shadow.sx, shadow.sy, 9 * scale, 4.5 * scale);
+    this.ballShadowGfx.fillEllipse(shadow.sx, shadow.sy, 26 * scale, 9 * scale);
 
     this.trailGfx.clear().setDepth(ball.y);
     const kind = ball.special?.kind;
@@ -1361,13 +1363,13 @@ export class MatchScene extends Phaser.Scene {
         const ratio = (i + 1) / this.trail.length;
         const pos = worldToScreen(pt.x, pt.y, pt.z);
         this.trailGfx.fillStyle(color, 0.15 + 0.5 * ratio);
-        this.trailGfx.fillCircle(pos.sx, pos.sy, BALL_RADIUS * (0.4 + 0.6 * ratio));
+        this.trailGfx.fillCircle(pos.sx, pos.sy - BALL_LIFT, (BALL_DISPLAY_D / 2) * (0.4 + 0.6 * ratio));
       });
     }
 
     const pos = worldToScreen(ball.x, ball.y, ball.z);
     this.spinBall(ball.x, ball.y);
-    this.ballSprite.setPosition(pos.sx, pos.sy).setFrame(this.ballSpinFrame).setDepth(ball.y + 0.5);
+    this.ballSprite.setPosition(pos.sx, pos.sy - BALL_LIFT).setFrame(this.ballSpinFrame).setDepth(ball.y + 0.5);
     this.drawBeamBall();
   }
 
