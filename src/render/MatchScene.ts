@@ -28,6 +28,7 @@ import {
 } from '../sim';
 import { DEPTH_SCALE, cameraTargetX, pkCameraX, worldToScreen, FIELD_TOP } from './projection';
 import type { ResultInit, ResultScorer } from './ResultScene';
+import { createSpriteAnims, preloadSprites, SPRITE_CONFIGS, spriteAnimKey, type SpriteAnim, type SpriteConfig } from './sprites';
 import { applyView, BASE_H, textResolution, type View } from './view';
 
 export interface MatchInit {
@@ -42,6 +43,9 @@ interface PlayerView {
   container: Phaser.GameObjects.Container;
   gfx: Phaser.GameObjects.Graphics;
   label: Phaser.GameObjects.Text;
+  /** Set when the character's sheet loaded. The block figure is drawn when this is null. */
+  sprite: Phaser.GameObjects.Sprite | null;
+  spriteCfg: SpriteConfig | null;
 }
 
 interface TrailPoint {
@@ -112,6 +116,13 @@ const ARROW_EDGE_X = 16;
 const ARROW_EDGE_TOP = 104;
 const ARROW_EDGE_BOTTOM = 62;
 const ARROW_EDGE_BOTTOM_TOUCH = 142;
+/** Horizontal speed (sim units per second) above which the sprite runs. */
+const RUN_SPEED = 20;
+/** How long the special-shot pose overrides the action animation. */
+const SPECIAL_POSE_MS = 900;
+/** The bike is wider than the block body, so the shadow is widened to match. */
+const SPRITE_SHADOW_SCALE = 1.6;
+const PLAYER_COUNT = 10;
 
 const FONT = '"Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif';
 const SKIN = 0xf1c27d;
@@ -148,6 +159,26 @@ function darken(color: number, f: number): number {
   return (ch(16) << 16) | (ch(8) << 8) | ch(0);
 }
 
+/**
+ * Match setup from the URL (test entry, `?quick=1&home=shu&away=wei&human=1`). Only valid values are used:
+ * both countries must be known and different, and humanIdx must be a player index.
+ */
+function matchFromUrl(search: string): MatchInit {
+  const q = new URLSearchParams(search);
+  const country = (v: string | null): Country | null =>
+    (Object.keys(COUNTRY_INFO) as Country[]).find((c) => c === v) ?? null;
+  const home = country(q.get('home'));
+  const away = country(q.get('away'));
+  const human = Number(q.get('human'));
+  const out: MatchInit = {};
+  if (home && away && home !== away) {
+    out.home = home;
+    out.away = away;
+  }
+  if (q.has('human') && Number.isInteger(human) && human >= 0 && human < PLAYER_COUNT) out.humanIdx = human;
+  return out;
+}
+
 export class MatchScene extends Phaser.Scene {
   private homeCountry: Country = 'shu';
   private awayCountry: Country = 'wei';
@@ -172,6 +203,8 @@ export class MatchScene extends Phaser.Scene {
   private ballShadowGfx!: Phaser.GameObjects.Graphics;
   private trailGfx!: Phaser.GameObjects.Graphics;
   private trail: TrailPoint[] = [];
+  /** Per player idx: time (ms) until which the special-shot pose is shown. */
+  private specialAnimUntil: number[] = [];
 
   private homeText!: Phaser.GameObjects.Text;
   private awayText!: Phaser.GameObjects.Text;
@@ -222,11 +255,17 @@ export class MatchScene extends Phaser.Scene {
   }
 
   init(data?: MatchInit): void {
-    this.homeCountry = data?.home ?? 'shu';
-    this.awayCountry = data?.away ?? 'wei';
-    this.humanIdx = data?.humanIdx ?? 4;
+    // Explicit data wins. The test URL params fill in when the scene is auto-started (?quick) without them.
+    const url = matchFromUrl(window.location.search);
+    this.homeCountry = data?.home ?? url.home ?? 'shu';
+    this.awayCountry = data?.away ?? url.away ?? 'wei';
+    this.humanIdx = data?.humanIdx ?? url.humanIdx ?? 4;
     this.seed = data?.seed ?? 1;
     this.halfSeconds = data?.halfSeconds ?? 120;
+  }
+
+  preload(): void {
+    preloadSprites(this.load);
   }
 
   create(): void {
@@ -245,6 +284,7 @@ export class MatchScene extends Phaser.Scene {
     this.accumulator = 0;
     this.prevPhase = null;
     this.trail = [];
+    this.specialAnimUntil = [];
     this.scorers = [];
     this.resultQueued = false;
     this.teamColors = [COUNTRY_INFO[this.homeCountry].color, COUNTRY_INFO[this.awayCountry].color];
@@ -256,6 +296,7 @@ export class MatchScene extends Phaser.Scene {
     });
 
     this.drawField();
+    createSpriteAnims(this.anims, this.textures);
     this.createPlayerViews();
     this.ballShadowGfx = this.add.graphics();
     this.trailGfx = this.add.graphics();
@@ -329,6 +370,7 @@ export class MatchScene extends Phaser.Scene {
         this.showBanner(`進球！ ${players[e.scorerIdx].name}`, 2000);
       } else if (e.type === 'special') {
         this.showSpecial(`${e.name}！`, SPECIAL_COLORS[e.kind]);
+        this.playSpecialPose(e.playerIdx);
       } else if (e.type === 'pkResult') {
         const text = e.outcome === 'goal' ? '進球！' : e.outcome === 'save' ? '撲救！' : '射偏！';
         this.showBanner(text, PK_RESULT_BANNER_MS);
@@ -593,10 +635,78 @@ export class MatchScene extends Phaser.Scene {
     };
     this.playerViews = this.state.players.map((p) => {
       const gfx = this.add.graphics();
+      const spriteCfg = this.spriteConfigFor(p.charId);
+      const sprite = spriteCfg ? this.add.sprite(0, 0, spriteCfg.key) : null;
       const label = this.add.text(0, 0, p.name, style).setOrigin(0.5, 1);
-      const container = this.add.container(0, 0, [gfx, label]);
-      return { container, gfx, label };
+      const container = this.add.container(0, 0, sprite ? [gfx, sprite, label] : [gfx, label]);
+      return { container, gfx, label, sprite, spriteCfg };
     });
+  }
+
+  /** Sprite config for a character whose sheet loaded. Null means the block figure is drawn. */
+  private spriteConfigFor(charId: string): SpriteConfig | null {
+    const cfg = SPRITE_CONFIGS[charId];
+    return cfg && this.textures.exists(cfg.key) ? cfg : null;
+  }
+
+  /**
+   * Which sprite animation a player shows: a special shot in progress first, then the sim action, then charging,
+   * then speed (run above RUN_SPEED, otherwise idle).
+   */
+  private spriteAnimFor(p: Player): SpriteAnim {
+    if (this.specialAnimUntil[p.idx] > this.time.now) return 'special';
+    switch (p.action) {
+      case 'punch':
+      case 'tackle':
+        return 'attack';
+      case 'jump':
+      case 'flykick':
+        return 'jump';
+      case 'hitstun':
+      case 'down':
+      case 'dive':
+      case 'recover':
+        return p.action;
+      case 'charge':
+        return 'charge';
+      default:
+        break;
+    }
+    if (p.chargeTicks > 0) return 'charge';
+    return Math.abs(p.vx) > RUN_SPEED ? 'run' : 'idle';
+  }
+
+  /** Plays the special-shot pose on this player's sprite and holds it for SPECIAL_POSE_MS. */
+  private playSpecialPose(idx: number): void {
+    this.specialAnimUntil[idx] = this.time.now + SPECIAL_POSE_MS;
+    const view = this.playerViews[idx];
+    if (view?.sprite && view.spriteCfg) view.sprite.play(spriteAnimKey(view.spriteCfg, 'special'));
+  }
+
+  /**
+   * Draws the sprite for a player: the animation comes from the sim state, the frame is anchored at the ground
+   * point between the wheels and flipped by facing. Returns the top of the frame in container space (for the label).
+   */
+  private drawSpritePlayer(sprite: Phaser.GameObjects.Sprite, cfg: SpriteConfig, p: Player, time: number, hitFlicker: boolean): number {
+    const anim = this.spriteAnimFor(p);
+    const key = spriteAnimKey(cfg, anim);
+    if (sprite.anims.currentAnim?.key !== key) sprite.play(key);
+
+    const { meta } = cfg;
+    const scale = cfg.displayHeight / meta.frameHeight;
+    const flip = p.facingX < 0;
+    const ax = meta.anchorX / meta.frameWidth;
+    const ay = meta.anchorY / meta.frameHeight;
+    const pulse = 0.5 + 0.5 * Math.sin(time / 80);
+    const alpha = hitFlicker ? 0.35 : anim === 'charge' ? 0.7 + 0.3 * pulse : 1;
+    // Flipping mirrors the frame around its box, so the anchor's x is mirrored too.
+    sprite
+      .setOrigin(flip ? 1 - ax : ax, ay)
+      .setFlipX(flip)
+      .setScale(scale)
+      .setPosition(0, -p.z)
+      .setAlpha(alpha);
+    return -p.z - meta.anchorY * scale;
   }
 
   private drawPlayer(view: PlayerView, p: Player, time: number): void {
@@ -605,7 +715,8 @@ export class MatchScene extends Phaser.Scene {
 
     const g = view.gfx;
     g.clear();
-    g.setAlpha(p.action === 'hitstun' && Math.floor(time / 50) % 2 === 1 ? 0.35 : 1);
+    const hitFlicker = p.action === 'hitstun' && Math.floor(time / 50) % 2 === 1;
+    g.setAlpha(hitFlicker ? 0.35 : 1);
 
     const r = p.radius;
     const lift = p.z;
@@ -615,9 +726,10 @@ export class MatchScene extends Phaser.Scene {
     const facingX = p.facingX >= 0 ? 1 : -1;
     const facingY = p.facingY;
 
-    // Shadow on the ground.
+    // Shadow on the ground (wider under the bike).
+    const spriteOn = view.sprite !== null && view.spriteCfg !== null;
     g.fillStyle(0x000000, 0.3);
-    g.fillEllipse(0, 0, r * 2.4, r * 1.2);
+    g.fillEllipse(0, 0, r * 2.4 * (spriteOn ? SPRITE_SHADOW_SCALE : 1), r * 1.2);
 
     // Charge ring.
     if (p.chargeTicks > 0) {
@@ -628,64 +740,69 @@ export class MatchScene extends Phaser.Scene {
       g.strokeEllipse(0, 0, R * 2, R * 2 * DEPTH_SCALE);
     }
 
-    const lying = p.action === 'down' || p.action === 'dive';
-    const tackling = p.action === 'tackle';
-    const bodyH = tackling ? r * 1.5 : r * 2.4;
-    const headR = Math.max(3, r * 0.6);
-    let bodyX: number;
-    let bodyY: number;
-    let bodyW: number;
-    let bodyHgt: number;
-    let headCx: number;
-    let headCy: number;
-    if (lying) {
-      bodyW = r * 2.4;
-      bodyHgt = r * 1.1;
-      bodyX = -bodyW / 2;
-      bodyY = -lift - bodyHgt;
-      headCx = facingX * (bodyW / 2 + headR);
-      headCy = -lift - bodyHgt / 2;
+    let topY: number;
+    if (view.sprite && view.spriteCfg) {
+      topY = this.drawSpritePlayer(view.sprite, view.spriteCfg, p, time, hitFlicker);
     } else {
-      bodyW = r * 2;
-      bodyHgt = bodyH;
-      const lean = tackling ? facingX * r * 0.6 : 0;
-      bodyX = -bodyW / 2 + lean;
-      bodyY = -lift - bodyH;
-      headCx = lean;
-      headCy = bodyY - headR * (tackling ? 0.8 : 1);
+      const lying = p.action === 'down' || p.action === 'dive';
+      const tackling = p.action === 'tackle';
+      const bodyH = tackling ? r * 1.5 : r * 2.4;
+      const headR = Math.max(3, r * 0.6);
+      let bodyX: number;
+      let bodyY: number;
+      let bodyW: number;
+      let bodyHgt: number;
+      let headCx: number;
+      let headCy: number;
+      if (lying) {
+        bodyW = r * 2.4;
+        bodyHgt = r * 1.1;
+        bodyX = -bodyW / 2;
+        bodyY = -lift - bodyHgt;
+        headCx = facingX * (bodyW / 2 + headR);
+        headCy = -lift - bodyHgt / 2;
+      } else {
+        bodyW = r * 2;
+        bodyHgt = bodyH;
+        const lean = tackling ? facingX * r * 0.6 : 0;
+        bodyX = -bodyW / 2 + lean;
+        bodyY = -lift - bodyH;
+        headCx = lean;
+        headCy = bodyY - headR * (tackling ? 0.8 : 1);
+      }
+      topY = Math.min(bodyY, headCy - headR);
+
+      // Attack and kick limbs (drawn behind the body).
+      const shoulderY = -lift - bodyHgt * 0.7;
+      if (p.action === 'punch') {
+        g.lineStyle(4, outline, 1);
+        g.lineBetween(facingX * r * 0.3, shoulderY, facingX * r * 2.2, shoulderY + facingY * r * 1.2);
+        g.lineStyle(3, SKIN, 1);
+        g.lineBetween(facingX * r * 0.3, shoulderY, facingX * r * 2.2, shoulderY + facingY * r * 1.2);
+      } else if (p.action === 'flykick') {
+        const hipY = -lift - bodyHgt * 0.35;
+        g.lineStyle(5, outline, 1);
+        g.lineBetween(0, hipY, facingX * r * 2.6, -lift - r * 0.4);
+        g.lineStyle(3, darken(bodyColor, 0.8), 1);
+        g.lineBetween(0, hipY, facingX * r * 2.6, -lift - r * 0.4);
+      }
+
+      // Body.
+      g.fillStyle(bodyColor, 1);
+      g.fillRect(bodyX, bodyY, bodyW, bodyHgt);
+      g.lineStyle(1, outline, 1);
+      g.strokeRect(bodyX, bodyY, bodyW, bodyHgt);
+
+      // Head and facing eye.
+      g.fillStyle(SKIN, 1);
+      g.fillCircle(headCx, headCy, headR);
+      g.lineStyle(1, 0x5a3b1e, 1);
+      g.strokeCircle(headCx, headCy, headR);
+      g.fillStyle(0x222222, 1);
+      g.fillCircle(headCx + facingX * headR * 0.4, headCy - headR * 0.15, Math.max(1, headR * 0.18));
     }
-    const topY = Math.min(bodyY, headCy - headR);
 
-    // Attack and kick limbs (drawn behind the body).
-    const shoulderY = -lift - bodyHgt * 0.7;
-    if (p.action === 'punch') {
-      g.lineStyle(4, outline, 1);
-      g.lineBetween(facingX * r * 0.3, shoulderY, facingX * r * 2.2, shoulderY + facingY * r * 1.2);
-      g.lineStyle(3, SKIN, 1);
-      g.lineBetween(facingX * r * 0.3, shoulderY, facingX * r * 2.2, shoulderY + facingY * r * 1.2);
-    } else if (p.action === 'flykick') {
-      const hipY = -lift - bodyHgt * 0.35;
-      g.lineStyle(5, outline, 1);
-      g.lineBetween(0, hipY, facingX * r * 2.6, -lift - r * 0.4);
-      g.lineStyle(3, darken(bodyColor, 0.8), 1);
-      g.lineBetween(0, hipY, facingX * r * 2.6, -lift - r * 0.4);
-    }
-
-    // Body.
-    g.fillStyle(bodyColor, 1);
-    g.fillRect(bodyX, bodyY, bodyW, bodyHgt);
-    g.lineStyle(1, outline, 1);
-    g.strokeRect(bodyX, bodyY, bodyW, bodyHgt);
-
-    // Head and facing eye.
-    g.fillStyle(SKIN, 1);
-    g.fillCircle(headCx, headCy, headR);
-    g.lineStyle(1, 0x5a3b1e, 1);
-    g.strokeCircle(headCx, headCy, headR);
-    g.fillStyle(0x222222, 1);
-    g.fillCircle(headCx + facingX * headR * 0.4, headCy - headR * 0.15, Math.max(1, headR * 0.18));
-
-    // Human marker above the name.
+    // Name label above the top of the figure; human marker above the name.
     const labelY = topY - 2;
     view.label.setPosition(0, labelY);
     if (p.idx === this.humanIdx) {
