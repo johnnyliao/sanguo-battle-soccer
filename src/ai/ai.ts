@@ -167,7 +167,7 @@ function ownerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPla
   const inChargeRange = goalDist < CHARGE_SHOT_RANGE;
   if (inChargeRange && p.facingX * dir > 0) {
     const special =
-      p.specialMode === 'rampage' &&
+      (p.specialMode === 'rampage' || p.specialMode === 'lunge') &&
       !p.prevInput.l &&
       p.stamina >= SHOT_MIN_STAMINA &&
       p.specialCooldown === 0 &&

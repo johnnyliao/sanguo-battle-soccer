@@ -71,8 +71,15 @@ export const RAMPAGE_SPEED_MULT = 1.35;
 export const RAMPAGE_BUMP_SPEED = 220;
 export const RAMPAGE_BUMP_STAMINA = 8;
 export const RAMPAGE_BUMP_COOLDOWN = 30;
+/** Zhao Yun's lunge (遊龍穿刺): duration in ticks and total distance in px. */
+export const LUNGE_TICKS = 15;
+export const LUNGE_DISTANCE = 200;
+/** Constant lunge speed in px per second (distance per tick, times TICK_HZ). */
+export const LUNGE_SPEED = (LUNGE_DISTANCE / LUNGE_TICKS) * TICK_HZ;
 /** Ticks before any special can be used again (12 s). */
 export const SPECIAL_COOLDOWN_TICKS = 720;
+/** An L press made during a busy action stays buffered this long (0.3 s) and fires once the player can act. */
+export const SPECIAL_BUFFER_TICKS = 18;
 /** Roar shockwave: circle radius, and how far in front of the roarer its centre sits. */
 export const ROAR_RADIUS = 105;
 export const ROAR_FORWARD = 30;

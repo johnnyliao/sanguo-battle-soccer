@@ -27,7 +27,8 @@ export type PlayerAction =
   | 'down'
   | 'recover'
   | 'charge'
-  | 'dive';
+  | 'dive'
+  | 'lunge';
 
 export type AttackKind = 'punch' | 'tackle' | 'special';
 
@@ -67,10 +68,12 @@ export interface Player {
   rampageTicks: number;
   /** Ticks during which this player cannot be bumped by a rampaging opponent again. */
   bumpCooldown: number;
-  /** What the special button (L) does: a rampage, or a roar (shockwave) for Zhang Fei. */
-  specialMode: 'rampage' | 'roar';
+  /** What the special button (L) does: a rampage, a roar (shockwave) for Zhang Fei, or a lunge (long dash) for Zhao Yun. */
+  specialMode: 'rampage' | 'roar' | 'lunge';
   /** Ticks until the special can be used again. Set when a rampage starts or a roar fires. */
   specialCooldown: number;
+  /** Ticks left on a buffered L press. A press made while busy waits here and fires once the player can act. 0 = none. */
+  specialBuffer: number;
   specialKind: SpecialKind;
   specialName: string;
   prevInput: InputFrame;
@@ -125,6 +128,10 @@ export type SimEvent =
   | { type: 'roar'; playerIdx: number; x: number; y: number; radius: number }
   | { type: 'rampageStart'; playerIdx: number }
   | { type: 'rampageEnd'; playerIdx: number }
+  /** A lunge starts: the dash origin and unit direction. */
+  | { type: 'lungeStart'; playerIdx: number; x: number; y: number; dirX: number; dirY: number }
+  /** A lunge ends (timer, field edge, or phase change). */
+  | { type: 'lungeEnd'; playerIdx: number; x: number; y: number }
   | { type: 'specialEnd' }
   | { type: 'whistle'; reason: 'kickoff' | 'half' | 'full' }
   | { type: 'goal'; team: 0 | 1; scorerIdx: number }

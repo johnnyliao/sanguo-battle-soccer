@@ -87,6 +87,7 @@ export function createInitialState(
         bumpCooldown: 0,
         specialMode: def.special.mode ?? 'rampage',
         specialCooldown: 0,
+        specialBuffer: 0,
         specialKind: def.special.kind,
         specialName: def.special.name,
         prevInput: { ...EMPTY_INPUT },

@@ -23,7 +23,7 @@ import {
   SPECIAL_ZIGZAG_FREQ,
   WALL_BOUNCE,
 } from './constants';
-import { applyRampageBumps, applySpecialHit, clampPlayerToField, updateAction } from './actions';
+import { applyRampageBumps, applySpecialHit, clampPlayerToField, isInvincible, updateAction } from './actions';
 import { inOwnArea, goalMouth, isInGoalMouth } from './field';
 import { updateMatch } from './match';
 import { updatePk } from './pk';
@@ -84,7 +84,7 @@ export function step(state: GameState, inputs: InputFrame[]): GameState {
 
 /**
  * Pushes overlapping players apart in xy; the push is split by inverse mass (lighter moves more). Downed players are skipped.
- * A rampaging player has infinite mass: it is not pushed, and an opponent takes the whole push.
+ * An invincible player (rampaging or lunging) has infinite mass: it is not pushed, and an opponent takes the whole push.
  */
 function resolvePlayerCollisions(players: Player[]): void {
   for (let i = 0; i < players.length; i++) {
@@ -102,8 +102,8 @@ function resolvePlayerCollisions(players: Player[]): void {
       const nx = dist === 0 ? 1 : dx / dist;
       const ny = dist === 0 ? 0 : dy / dist;
       const overlap = minDist - dist;
-      const invA = a.rampageTicks > 0 ? 0 : 1 / a.mass;
-      const invB = b.rampageTicks > 0 ? 0 : 1 / b.mass;
+      const invA = isInvincible(a) ? 0 : 1 / a.mass;
+      const invB = isInvincible(b) ? 0 : 1 / b.mass;
       const sumInv = invA + invB;
       // Two rampagers overlapping: neither is movable, so the push splits evenly.
       const pushA = sumInv === 0 ? overlap / 2 : (overlap * invA) / sumInv;

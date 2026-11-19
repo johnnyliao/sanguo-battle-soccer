@@ -21,6 +21,8 @@ import {
   KICK_RECOVER_TICKS,
   KNOCKBACK_SPEED,
   LOOSE_BALL_NO_TOUCH,
+  LUNGE_SPEED,
+  LUNGE_TICKS,
   PASS_LOB_DIST,
   PASS_LOB_SPEED,
   PLAYER_ACCEL,
@@ -46,6 +48,7 @@ import {
   SHOT_BASE_SPEED,
   SHOT_SPEED_PER_CHARGE,
   SHOT_SPEED_PER_POWER,
+  SPECIAL_BUFFER_TICKS,
   SPECIAL_COOLDOWN_TICKS,
   SPECIAL_FLAT_Z,
   SPECIAL_HIT_STAMINA,
@@ -111,6 +114,8 @@ export function updateAction(state: GameState, p: Player, input: InputFrame): vo
   applyGravity(p);
   tickRampage(state, p);
   tickSpecialCooldown(state, p);
+  if (input.l && !p.prevInput.l) p.specialBuffer = SPECIAL_BUFFER_TICKS;
+  else if (p.specialBuffer > 0) p.specialBuffer--;
   switch (p.action) {
     case 'normal':
       updateNormal(state, p, input);
@@ -138,6 +143,9 @@ export function updateAction(state: GameState, p: Player, input: InputFrame): vo
       break;
     case 'charge':
       updateCharge(state, p, input);
+      break;
+    case 'lunge':
+      updateLunge(state, p);
       break;
   }
 }
@@ -232,7 +240,8 @@ function updateNormal(state: GameState, p: Player, input: InputFrame): void {
     p.facingY = dir.y;
   }
 
-  trySpecial(state, p, input);
+  // A lunge takes over the whole tick: its movement is set by startLunge and updateLunge.
+  if (trySpecial(state, p, input) && p.action === 'lunge') return;
 
   // A rampage replaces the dash: no dash drain, and the rampage speed applies instead.
   const rampaging = p.rampageTicks > 0;
@@ -402,18 +411,22 @@ function releaseCharge(state: GameState, p: Player, input: InputFrame): void {
 }
 
 /**
- * L press: starts the special if it is ready (cooldown 0, enough stamina). A rampage needs the ball and starts at once;
- * a roar (Zhang Fei) works with or without it. Returns true if the special started.
+ * Buffered L press: starts the special if a press is buffered, the match is in play, and it is ready (cooldown 0,
+ * enough stamina). A rampage or lunge needs the ball and starts at once; a roar (Zhang Fei) works with or without it.
+ * A special that cannot start yet keeps the buffer. Returns true if the special started.
  */
 function trySpecial(state: GameState, p: Player, input: InputFrame): boolean {
-  if (!input.l || p.prevInput.l) return false;
+  if (p.specialBuffer === 0 || state.match.phase !== 'play') return false;
   if (p.specialCooldown > 0 || p.stamina < SPECIAL_STAMINA_COST) return false;
   if (p.specialMode === 'roar') {
+    p.specialBuffer = 0;
     castRoar(state, p);
     return true;
   }
   if (state.ball.ownerIdx !== p.idx) return false;
-  startRampage(state, p);
+  p.specialBuffer = 0;
+  if (p.specialMode === 'lunge') startLunge(state, p, input);
+  else startRampage(state, p);
   return true;
 }
 
@@ -426,6 +439,56 @@ function startRampage(state: GameState, p: Player): void {
   p.actionTimer = 0;
   state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
   state.events.push({ type: 'rampageStart', playerIdx: p.idx });
+}
+
+/**
+ * Special L with the ball (Zhao Yun): a fixed-speed dash along the held direction (or facing). The player keeps the ball
+ * at his feet and is invincible for the lunge's LUNGE_TICKS ticks.
+ */
+function startLunge(state: GameState, p: Player, input: InputFrame): void {
+  const dir = inputDir(input);
+  if (dir.x !== 0 || dir.y !== 0) {
+    p.facingX = dir.x;
+    p.facingY = dir.y;
+  }
+  p.stamina -= SPECIAL_STAMINA_COST;
+  p.specialCooldown = SPECIAL_COOLDOWN_TICKS;
+  p.chargeTicks = 0;
+  p.action = 'lunge';
+  p.actionTimer = LUNGE_TICKS;
+  p.vx = p.facingX * LUNGE_SPEED;
+  p.vy = p.facingY * LUNGE_SPEED;
+  state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
+  state.events.push({ type: 'lungeStart', playerIdx: p.idx, x: p.x, y: p.y, dirX: p.facingX, dirY: p.facingY });
+}
+
+/**
+ * One lunge tick: the velocity stays fixed and input is ignored. The lunge ends when its timer runs out, when the
+ * player reaches the field edge, or when the phase leaves play.
+ */
+function updateLunge(state: GameState, p: Player): void {
+  if (state.match.phase !== 'play') {
+    endLunge(state, p);
+    return;
+  }
+  const nextX = p.x + p.vx * DT;
+  const nextY = p.y + p.vy * DT;
+  const atEdge = nextX < 0 || nextX > FIELD_W || nextY < 0 || nextY > FIELD_D;
+  integrate(p);
+  p.actionTimer--;
+  if (atEdge || p.actionTimer <= 0) endLunge(state, p);
+}
+
+/** Back to normal play. The lunge speed is scaled down to the player's normal top speed, keeping its direction. */
+function endLunge(state: GameState, p: Player): void {
+  const maxSpeed = maxSpeedOf(p);
+  const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+  if (speed > maxSpeed) {
+    p.vx = (p.vx / speed) * maxSpeed;
+    p.vy = (p.vy / speed) * maxSpeed;
+  }
+  toNormal(p);
+  state.events.push({ type: 'lungeEnd', playerIdx: p.idx, x: p.x, y: p.y });
 }
 
 /** Counts the special cooldown down while the match is in play. */
@@ -446,7 +509,7 @@ function castRoar(state: GameState, p: Player): void {
   state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
   state.events.push({ type: 'roar', playerIdx: p.idx, x: cx, y: cy, radius: ROAR_RADIUS });
   for (const v of state.players) {
-    if (v.team === p.team || v.action === 'down' || v.rampageTicks > 0) continue;
+    if (v.team === p.team || v.action === 'down' || isInvincible(v)) continue;
     if (distance(cx, cy, v.x, v.y) > ROAR_RADIUS) continue;
     roarKnock(state, p, v);
   }
@@ -665,7 +728,7 @@ export function applySpecialHit(
   dirX: number,
   dirY: number,
 ): void {
-  if (victim.rampageTicks > 0) return;
+  if (isInvincible(victim)) return;
   victim.stamina = Math.max(0, victim.stamina - SPECIAL_HIT_STAMINA);
   victim.chargeTicks = 0;
 
@@ -709,15 +772,20 @@ function findVictim(
   return undefined;
 }
 
+/** Invincible players (rampaging or lunging) cannot be hit, tackled, stolen from, roared at, or pierced by a special. */
+export function isInvincible(p: Player): boolean {
+  return p.rampageTicks > 0 || p.action === 'lunge';
+}
+
 /**
- * Each rampaging player knocks away every standing opponent that is not rampaging and not on bump cooldown,
- * whose circle is within RAMPAGE_BUMP_PAD of its own. Runs after the actions, before collisions.
+ * Each invincible attacker (rampaging or lunging) knocks away every standing opponent that is not invincible and not on
+ * bump cooldown, whose circle is within RAMPAGE_BUMP_PAD of its own. Runs after the actions, before collisions.
  */
 export function applyRampageBumps(state: GameState): void {
   for (const r of state.players) {
-    if (r.rampageTicks === 0) continue;
+    if (!isInvincible(r)) continue;
     for (const o of state.players) {
-      if (o.team === r.team || o.action === 'down' || o.bumpCooldown > 0 || o.rampageTicks > 0) continue;
+      if (o.team === r.team || o.action === 'down' || o.bumpCooldown > 0 || isInvincible(o)) continue;
       const dx = o.x - r.x;
       const dy = o.y - r.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -758,8 +826,8 @@ function rampageBump(state: GameState, rampager: Player, victim: Player, dist: n
 
 function applyHit(state: GameState, attacker: Player, victim: Player, kind: AttackKind): void {
   attacker.hitDone = true;
-  // A rampaging victim is invincible: the attack is spent and nothing else changes.
-  if (victim.rampageTicks > 0) return;
+  // An invincible victim (rampaging or lunging): the attack is spent and nothing else changes.
+  if (isInvincible(victim)) return;
   victim.chargeTicks = 0;
 
   let damage = Math.max(3, Math.round(8 + attacker.stats.power * 1.2 - victim.stats.defense * 0.5));

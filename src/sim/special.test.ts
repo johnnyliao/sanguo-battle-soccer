@@ -6,9 +6,11 @@ import {
   EMPTY_INPUT,
   FIELD_D,
   LOOSE_BALL_NO_TOUCH,
+  PUNCH_TICKS,
   RAMPAGE_TICKS,
   ROAR_RADIUS,
   ROAR_STAMINA,
+  SPECIAL_BUFFER_TICKS,
   SPECIAL_COOLDOWN_TICKS,
   SPECIAL_STAMINA_COST,
   createInitialState,
@@ -362,6 +364,64 @@ describe('roar cooldown', () => {
     state.players[5].y = state.players[0].y;
     const away = pressL(state);
     expect(away.some((e) => e.type === 'roar')).toBe(false);
+  });
+});
+
+describe('special buffer', () => {
+  it('L pressed during a punch fires the roar once the punch ends, once', () => {
+    const state = roarAwayState(300);
+    const p = state.players[0];
+    step(state, inputFor(0, { j: true }));
+    expect(p.action).toBe('punch');
+
+    const during = run(state, 1, inputFor(0, { l: true }));
+    expect(during.some((e) => e.type === 'roar')).toBe(false);
+    expect(p.specialBuffer).toBe(SPECIAL_BUFFER_TICKS);
+
+    const after = run(state, PUNCH_TICKS + 2);
+    expect(after.filter((e) => e.type === 'roar')).toHaveLength(1);
+    expect(p.specialBuffer).toBe(0);
+  });
+
+  it('an owner in a short hitstun who presses L rampages as soon as the hitstun ends', () => {
+    const state = ownerState(600);
+    const p = state.players[0];
+    p.action = 'hitstun';
+    p.actionTimer = 5;
+
+    const during = run(state, 1, inputFor(0, { l: true }));
+    expect(during.some((e) => e.type === 'rampageStart')).toBe(false);
+
+    const after = run(state, 10);
+    expect(after.filter((e) => e.type === 'rampageStart')).toHaveLength(1);
+    expect(p.rampageTicks).toBeGreaterThan(0);
+  });
+
+  it('an L press made in a busy state longer than the buffer does not fire later', () => {
+    const state = ownerState(600);
+    const p = state.players[0];
+    p.action = 'hitstun';
+    p.actionTimer = 40;
+
+    run(state, 1, inputFor(0, { l: true }));
+    const events = run(state, 80);
+
+    expect(events.some((e) => e.type === 'rampageStart' || e.type === 'special')).toBe(false);
+    expect(p.rampageTicks).toBe(0);
+    expect(p.specialCooldown).toBe(0);
+    expect(p.specialBuffer).toBe(0);
+  });
+
+  it('one L press fires one special: the buffer clears on start and the cooldown blocks a repeat', () => {
+    const state = roarOwnerState(600);
+    const p = state.players[0];
+
+    const first = pressL(state);
+    expect(first.filter((e) => e.type === 'roar')).toHaveLength(1);
+    expect(p.specialBuffer).toBe(0);
+
+    const rest = run(state, SPECIAL_COOLDOWN_TICKS + 20);
+    expect(rest.some((e) => e.type === 'roar' || e.type === 'special')).toBe(false);
   });
 });
 

@@ -20,8 +20,8 @@ export interface CharacterDef {
   role: Role;
   size: BodySize;
   stats: Stats;
-  /** 'rampage' (L with the ball: invincible run) or 'roar' (L with or without the ball: shockwave). */
-  special: { name: string; kind: SpecialKind; mode?: 'rampage' | 'roar' };
+  /** 'rampage' (L with the ball: invincible run), 'roar' (L with or without the ball: shockwave), or 'lunge' (L with the ball: invincible long dash). */
+  special: { name: string; kind: SpecialKind; mode?: 'rampage' | 'roar' | 'lunge' };
 }
 
 export interface SizeParams {
