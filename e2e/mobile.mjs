@@ -335,7 +335,7 @@ try {
     if (s.stage === 'aim' && s.shooterIdx === human && !humanAim) {
       humanAim = true;
       await page.waitForTimeout(150);
-      hintOk = await page.evaluate(() => window.__sg.scene.hudSpecialText.text.includes('搖桿'));
+      hintOk = await page.evaluate(() => window.__sg.scene.pkHintText.text.includes('搖桿'));
       await page.screenshot({ path: shot('mobile-4b-pk-human.png') });
     }
     if (s.stage === 'aim' && s.shooterIdx === human && s.meterTicks < 0 && pressedAtKick !== s.kicksTaken) {

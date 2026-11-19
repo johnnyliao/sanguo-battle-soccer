@@ -222,16 +222,23 @@ function orderLayout(H: number) {
     undoH: ORDER_UNDO_H * k,
   };
 }
-/** Minimap in the top-left band under the top bar: world units scaled to pixels. */
-const MINIMAP_X = 8;
-const MINIMAP_Y = 40;
+/** Minimap at the bottom-centre: world units scaled to pixels, MINIMAP_BOTTOM units above the view's bottom edge.
+ * The width is capped to W - MINIMAP_SIDE_CLEAR so it stays clear of the touch joystick (left) and buttons (right). */
 const MINIMAP_SCALE = 0.15;
+const MINIMAP_BOTTOM = 6;
+const MINIMAP_SIDE_CLEAR = 340;
+/** Top-left HUD: the human's stamina bar (under the name) with a tick at the special cost. */
+const STAMINA_BAR_X = 8;
+const STAMINA_BAR_Y = 21;
+const STAMINA_BAR_W = 110;
+const STAMINA_BAR_H = 8;
+const STAMINA_LOW_RATIO = 0.5;
 /** Off-screen arrow: shown when the human is closer than ARROW_MARGIN to a view edge. The arrow is clamped to
- * the band between the top bar / minimap and the bottom HUD (or the touch buttons). */
+ * the band between the top bar and the bottom edge (or the minimap / touch buttons). */
 const ARROW_MARGIN = 10;
 const ARROW_SIZE = 12;
 const ARROW_EDGE_X = 16;
-const ARROW_EDGE_TOP = 104;
+const ARROW_EDGE_TOP = 44;
 const ARROW_EDGE_BOTTOM = 62;
 const ARROW_EDGE_BOTTOM_TOUCH = 142;
 /** Horizontal speed (sim units per second) above which the sprite runs. */
@@ -272,8 +279,6 @@ const BEAM_HIT_LIFT = 20;
 const BEAM_FADE_MS = 150;
 const BEAM_SHAKE_MS = 120;
 const BEAM_SHAKE_INTENSITY = 0.002;
-const COOLDOWN_GREY = 0x9aa3ad;
-const HUD_COOLDOWN_W = 120;
 /** Why-not hint above the human's name: shown for HINT_MS, rising HINT_RISE px while it fades. */
 const HINT_MS = 1000;
 const HINT_RISE = 8;
@@ -300,6 +305,11 @@ function hexCss(color: number): string {
 /** Left edge of the centred PK order box for a view of width W. */
 function orderLeft(W: number): number {
   return (W - ORDER_BOX_W) / 2;
+}
+
+/** Minimap scale for a view of width W: MINIMAP_SCALE, shrunk on narrow touch views to clear the touch controls. */
+function minimapScale(W: number): number {
+  return Math.min(MINIMAP_SCALE, (W - MINIMAP_SIDE_CLEAR) / FIELD_W);
 }
 
 function mix(a: number, b: number, t: number): number {
@@ -376,7 +386,6 @@ export class MatchScene extends Phaser.Scene {
   private awayText!: Phaser.GameObjects.Text;
   private dashText!: Phaser.GameObjects.Text;
   private topBarGfx!: Phaser.GameObjects.Graphics;
-  private bottomBarGfx!: Phaser.GameObjects.Graphics;
   private minimapGfx!: Phaser.GameObjects.Graphics;
   private minimapFrames = 0;
   private arrowGfx!: Phaser.GameObjects.Graphics;
@@ -387,9 +396,7 @@ export class MatchScene extends Phaser.Scene {
   private baseH = BASE_H;
   private clockText!: Phaser.GameObjects.Text;
   private hudNameText!: Phaser.GameObjects.Text;
-  private hudSpecialText!: Phaser.GameObjects.Text;
-  private hudBarsGfx!: Phaser.GameObjects.Graphics;
-  private hudCooldownText!: Phaser.GameObjects.Text;
+  private hudStaminaGfx!: Phaser.GameObjects.Graphics;
   private bannerText!: Phaser.GameObjects.Text;
   private bannerUntil = 0;
   private specialText!: Phaser.GameObjects.Text;
@@ -407,6 +414,9 @@ export class MatchScene extends Phaser.Scene {
   private pkHudGfx!: Phaser.GameObjects.Graphics;
   private pkAimGfx!: Phaser.GameObjects.Graphics;
   private pkScoreText!: Phaser.GameObjects.Text;
+  /** Shootout bottom-centre lines: shooter / keeper names and the aim hint. */
+  private pkLineText!: Phaser.GameObjects.Text;
+  private pkHintText!: Phaser.GameObjects.Text;
   private pkHomeText!: Phaser.GameObjects.Text;
   private pkAwayText!: Phaser.GameObjects.Text;
   private pkMeterLabel!: Phaser.GameObjects.Text;
@@ -988,17 +998,20 @@ export class MatchScene extends Phaser.Scene {
     this.minimapFrames++;
 
     const g = this.minimapGfx.clear();
-    const s = MINIMAP_SCALE;
-    const mx = (x: number) => MINIMAP_X + x * s;
-    const my = (y: number) => MINIMAP_Y + y * s;
+    const { W, H } = this.view;
+    const s = minimapScale(W);
     const w = FIELD_W * s;
     const h = FIELD_D * s;
+    const ox = (W - w) / 2;
+    const oy = H - MINIMAP_BOTTOM - h;
+    const mx = (x: number) => ox + x * s;
+    const my = (y: number) => oy + y * s;
     const { players, ball } = this.state;
 
     g.fillStyle(0x0b3d1e, 0.6);
-    g.fillRect(MINIMAP_X, MINIMAP_Y, w, h);
+    g.fillRect(ox, oy, w, h);
     g.lineStyle(1, 0xffffff, 0.9);
-    g.strokeRect(MINIMAP_X, MINIMAP_Y, w, h);
+    g.strokeRect(ox, oy, w, h);
     g.lineBetween(mx(FIELD_W / 2), my(0), mx(FIELD_W / 2), my(FIELD_D));
 
     // Goals: a white bar across each goal mouth.
@@ -1026,11 +1039,11 @@ export class MatchScene extends Phaser.Scene {
     }
 
     const cam = this.cameras.main;
-    const x0 = Math.max(MINIMAP_X, mx(cam.scrollX));
-    const x1 = Math.min(MINIMAP_X + w, mx(cam.scrollX + this.view.W));
+    const x0 = Math.max(ox, mx(cam.scrollX));
+    const x1 = Math.min(ox + w, mx(cam.scrollX + W));
     if (x1 > x0) {
       g.lineStyle(1, 0xffffff, 1);
-      g.strokeRect(x0, MINIMAP_Y, x1 - x0, h);
+      g.strokeRect(x0, oy, x1 - x0, h);
     }
   }
 
@@ -1442,21 +1455,11 @@ export class MatchScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(hudDepth + 1);
 
-    this.bottomBarGfx = this.add.graphics().setScrollFactor(0).setDepth(hudDepth);
     this.hudNameText = this.add
-      .text(0, 0, '', style('#ffffff', '14px'))
-      .setScrollFactor(0)
-      .setDepth(hudDepth + 1);
-    this.hudSpecialText = this.add
-      .text(0, 0, '', style('#ffd98a', '12px', false))
-      .setScrollFactor(0)
-      .setDepth(hudDepth + 1);
-    this.hudBarsGfx = this.add.graphics().setScrollFactor(0).setDepth(hudDepth + 1);
-    this.hudCooldownText = this.add
       .text(0, 0, '', style('#ffffff', '12px'))
-      .setOrigin(0, 0.5)
       .setScrollFactor(0)
       .setDepth(hudDepth + 1);
+    this.hudStaminaGfx = this.add.graphics().setScrollFactor(0).setDepth(hudDepth + 1);
 
     this.bannerText = this.add
       .text(0, 0, '', style('#ffffff', '26px'))
@@ -1497,12 +1500,12 @@ export class MatchScene extends Phaser.Scene {
     this.awayText.setPosition(W / 2 + 8, 17);
     this.clockText.setPosition(W - 10, 17);
 
-    this.bottomBarGfx.clear().fillStyle(0x000000, 0.55).fillRect(0, H - 38, W, 38);
-    this.hudNameText.setPosition(8, H - 35);
-    this.hudSpecialText.setPosition(8, H - 17);
+    this.hudNameText.setPosition(STAMINA_BAR_X, 3);
     this.bannerText.setPosition(W / 2, H / 2 - 30);
     this.specialText.setPosition(W / 2, H / 2 + 20);
     this.pkMeterLabel.setPosition(W - PK_METER_RIGHT - 6, H - PK_METER_BOTTOM + PK_METER_H / 2);
+    this.pkLineText.setPosition(W / 2, H - 40);
+    this.pkHintText.setPosition(W / 2, H - 2);
 
     const left = orderLeft(W);
     const o = orderLayout(H);
@@ -1548,6 +1551,8 @@ export class MatchScene extends Phaser.Scene {
     const away = COUNTRY_INFO[this.awayCountry];
     this.pkHomeText = add(8, 64, hexCss(home.color), '13px', home.name);
     this.pkAwayText = add(8, 85, hexCss(away.color), '13px', away.name);
+    this.pkLineText = add(0, 0, '', '#ffffff', '14px').setOrigin(0.5, 1);
+    this.pkHintText = add(0, 0, '', '#ffd98a', '11px').setOrigin(0.5, 1);
     this.pkMeterLabel = add(0, 0, '#ffffff', '12px', '力量')
       .setOrigin(1, 0.5);
     this.pkObjs = [
@@ -1556,6 +1561,8 @@ export class MatchScene extends Phaser.Scene {
       this.pkScoreText,
       this.pkHomeText,
       this.pkAwayText,
+      this.pkLineText,
+      this.pkHintText,
       this.pkMeterLabel,
     ];
   }
@@ -1657,7 +1664,6 @@ export class MatchScene extends Phaser.Scene {
 
   private drawMatchHud(): void {
     const { match, players } = this.state;
-    const { H } = this.view;
     const secs = Math.ceil(match.clockTicks / TICK_HZ);
     const mm = String(Math.floor(secs / 60)).padStart(2, '0');
     const ss = String(secs % 60).padStart(2, '0');
@@ -1666,35 +1672,19 @@ export class MatchScene extends Phaser.Scene {
     const p = players[this.humanIdx];
     const block = positionBlockReason(this.state, p) ?? (p.stamina < SPECIAL_STAMINA_COST ? '體力不足' : null);
     this.touch.setSpecialStatus({ cooldownTicks: p.specialCooldown, cooldownTotal: SPECIAL_COOLDOWN_TICKS, block });
-    this.hudNameText.setText(p.name);
-    this.hudSpecialText.setText(`必殺：${p.specialName}`);
+    this.hudNameText.setText(p.name).setVisible(true);
 
-    const barX = 150;
-    const barW = 180;
+    // Stamina bar: green, yellow below half, red below the special cost; a white tick marks the special cost.
     const staminaRatio = Math.max(0, Math.min(1, p.stamina / p.maxStamina));
-    const chargeRatio = Math.min(1, p.chargeTicks / CHARGE_FULL);
-    this.hudBarsGfx.clear();
-    this.hudBarsGfx.fillStyle(0x333333, 1);
-    this.hudBarsGfx.fillRect(barX, H - 30, barW, 7);
-    this.hudBarsGfx.fillRect(barX, H - 15, barW, 7);
-    this.hudBarsGfx.fillStyle(0x6cd46c, 1);
-    this.hudBarsGfx.fillRect(barX, H - 30, barW * staminaRatio, 7);
-    this.hudBarsGfx.fillStyle(chargeRatio >= 1 ? GOLD : 0x4fb3ff, 1);
-    this.hudBarsGfx.fillRect(barX, H - 15, barW * chargeRatio, 7);
-
-    // Special cooldown, right of the bars: a grey bar draining while cooling down, gold when ready.
-    const cdX = barX + barW + 10;
-    const cooling = p.specialCooldown > 0;
-    const cdRatio = Math.min(1, p.specialCooldown / SPECIAL_COOLDOWN_TICKS);
-    const label = cooling ? `必殺冷卻 ${Math.ceil(p.specialCooldown / TICK_HZ)} 秒` : '必殺可用';
-    this.hudCooldownText.setVisible(true).setPosition(cdX, H - 30);
-    if (this.hudCooldownText.text !== label) {
-      this.hudCooldownText.setText(label).setColor(cooling ? hexCss(COOLDOWN_GREY) : hexCss(GOLD));
-    }
-    this.hudBarsGfx.fillStyle(0x333333, 1);
-    this.hudBarsGfx.fillRect(cdX, H - 15, HUD_COOLDOWN_W, 7);
-    this.hudBarsGfx.fillStyle(cooling ? COOLDOWN_GREY : GOLD, 1);
-    this.hudBarsGfx.fillRect(cdX, H - 15, HUD_COOLDOWN_W * (cooling ? cdRatio : 1), 7);
+    const costRatio = SPECIAL_STAMINA_COST / p.maxStamina;
+    const fill = staminaRatio < costRatio ? 0xff3b3b : staminaRatio < STAMINA_LOW_RATIO ? 0xf2c94c : 0x6cd46c;
+    const g = this.hudStaminaGfx.clear();
+    g.fillStyle(0x333333, 1);
+    g.fillRect(STAMINA_BAR_X, STAMINA_BAR_Y, STAMINA_BAR_W, STAMINA_BAR_H);
+    g.fillStyle(fill, 1);
+    g.fillRect(STAMINA_BAR_X, STAMINA_BAR_Y, STAMINA_BAR_W * staminaRatio, STAMINA_BAR_H);
+    g.fillStyle(0xffffff, 1);
+    g.fillRect(STAMINA_BAR_X + STAMINA_BAR_W * costRatio - 0.5, STAMINA_BAR_Y - 2, 1, STAMINA_BAR_H + 4);
   }
 
   /** Shootout HUD: title, PK score, per-team kick markers, shooter/keeper line, aim helpers and power meter. */
@@ -1705,8 +1695,8 @@ export class MatchScene extends Phaser.Scene {
     const sudden = pk.kicks[0].length >= PK_ROUNDS && pk.kicks[1].length >= PK_ROUNDS;
     this.clockText.setText(sudden ? 'PK 大戰　驟死' : 'PK 大戰');
     this.pkScoreText.setText(`PK ${pk.score[0]} - ${pk.score[1]}`);
-    this.hudBarsGfx.clear();
-    this.hudCooldownText.setVisible(false);
+    this.hudStaminaGfx.clear();
+    this.hudNameText.setVisible(false);
 
     const g = this.pkHudGfx.clear();
     g.fillStyle(0x000000, 0.55);
@@ -1717,7 +1707,7 @@ export class MatchScene extends Phaser.Scene {
     const live = pk.stage === 'aim' || pk.stage === 'flight' || pk.stage === 'result';
     const shooter = live ? players[pk.shooterIdx] : undefined;
     const keeper = live ? players[pk.keeperIdx] : undefined;
-    this.hudNameText.setText(shooter && keeper ? `射門：${shooter.name}　守門：${keeper.name}` : '');
+    this.pkLineText.setText(shooter && keeper ? `射門：${shooter.name}　守門：${keeper.name}` : '');
 
     const humanShoots = live && pk.shooterIdx === this.humanIdx;
     const humanKeeps = live && pk.keeperIdx === this.humanIdx;
@@ -1732,7 +1722,7 @@ export class MatchScene extends Phaser.Scene {
     } else if (pk.stage === 'aim') {
       hint = '觀看中…';
     }
-    this.hudSpecialText.setText(hint);
+    this.pkHintText.setText(hint);
 
     const aiming = pk.stage === 'aim' && (humanShoots || humanKeeps);
     const aim = this.pkAimGfx.clear();
