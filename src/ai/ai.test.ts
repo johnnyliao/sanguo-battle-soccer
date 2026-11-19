@@ -6,6 +6,7 @@ import {
   FIELD_D,
   FIELD_W,
   createInitialState,
+  RAMPAGE_TICKS,
   hashState,
   ownGoalX,
   step,
@@ -24,6 +25,7 @@ interface MatchReport {
   score: [number, number];
   shots: [number, number];
   specials: [number, number];
+  rampages: number;
   hits: number;
   goals: number;
   pickups: number;
@@ -56,6 +58,7 @@ function runMatch(
     score: [0, 0],
     shots: [0, 0],
     specials: [0, 0],
+    rampages: 0,
     hits: 0,
     goals: 0,
     pickups: 0,
@@ -72,6 +75,7 @@ function runMatch(
     for (const e of state.events) {
       if (e.type === 'kick' && e.kind === 'shot') report.shots[state.players[e.playerIdx].team]++;
       else if (e.type === 'special') report.specials[state.players[e.playerIdx].team]++;
+      else if (e.type === 'rampageStart') report.rampages++;
       else if (e.type === 'hit') report.hits++;
       else if (e.type === 'goal') report.goals++;
       else if (e.type === 'pickup') report.pickups++;
@@ -97,7 +101,7 @@ describe('AI full match', () => {
       console.log(
         `[AI match seed 1] ticks=${report.ticks} phase=${report.finalPhase} score=${report.score[0]}-${report.score[1]} ` +
           `shots(shu/wei)=${report.shots[0]}/${report.shots[1]} specials(shu/wei)=${report.specials[0]}/${report.specials[1]} ` +
-          `hits=${report.hits} goals=${report.goals} pickups=${report.pickups} ownerChanges=${report.ownerChanges}`,
+          `rampages=${report.rampages} hits=${report.hits} goals=${report.goals} pickups=${report.pickups} ownerChanges=${report.ownerChanges}`,
       );
 
       expect(['fulltime', 'pk']).toContain(report.finalPhase);
@@ -116,7 +120,7 @@ describe('AI full match', () => {
       for (const r of reports) {
         console.log(
           `[AI match seed ${r.seed}] goals=${r.goals} score=${r.score[0]}-${r.score[1]} phase=${r.finalPhase} ` +
-            `shots=${r.shots[0]}/${r.shots[1]} specials=${r.specials[0]}/${r.specials[1]} hits=${r.hits}`,
+            `shots=${r.shots[0]}/${r.shots[1]} specials=${r.specials[0]}/${r.specials[1]} rampages=${r.rampages} hits=${r.hits}`,
         );
       }
       const total = reports.reduce((sum, r) => sum + r.goals, 0);
@@ -173,6 +177,36 @@ describe('AI behaviour', () => {
       );
     }
     expect(passedToCaller).toBe(true);
+  });
+
+  it('an AI owner in a rampage dribbles at the goal and fires its special once close enough', () => {
+    const state = createInitialState({ seed: 4, teams: [getTeam('shu'), getTeam('wei')], startInPlay: true }, SIZE_PARAMS);
+    state.players.forEach((p, i) => {
+      p.x = 100;
+      p.y = 20 + i * 24;
+    });
+    // idx 3 is a straight-special MF; a lob special would fire from 380 px instead of 260 px.
+    const owner = state.players[3];
+    owner.x = 900;
+    owner.y = FIELD_D / 2;
+    owner.facingX = 1;
+    owner.facingY = 0;
+    owner.rampageTicks = RAMPAGE_TICKS;
+    state.ball.x = owner.x + owner.radius + DRIBBLE_OFFSET;
+    state.ball.y = owner.y;
+    state.ball.ownerIdx = 3;
+    state.ball.lastTouchIdx = 3;
+
+    const ai = createAIState(4);
+    let fired = false;
+    for (let t = 0; t < 120 && !fired; t++) {
+      step(state, computeAIInputs(state, ai, NO_HUMANS));
+      fired = state.events.some((e) => e.type === 'special' && e.playerIdx === 3);
+    }
+
+    expect(fired).toBe(true);
+    expect(state.ball.special).not.toBeNull();
+    expect(Math.abs(FIELD_W - owner.x)).toBeLessThan(260);
   });
 
   it('keeps each goalkeeper near its own goal line while the ball is far from it', () => {

@@ -65,6 +65,10 @@ export interface Player {
   noTouchTicks: number;
   /** Ticks spent charging a shot (J held while owning the ball). */
   chargeTicks: number;
+  /** Ticks left in a rampage (invincible, keeps the ball). 0 = no rampage. */
+  rampageTicks: number;
+  /** Ticks during which this player cannot be bumped by a rampaging opponent again. */
+  bumpCooldown: number;
   specialKind: SpecialKind;
   specialName: string;
   prevInput: InputFrame;
@@ -112,6 +116,8 @@ export type SimEvent =
   | { type: 'kick'; playerIdx: number; kind: 'pass' | 'shot' | 'clear'; targetIdx: number }
   | { type: 'chargeFull'; playerIdx: number }
   | { type: 'special'; playerIdx: number; kind: SpecialKind; name: string }
+  | { type: 'rampageStart'; playerIdx: number }
+  | { type: 'rampageEnd'; playerIdx: number }
   | { type: 'specialEnd' }
   | { type: 'whistle'; reason: 'kickoff' | 'half' | 'full' }
   | { type: 'goal'; team: 0 | 1; scorerIdx: number }

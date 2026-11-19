@@ -23,7 +23,7 @@ import {
   SPECIAL_ZIGZAG_FREQ,
   WALL_BOUNCE,
 } from './constants';
-import { applySpecialHit, clampPlayerToField, updateAction } from './actions';
+import { applyRampageBumps, applySpecialHit, clampPlayerToField, updateAction } from './actions';
 import { inOwnArea, goalMouth, isInGoalMouth } from './field';
 import { updateMatch } from './match';
 import { updatePk } from './pk';
@@ -66,6 +66,7 @@ export function step(state: GameState, inputs: InputFrame[]): GameState {
       updateAction(state, state.players[i], frames[i]);
     }
 
+    applyRampageBumps(state);
     resolvePlayerCollisions(state.players);
     updatePossession(state);
     updateBall(state);
@@ -81,7 +82,10 @@ export function step(state: GameState, inputs: InputFrame[]): GameState {
   return state;
 }
 
-/** Pushes overlapping players apart in xy; the push is split by inverse mass (lighter moves more). Downed players are skipped. */
+/**
+ * Pushes overlapping players apart in xy; the push is split by inverse mass (lighter moves more). Downed players are skipped.
+ * A rampaging player has infinite mass: it is not pushed, and an opponent takes the whole push.
+ */
 function resolvePlayerCollisions(players: Player[]): void {
   for (let i = 0; i < players.length; i++) {
     for (let j = i + 1; j < players.length; j++) {
@@ -98,11 +102,12 @@ function resolvePlayerCollisions(players: Player[]): void {
       const nx = dist === 0 ? 1 : dx / dist;
       const ny = dist === 0 ? 0 : dy / dist;
       const overlap = minDist - dist;
-      const invA = 1 / a.mass;
-      const invB = 1 / b.mass;
+      const invA = a.rampageTicks > 0 ? 0 : 1 / a.mass;
+      const invB = b.rampageTicks > 0 ? 0 : 1 / b.mass;
       const sumInv = invA + invB;
-      const pushA = (overlap * invA) / sumInv;
-      const pushB = (overlap * invB) / sumInv;
+      // Two rampagers overlapping: neither is movable, so the push splits evenly.
+      const pushA = sumInv === 0 ? overlap / 2 : (overlap * invA) / sumInv;
+      const pushB = sumInv === 0 ? overlap / 2 : (overlap * invB) / sumInv;
 
       a.x -= nx * pushA;
       a.y -= ny * pushA;

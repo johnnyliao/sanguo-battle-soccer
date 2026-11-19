@@ -48,8 +48,13 @@ const SHOT_RANGE_DF = 250;
 const SHOT_CLEAR_RANGE = 40;
 const SHOT_FULL_CHANCE = 0.6;
 const SHOT_MIN_STAMINA = 25;
-/** Lob specials are charged from this far out, whatever the role. */
-const LOB_SHOT_RANGE = 440;
+/** A full charge (rampage) is started from this far out, whatever the role. */
+const CHARGE_SHOT_RANGE = 560;
+/** A rampaging owner fires its special once this close to the goal (lob kinds from further out). */
+const RAMPAGE_FIRE_RANGE = 260;
+const RAMPAGE_FIRE_RANGE_LOB = 380;
+/** A rampaging owner fires when this few rampage ticks are left. */
+const RAMPAGE_FIRE_LEFT = 15;
 
 const PRESSURE_RANGE = 40;
 const PRESSURE_PASS_CHANCE = 0.04;
@@ -109,6 +114,7 @@ function decide(state: GameState, ai: AIState, p: Player): InputFrame {
 
   if (p.action !== 'normal') return busyFrame(state, p, s);
   if (state.ball.ownerIdx === p.idx) {
+    if (p.rampageTicks > 0) return rampageFrame(state, p, s);
     return p.role === 'GK' ? gkOwnerFrame(state, ai, p, s) : ownerFrame(state, ai, p, s);
   }
   return freeFrame(state, ai, p, s);
@@ -132,13 +138,13 @@ function ownerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPla
   const goalDist = Math.abs(goalX - p.x);
   const shotRange = p.role === 'DF' ? SHOT_RANGE_DF : SHOT_RANGE_FWD;
   const inShotRange = goalDist < shotRange;
-  const lobFar = p.specialKind === 'lob' && goalDist < LOB_SHOT_RANGE;
-  if ((inShotRange || lobFar) && p.facingX * dir > 0 && !p.prevInput.j) {
+  const inChargeRange = goalDist < CHARGE_SHOT_RANGE;
+  if (inChargeRange && p.facingX * dir > 0 && !p.prevInput.j) {
     const full =
       p.stamina >= SHOT_MIN_STAMINA &&
       nearestOpponent(state, team, p.x, p.y, SHOT_CLEAR_RANGE) === null &&
       nextRandom(ai) < SHOT_FULL_CHANCE;
-    // Outside its role range a player only shoots when the charge is full (a lob special).
+    // Outside its role range a player only shoots when the charge is full (a rampage).
     if (full || inShotRange) {
       s.intent = full ? 'charge' : 'tap';
       return frame(steerTo(p, goalX, CENTER_Y), { j: true });
@@ -162,6 +168,16 @@ function ownerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPla
     p.stamina > DRIBBLE_DASH_STAMINA_FRAC * p.maxStamina &&
     !opponentAhead(state, p, DRIBBLE_DASH_RANGE, DRIBBLE_DASH_LATERAL);
   return frame(steerTo(p, goalX, ty), { dash });
+}
+
+/** Rampaging owner: dribble straight at the goal centre, and fire the special once close enough or when the rampage is nearly over. */
+function rampageFrame(state: GameState, p: Player, s: AIState['perPlayer'][number]): InputFrame {
+  s.intent = 'rampage';
+  const goalX = opponentGoalX(state, p.team);
+  const goalDist = Math.abs(goalX - p.x);
+  const fireRange = p.specialKind === 'lob' ? RAMPAGE_FIRE_RANGE_LOB : RAMPAGE_FIRE_RANGE;
+  const fire = goalDist < fireRange || p.rampageTicks < RAMPAGE_FIRE_LEFT;
+  return frame(steerTo(p, goalX, CENTER_Y), { j: fire });
 }
 
 function gkOwnerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPlayer'][number]): InputFrame {
@@ -195,6 +211,7 @@ function freeFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPlay
   if (
     victim !== null &&
     victim.idx !== ball.ownerIdx &&
+    victim.rampageTicks === 0 &&
     s.cooldown === 0 &&
     !p.prevInput.j &&
     nextRandom(ai) < OPPORTUNIST_CHANCE
@@ -286,7 +303,8 @@ function chaseFrame(
 
   const move = steerTo(p, owner.x, owner.y);
   const d = dist(p.x, p.y, owner.x, owner.y);
-  if (s.cooldown === 0 && !p.prevInput.j) {
+  // A rampaging carrier is not attacked: the chaser keeps closing in but does not punch or tackle.
+  if (s.cooldown === 0 && !p.prevInput.j && owner.rampageTicks === 0) {
     if (d < PUNCH_TRIGGER && facingDot(p, owner.x, owner.y) > 0.5) {
       s.cooldown = ATTACK_COOLDOWN;
       s.intent = 'punch';

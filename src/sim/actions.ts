@@ -34,6 +34,11 @@ import {
   PUNCH_HIT_RADIUS,
   PUNCH_RANGE,
   PUNCH_TICKS,
+  RAMPAGE_BUMP_COOLDOWN,
+  RAMPAGE_BUMP_SPEED,
+  RAMPAGE_BUMP_STAMINA,
+  RAMPAGE_SPEED_MULT,
+  RAMPAGE_TICKS,
   RECOVER_TICKS,
   SHOT_BASE_SPEED,
   SHOT_SPEED_PER_CHARGE,
@@ -77,6 +82,9 @@ const HIT_VZ = 80;
 const LOOSE_BALL_SPEED = 90;
 const LOOSE_BALL_SPREAD = 30;
 const LOOSE_BALL_VZ = 120;
+const RAMPAGE_BUMP_VZ = 90;
+/** A rampager bumps opponents whose circle comes within this many px of its own. */
+const RAMPAGE_BUMP_PAD = 4;
 const PASS_CONE_COS = 0.3;
 const PASS_SPEED_GUESS = 300;
 const PASS_GROUND_VZ = 30;
@@ -97,6 +105,7 @@ const LOB_OVERSHOOT = 10;
 export function updateAction(state: GameState, p: Player, input: InputFrame): void {
   if (p.callPassTicks > 0) p.callPassTicks--;
   const landed = applyGravity(p);
+  tickRampage(state, p);
   switch (p.action) {
     case 'normal':
       updateNormal(state, p, input);
@@ -234,7 +243,9 @@ function updateNormal(state: GameState, p: Player, input: InputFrame): void {
     p.facingY = dir.y;
   }
 
-  const dashHeld = input.dash && p.stamina > 0;
+  // A rampage replaces the dash: no dash drain, and the rampage speed applies instead.
+  const rampaging = p.rampageTicks > 0;
+  const dashHeld = !rampaging && input.dash && p.stamina > 0;
   if (dashHeld && moving) {
     p.stamina -= DASH_STAMINA_COST * DT;
   } else {
@@ -252,8 +263,14 @@ function updateNormal(state: GameState, p: Player, input: InputFrame): void {
 
   if (ownsBall) {
     if (input.k && !p.prevInput.k) {
+      if (rampaging) endRampage(state, p);
       passBall(state, p);
       integrate(p);
+      return;
+    }
+    if (input.j && !p.prevInput.j && rampaging) {
+      endRampage(state, p);
+      startSpecial(state, p);
       return;
     }
     if (input.j && !p.prevInput.j) {
@@ -291,7 +308,11 @@ function updateNormal(state: GameState, p: Player, input: InputFrame): void {
     return;
   }
 
-  const maxSpeed = dashHeld ? baseSpeed * DASH_MULT : baseSpeed;
+  const maxSpeed = rampaging
+    ? baseSpeed * RAMPAGE_SPEED_MULT
+    : dashHeld
+      ? baseSpeed * DASH_MULT
+      : baseSpeed;
   const k = Math.min(1, (PLAYER_ACCEL * DT) / p.mass);
   p.vx += (dir.x * maxSpeed - p.vx) * k;
   p.vy += (dir.y * maxSpeed - p.vy) * k;
@@ -421,19 +442,44 @@ function moveCharging(p: Player, input: InputFrame): void {
   integrate(p);
 }
 
-/** Picks the shot type on J release: special (full charge, stamina, toward goal), shot (toward goal), else clear. */
+/** Picks the shot type on J release: rampage (full charge, stamina), shot (toward goal), else clear. */
 function releaseCharge(state: GameState, p: Player, input: InputFrame): void {
   const full = p.chargeTicks >= CHARGE_FULL;
   const charge = Math.min(p.chargeTicks, CHARGE_FULL - 1);
   p.chargeTicks = 0;
   const towardGoal = p.facingX * attackDir(state, p.team) > 0;
-  if (full && towardGoal && p.stamina >= SPECIAL_STAMINA_COST) {
-    startSpecial(state, p);
+  if (full && p.stamina >= SPECIAL_STAMINA_COST) {
+    startRampage(state, p);
   } else if (towardGoal) {
     shoot(state, p, input, charge);
   } else {
     kickClear(state, p);
   }
+}
+
+/** Full charge released: the player keeps the ball and rampages. The special ball flies on the next J press. */
+function startRampage(state: GameState, p: Player): void {
+  p.stamina -= SPECIAL_STAMINA_COST;
+  p.rampageTicks = RAMPAGE_TICKS;
+  p.action = 'normal';
+  p.actionTimer = 0;
+  state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
+  state.events.push({ type: 'rampageStart', playerIdx: p.idx });
+}
+
+/** Clears a rampage and reports it. Callers only call this while the player is rampaging. */
+export function endRampage(state: GameState, p: Player): void {
+  p.rampageTicks = 0;
+  state.events.push({ type: 'rampageEnd', playerIdx: p.idx });
+}
+
+/** Counts down bump cooldowns and the rampage. A rampage also ends when its owner loses the ball or the phase leaves play. */
+function tickRampage(state: GameState, p: Player): void {
+  if (p.bumpCooldown > 0) p.bumpCooldown--;
+  if (p.rampageTicks === 0) return;
+  p.rampageTicks--;
+  const holding = state.match.phase === 'play' && state.ball.ownerIdx === p.idx;
+  if (!holding || p.rampageTicks === 0) endRampage(state, p);
 }
 
 /** Ball leaves the owner. The ball keeps its current (dribble) position. */
@@ -485,7 +531,7 @@ function startSpecial(state: GameState, p: Player): void {
   const dirY = len > 0 ? dy / len : 0;
   const speed = p.specialKind === 'lob' ? lobSpeed(len) : specialSpeed(p.specialKind);
 
-  p.stamina -= SPECIAL_STAMINA_COST;
+  p.stamina = Math.max(0, p.stamina - SPECIAL_STAMINA_COST);
   releaseBall(state, p, dirX * speed, dirY * speed, p.specialKind === 'lob' ? SPECIAL_LOB_VZ : 0);
   const special: SpecialShot = {
     kind: p.specialKind,
@@ -607,6 +653,7 @@ export function applySpecialHit(
   dirX: number,
   dirY: number,
 ): void {
+  if (victim.rampageTicks > 0) return;
   victim.stamina = Math.max(0, victim.stamina - SPECIAL_HIT_STAMINA);
   victim.chargeTicks = 0;
 
@@ -650,8 +697,57 @@ function findVictim(
   return undefined;
 }
 
+/**
+ * Each rampaging player knocks away every standing opponent that is not rampaging and not on bump cooldown,
+ * whose circle is within RAMPAGE_BUMP_PAD of its own. Runs after the actions, before collisions.
+ */
+export function applyRampageBumps(state: GameState): void {
+  for (const r of state.players) {
+    if (r.rampageTicks === 0) continue;
+    for (const o of state.players) {
+      if (o.team === r.team || o.action === 'down' || o.bumpCooldown > 0 || o.rampageTicks > 0) continue;
+      const dx = o.x - r.x;
+      const dy = o.y - r.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist >= r.radius + o.radius + RAMPAGE_BUMP_PAD) continue;
+      rampageBump(state, r, o, dist);
+    }
+  }
+}
+
+function rampageBump(state: GameState, rampager: Player, victim: Player, dist: number): void {
+  const dirX = dist > 0 ? (victim.x - rampager.x) / dist : rampager.facingX;
+  const dirY = dist > 0 ? (victim.y - rampager.y) / dist : rampager.facingY;
+  const massMult = Math.min(1.5, Math.max(0.7, rampager.mass / victim.mass));
+  victim.vx = dirX * RAMPAGE_BUMP_SPEED * massMult;
+  victim.vy = dirY * RAMPAGE_BUMP_SPEED * massMult;
+  victim.vz = RAMPAGE_BUMP_VZ;
+  victim.bumpCooldown = RAMPAGE_BUMP_COOLDOWN;
+  victim.stamina = Math.max(0, victim.stamina - RAMPAGE_BUMP_STAMINA);
+
+  let down = false;
+  if (victim.stamina <= 0) {
+    setDown(victim, DOWN_TICKS_EXHAUSTED);
+    down = true;
+  } else {
+    victim.action = 'hitstun';
+    victim.actionTimer = HITSTUN_TICKS;
+  }
+
+  state.events.push({
+    type: 'hit',
+    attackerIdx: rampager.idx,
+    victimIdx: victim.idx,
+    kind: 'special',
+    damage: RAMPAGE_BUMP_STAMINA,
+  });
+  if (down) state.events.push({ type: 'down', playerIdx: victim.idx });
+}
+
 function applyHit(state: GameState, attacker: Player, victim: Player, kind: AttackKind): void {
   attacker.hitDone = true;
+  // A rampaging victim is invincible: the attack is spent and nothing else changes.
+  if (victim.rampageTicks > 0) return;
   victim.chargeTicks = 0;
 
   let damage = Math.max(3, Math.round(8 + attacker.stats.power * 1.2 - victim.stats.defense * 0.5));

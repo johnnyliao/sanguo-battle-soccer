@@ -11,6 +11,7 @@ import {
   PLAYER_BASE_SPEED,
   PLAYER_SPEED_PER_STAT,
   PUNCH_TICKS,
+  RAMPAGE_TICKS,
   SPECIAL_FLAT_Z,
   createInitialState,
   step,
@@ -117,12 +118,13 @@ function flyUntilEnd(state: GameState, maxTicks: number): { x: number; y: number
   return frames;
 }
 
-/** Special kind launched from centre field toward team 1's goal by a fully charged player 0. */
+/** Special kind launched from centre field toward team 1's goal: full charge, release, then J during the rampage. */
 function specialFromCentre(kind: SpecialKind): GameState {
   const state = ownerState(600);
   state.players[0].specialKind = kind;
   state.players[0].specialName = kind;
   fullChargeRelease(state);
+  step(state, inputFor(0, { j: true }));
   return state;
 }
 
@@ -270,7 +272,7 @@ describe('charge', () => {
     expect(fullAt).toEqual([CHARGE_FULL]);
   });
 
-  it('releasing after a full charge with enough stamina fires a special and costs 20 stamina', () => {
+  it('releasing after a full charge with enough stamina starts a rampage and costs 20 stamina', () => {
     const state = ownerState(600);
     const p = state.players[0];
     const events: SimEvent[] = [];
@@ -287,9 +289,12 @@ describe('charge', () => {
       kind: 'straight',
       name: 'test',
     });
+    expect(events).toContainEqual({ type: 'rampageStart', playerIdx: 0 });
     expect(p.stamina).toBeCloseTo(stamina0 - 20, 9);
-    expect(state.ball.special).not.toBeNull();
-    expect(state.ball.ownerIdx).toBe(-1);
+    expect(p.rampageTicks).toBe(RAMPAGE_TICKS);
+    expect(p.action).toBe('normal');
+    expect(state.ball.special).toBeNull();
+    expect(state.ball.ownerIdx).toBe(0);
     expect(p.chargeTicks).toBe(0);
   });
 
@@ -367,6 +372,7 @@ describe('special shots', () => {
     p.specialKind = 'lob';
     p.specialName = 'lob';
     fullChargeRelease(state);
+    step(state, inputFor(0, { j: true }));
 
     const goals: SimEvent[] = [];
     for (let t = 0; t < 240; t++) {
@@ -407,6 +413,7 @@ describe('special shots', () => {
     state.players[1].x = 800;
     state.players[1].y = FIELD_D / 2;
     fullChargeRelease(state);
+    step(state, inputFor(0, { j: true }));
 
     const pickups: SimEvent[] = [];
     let ended = false;

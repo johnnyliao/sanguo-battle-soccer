@@ -83,6 +83,8 @@ export function createInitialState(
         callPassTicks: 0,
         noTouchTicks: 0,
         chargeTicks: 0,
+        rampageTicks: 0,
+        bumpCooldown: 0,
         specialKind: def.special.kind,
         specialName: def.special.name,
         prevInput: { ...EMPTY_INPUT },

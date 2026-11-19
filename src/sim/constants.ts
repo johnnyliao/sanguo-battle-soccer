@@ -68,6 +68,11 @@ export const SPECIAL_LOB_FALL_GRAVITY_MULT = 3;
 export const SPECIAL_PIERCE_SPEED = 460;
 export const SPECIAL_HIT_STAMINA = 20;
 export const SPECIAL_FLAT_Z = 10;
+export const RAMPAGE_TICKS = 180;
+export const RAMPAGE_SPEED_MULT = 1.35;
+export const RAMPAGE_BUMP_SPEED = 220;
+export const RAMPAGE_BUMP_STAMINA = 8;
+export const RAMPAGE_BUMP_COOLDOWN = 30;
 
 export const KICKOFF_TICKS = 60;
 export const GOAL_CELEBRATE_TICKS = 150;

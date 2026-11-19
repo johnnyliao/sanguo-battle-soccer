@@ -1,4 +1,5 @@
 import { FIELD_D, FIELD_W, GOAL_H, GOAL_HALF_W } from './constants';
+import { endRampage } from './actions';
 import { rngInt, rngNext } from './rng';
 import {
   EMPTY_INPUT,
@@ -64,6 +65,10 @@ function teamIdxs(team: 0 | 1): number[] {
 
 /** Starts the shootout in the 'order' stage. Called by updateMatch when the 2nd half ends level. */
 export function startPk(state: GameState): void {
+  for (const p of state.players) {
+    if (p.rampageTicks > 0) endRampage(state, p);
+    p.bumpCooldown = 0;
+  }
   const firstTeam: 0 | 1 = rngInt(state, 2) === 0 ? 0 : 1;
   state.match.pk = {
     stage: 'order',

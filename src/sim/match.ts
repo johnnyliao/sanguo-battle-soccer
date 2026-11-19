@@ -6,6 +6,7 @@ import {
   HALFTIME_TICKS,
   KICKOFF_TICKS,
 } from './constants';
+import { endRampage } from './actions';
 import { attackDir, formationPosition, goalMouth } from './field';
 import { startPk } from './pk';
 import type { GameState } from './types';
@@ -113,6 +114,8 @@ function startSecondHalf(state: GameState): void {
 export function resetForKickoff(state: GameState): void {
   const m = state.match;
   for (const p of state.players) {
+    if (p.rampageTicks > 0) endRampage(state, p);
+    p.bumpCooldown = 0;
     const dir = attackDir(state, p.team);
     const pos = formationPosition(p.idx % 5, dir);
     p.x = pos.x;
