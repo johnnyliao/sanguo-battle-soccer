@@ -1,6 +1,6 @@
 // Hidden sound audition page (`?sfx=1`): one button per Shu attack, shout and special stage, plus the generic
 // ZzFX sounds. Plain DOM overlay; not linked from the game. Taps resume the AudioContext (user gesture).
-import { SHU_CHARS, SYNTH_RECIPES, type ShuId } from './characterSounds';
+import { cueBus, SHU_CHARS, SYNTH_RECIPES, type ShuId } from './characterSounds';
 import { defaultZzfxPlay } from './AudioPlayer';
 import { SOUNDS } from './sounds';
 import { playRecipe } from './synth';
@@ -66,7 +66,7 @@ function section(title: string): HTMLDivElement {
 function playCues(names: string[]): void {
   for (const name of names) {
     const recipe = SYNTH_RECIPES[name];
-    if (recipe) playRecipe(recipe, VOLUME);
+    if (recipe) playRecipe(recipe, VOLUME, cueBus(name));
   }
 }
 
@@ -87,6 +87,7 @@ export function mountAudition(parent: HTMLElement = document.body): HTMLElement 
     const row = document.createElement('div');
     row.appendChild(button('普攻', () => playCues([`${id}.attack`])));
     row.appendChild(button('呼喊', () => playCues([`${id}.shout`])));
+    row.appendChild(button('舊呼喊', () => playCues([`${id}.shoutOld`])));
     for (const stage of STAGES[id]) {
       row.appendChild(button(stage.label, () => playCues(stage.cues)));
     }

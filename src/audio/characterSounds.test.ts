@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AudioPlayer, SHOUT_GAP_MS } from './AudioPlayer';
-import { SYNTH_RECIPES } from './characterSounds';
+import { cueBus, SYNTH_RECIPES } from './characterSounds';
 import { SOUNDS, soundsForEvent } from './sounds';
 
 const CHARS = ['zhangfei', 'guanyu', 'zhugeliang', 'machao', 'zhaoyun', 'xuchu'];
@@ -93,6 +93,20 @@ describe('character sound mapping', () => {
       }
     }
     expect(mapped).toBeGreaterThan(0);
+  });
+});
+
+describe('battle cry recipes', () => {
+  it('keeps the old shout as shoutOld for every Shu character', () => {
+    for (const charId of CHARS.slice(0, 5)) {
+      expect(SYNTH_RECIPES[`${charId}.shoutOld`], charId).toBeTypeOf('function');
+    }
+  });
+
+  it('routes only the new shouts to the shout bus', () => {
+    expect(cueBus('zhangfei.shout')).toBe('shout');
+    expect(cueBus('zhangfei.shoutOld')).toBe('sfx');
+    expect(cueBus('zhangfei.roar')).toBe('sfx');
   });
 });
 

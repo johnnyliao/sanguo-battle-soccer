@@ -2,6 +2,7 @@
 // characterCues maps a sim event to cue names; SYNTH_RECIPES holds the recipe behind each name. No audio files.
 import type { SimEvent, SoundCue } from './sounds';
 import {
+  battleSpace,
   breath,
   envelope,
   fmTone,
@@ -10,8 +11,10 @@ import {
   PLUCK,
   SWELL,
   tone,
+  warCry,
   wobble,
   type Adsr,
+  type Bus,
   type Recipe,
 } from './synth';
 
@@ -62,7 +65,11 @@ const RECIPES: Record<ShuId, Record<string, Recipe>> = {
       tone(ac, out, { type: 'sine', f: 110, fEnd: 55, t0: t0 + 0.08, dur: 0.22, peak: 0.5, env: PLUCK });
       noiseBurst(ac, out, { t0: t0 + 0.08, dur: 0.05, peak: 0.35, env: PLUCK, filter: 'lowpass', f: 900 });
     },
-    shout: (ac, out, t0) => {
+    shout: (ac, out, t0) => warCry(ac, battleSpace(ac, out), {
+      t0, dur: 1.2, f0: 90, fPeak: 110, fEnd: 70, vowels: ['o', 'a'], switchAt: 0.4, onset: 'h',
+      peak: 0.6, grit: 1, jitter: 0.055, rasp: 0.2, sub: 0.5,
+    }),
+    shoutOld: (ac, out, t0) => {
       breath(ac, out, t0, 0.07, 0.3);
       formantVoice(ac, out, { t0, dur: 0.34, f0: 98, f1: 92, vowel: 'o', peak: 0.45, rough: 0.5, vib: 0.01 });
       formantVoice(ac, out, { t0: t0 + 0.3, dur: 0.6, f0: 92, f1: 78, vowel: 'a', peak: 0.4, rough: 0.5, vib: 0.012 });
@@ -92,7 +99,11 @@ const RECIPES: Record<ShuId, Record<string, Recipe>> = {
       tone(ac, out, { type: 'triangle', f: 1210, t0: t0 + 0.1, dur: 0.5, peak: 0.1, env: { attack: 0.002, decay: 0.25, sustain: 0, release: 0.2 } });
       tone(ac, out, { type: 'triangle', f: 1290, t0: t0 + 0.1, dur: 0.5, peak: 0.1, env: { attack: 0.002, decay: 0.25, sustain: 0, release: 0.2 } });
     },
-    shout: (ac, out, t0) => {
+    shout: (ac, out, t0) => warCry(ac, battleSpace(ac, out), {
+      t0, dur: 1.0, f0: 120, fPeak: 140, fEnd: 100, vowels: ['a', 'a'], onset: 'h',
+      peak: 0.6, grit: 0.7, jitter: 0.035, rasp: 0.25, sub: 0.35, presenceDb: 8,
+    }),
+    shoutOld: (ac, out, t0) => {
       breath(ac, out, t0, 0.07, 0.25);
       formantVoice(ac, out, { t0, dur: 0.7, f0: 130, f1: 115, vowel: 'a', peak: 0.5, rough: 0.25, vib: 0.01 });
     },
@@ -121,7 +132,11 @@ const RECIPES: Record<ShuId, Record<string, Recipe>> = {
       tone(ac, out, { type: 'sine', f: 1760, t0: t0 + 0.05, dur: 0.3, peak: 0.12, env: PLUCK });
       tone(ac, out, { type: 'sine', f: 2640, t0: t0 + 0.05, dur: 0.2, peak: 0.04, env: PLUCK });
     },
-    shout: (ac, out, t0) => {
+    shout: (ac, out, t0) => warCry(ac, battleSpace(ac, out), {
+      t0, dur: 0.8, f0: 180, fPeak: 210, fEnd: 160, vowels: ['e', 'a'], switchAt: 0.4, onset: 'h',
+      peak: 0.55, grit: 0.35, jitter: 0.03, rasp: 0.15, sub: 0.25, presenceDb: 9, fall: 0.25,
+    }),
+    shoutOld: (ac, out, t0) => {
       breath(ac, out, t0, 0.06, 0.2);
       formantVoice(ac, out, { t0, dur: 0.3, f0: 190, f1: 200, vowel: 'e', peak: 0.45, rough: 0.05, vib: 0.012 });
     },
@@ -159,7 +174,11 @@ const RECIPES: Record<ShuId, Record<string, Recipe>> = {
       });
       tone(ac, out, { type: 'triangle', f: 2600, fEnd: 1800, t0: t0 + 0.04, dur: 0.1, peak: 0.15, env: PLUCK });
     },
-    shout: (ac, out, t0) => {
+    shout: (ac, out, t0) => warCry(ac, battleSpace(ac, out), {
+      t0, dur: 1.1, f0: 165, fPeak: 210, fEnd: 150, vowels: ['e', 'a'], switchAt: 0.15, onset: 'k',
+      peak: 0.6, grit: 0.8, jitter: 0.05, rasp: 0.5, sub: 0.35,
+    }),
+    shoutOld: (ac, out, t0) => {
       breath(ac, out, t0, 0.06, 0.2);
       formantVoice(ac, out, { t0, dur: 0.1, f0: 150, vowel: 'e', peak: 0.35, rough: 0.3, vib: 0.02, vibRate: 6.5 });
       formantVoice(ac, out, { t0: t0 + 0.1, dur: 0.55, f0: 150, f1: 170, vowel: 'a', peak: 0.5, rough: 0.3, vib: 0.02, vibRate: 6.5 });
@@ -193,7 +212,20 @@ const RECIPES: Record<ShuId, Record<string, Recipe>> = {
       noiseBurst(ac, out, { t0, dur: 0.06, peak: 0.7, env: PLUCK, filter: 'highpass', f: 3000 });
       tone(ac, out, { type: 'triangle', f: 1800, fEnd: 1500, t0, dur: 0.15, peak: 0.4, env: PLUCK });
     },
+    // Two plosives 120 ms apart: a short 'HAH!' and then the sustained 'HAAA'.
     shout: (ac, out, t0) => {
+      const space = battleSpace(ac, out);
+      warCry(ac, space, {
+        t0, dur: 0.12, f0: 170, fPeak: 200, fEnd: 200, fall: 0.04, vowels: ['a', 'a'], onset: 'k',
+        peak: 0.6, grit: 0.6, jitter: 0.04, rasp: 0.3, sub: 0.35,
+        env: { attack: 0.008, decay: 0.02, sustain: 0.7, release: 0.04 },
+      });
+      warCry(ac, space, {
+        t0: t0 + 0.12, dur: 0.78, f0: 200, fPeak: 200, fEnd: 150, vowels: ['a', 'a'], onset: 'k',
+        peak: 0.6, grit: 0.6, jitter: 0.04, rasp: 0.3, sub: 0.35,
+      });
+    },
+    shoutOld: (ac, out, t0) => {
       breath(ac, out, t0, 0.05, 0.25);
       formantVoice(ac, out, { t0, dur: 0.32, f0: 165, vowel: 'a', peak: 0.5, rough: 0.08, vib: 0.01 });
     },
@@ -217,6 +249,11 @@ const RECIPES: Record<ShuId, Record<string, Recipe>> = {
     },
   },
 };
+
+/** Battle cries ('.shout') play through the hard-limited shout bus; every other cue uses the normal master. */
+export function cueBus(name: string): Bus {
+  return name.endsWith('.shout') ? 'shout' : 'sfx';
+}
 
 /** Every synthesized cue, keyed `<charId>.<stage>`. */
 export const SYNTH_RECIPES: Record<string, Recipe> = Object.fromEntries(

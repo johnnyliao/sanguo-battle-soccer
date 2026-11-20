@@ -1,5 +1,5 @@
 import { SOUNDS, soundsForEvent, type SimEvent, type SoundCue } from './sounds';
-import { SYNTH_RECIPES } from './characterSounds';
+import { cueBus, SYNTH_RECIPES } from './characterSounds';
 import { playRecipe, stopAllVoices } from './synth';
 
 export type PlayFn = (params: number[]) => void;
@@ -27,7 +27,7 @@ export function defaultZzfxPlay(params: number[]): void {
 
 export function defaultSynthPlay(name: string, volume: number): void {
   const recipe = SYNTH_RECIPES[name];
-  if (recipe) playRecipe(recipe, volume);
+  if (recipe) playRecipe(recipe, volume, cueBus(name));
 }
 
 /** The character behind an event: the player's, the attacker's for hits, the owner's for rider events. */
