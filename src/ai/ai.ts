@@ -44,10 +44,9 @@ const OPPORTUNIST_CHANCE = 0.01;
 
 const SHOT_RANGE_FWD = 330;
 const SHOT_RANGE_DF = 250;
-const SHOT_CLEAR_RANGE = 40;
 /** Per-tick chance to use the special while eligible (the button fires instantly, so keep it rare). */
-const SHOT_FULL_CHANCE = 0.005;
-const SPECIAL_RANGE = 400;
+const SHOT_FULL_CHANCE = 0.02;
+const SPECIAL_RANGE = 480;
 const SHOT_MIN_STAMINA = 25;
 /** A special (rampage) is started from this far out, whatever the role. */
 const CHARGE_SHOT_RANGE = 560;
@@ -202,7 +201,6 @@ function ownerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPla
       p.stamina >= SHOT_MIN_STAMINA &&
       p.specialCooldown === 0 &&
       goalDist < SPECIAL_RANGE &&
-      nearestOpponent(state, team, p.x, p.y, SHOT_CLEAR_RANGE) === null &&
       nextRandom(ai) < SHOT_FULL_CHANCE;
     if (special) {
       s.intent = 'special';

@@ -68,7 +68,7 @@ export const SPECIAL_HIT_STAMINA = 20;
 export const SPECIAL_FLAT_Z = 10;
 export const RAMPAGE_TICKS = 180;
 export const RAMPAGE_SPEED_MULT = 1.35;
-export const RAMPAGE_BUMP_SPEED = 220;
+export const RAMPAGE_BUMP_SPEED = 380;
 export const RAMPAGE_BUMP_STAMINA = 8;
 export const RAMPAGE_BUMP_COOLDOWN = 30;
 /** Zhao Yun's lunge (遊龍穿刺): duration in ticks and total distance in px. */

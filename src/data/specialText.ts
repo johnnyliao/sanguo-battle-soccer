@@ -17,7 +17,7 @@ export function specialDescription(def: CharacterDef): { condition: string; effe
   const { kind, mode = 'rampage' } = def.special;
   switch (mode) {
     case 'rampage':
-      return { condition: '持球', effect: `3 秒無敵衝刺，按攻擊射${SHOT_NAME[kind]}球` };
+      return { condition: '持球', effect: `無敵撞飛敵人，可帶球進門或射${SHOT_NAME[kind]}球` };
     case 'roar':
       return { condition: '持球或不持球', effect: '震開周圍敵人並暈眩，持球者掉球' };
     case 'lunge':

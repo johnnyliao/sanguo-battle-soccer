@@ -4,6 +4,8 @@ import {
   DRIBBLE_OFFSET,
   EMPTY_INPUT,
   FIELD_D,
+  FIELD_W,
+  GOAL_HALF_W,
   PLAYER_BASE_SPEED,
   PLAYER_SPEED_PER_STAT,
   PUNCH_TICKS,
@@ -189,7 +191,7 @@ describe('rampage protection', () => {
 });
 
 describe('rampage bumps', () => {
-  it('an opponent touching a rampager is knocked away into hitstun, with a special hit event and stamina loss', () => {
+  it('an opponent touching a rampager is knocked down and away, with a special hit event and stamina loss', () => {
     const state = ownerState(300);
     parkAway(state, [0, 5]);
     pressSpecial(state);
@@ -207,7 +209,8 @@ describe('rampage bumps', () => {
       kind: 'special',
       damage: RAMPAGE_BUMP_STAMINA,
     });
-    expect(victim.action).toBe('hitstun');
+    expect(events).toContainEqual({ type: 'down', playerIdx: 5 });
+    expect(victim.action).toBe('down');
     expect(victim.vx).toBeGreaterThan(0);
     expect(victim.stamina).toBeCloseTo(stamina0 - RAMPAGE_BUMP_STAMINA, 9);
     expect(owner.x).toBe(300);
@@ -361,5 +364,49 @@ describe('rampage end', () => {
 
     expect(state.players[0].rampageTicks).toBe(0);
     expect(state.players.every((p) => p.bumpCooldown === 0)).toBe(true);
+  });
+});
+
+/** Presses L, then holds `moveX` (and `moveY`) for `ticks` ticks while the rampage carries him. */
+function rampageDrive(state: GameState, moveX: -1 | 0 | 1, ticks: number, moveY: -1 | 0 | 1 = 0): SimEvent[] {
+  const seen = pressSpecial(state);
+  for (let t = 0; t < ticks; t++) {
+    step(state, inputFor(0, { moveX, moveY }));
+    seen.push(...state.events);
+  }
+  return seen;
+}
+
+describe('rampage into the goal', () => {
+  it('dribbling across the opponent goal line inside the mouth scores for his team, credited to him', () => {
+    const state = ownerState(FIELD_W - 120);
+
+    const events = rampageDrive(state, 1, 60);
+
+    expect(events).toContainEqual({ type: 'goal', team: 0, scorerIdx: 0 });
+    expect(state.match.score).toEqual([1, 0]);
+    expect(state.match.lastGoal).toEqual(expect.objectContaining({ team: 0, scorerIdx: 0 }));
+  });
+
+  it('reaching the goal line beside the posts does not score', () => {
+    const state = ownerState(FIELD_W - 120);
+    state.players[0].y = FIELD_D / 2 + GOAL_HALF_W + 30;
+    state.ball.y = state.players[0].y;
+
+    const events = rampageDrive(state, 1, 60);
+
+    expect(events.some((e) => e.type === 'goal')).toBe(false);
+    expect(state.match.score).toEqual([0, 0]);
+    expect(state.players[0].x).toBe(FIELD_W);
+  });
+
+  it('dribbling toward his own goal never scores an own goal', () => {
+    const state = ownerState(120, -1);
+
+    const events = rampageDrive(state, -1, 60);
+
+    expect(events.some((e) => e.type === 'goal')).toBe(false);
+    expect(state.match.score).toEqual([0, 0]);
+    expect(state.players[0].x).toBe(0);
   });
 });

@@ -16,7 +16,7 @@ function def(kind: CharacterDef['special']['kind'], mode?: CharacterDef['special
 
 describe('specialDescription', () => {
   it('rampage (default mode) names the shot of its kind', () => {
-    expect(specialDescription(def('straight'))).toEqual({ condition: '持球', effect: '3 秒無敵衝刺，按攻擊射直線高速球' });
+    expect(specialDescription(def('straight'))).toEqual({ condition: '持球', effect: '無敵撞飛敵人，可帶球進門或射直線高速球' });
     expect(specialDescription(def('zigzag', 'rampage')).effect).toContain('蛇行球');
     expect(specialDescription(def('lob', 'rampage')).effect).toContain('高吊下墜球');
     expect(specialDescription(def('pierce', 'rampage')).effect).toContain('穿人擊倒球');

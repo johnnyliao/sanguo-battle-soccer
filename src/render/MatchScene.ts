@@ -278,8 +278,8 @@ const RAMPAGE_EXHAUST_BACK = 30;
 const RAMPAGE_EXHAUST_LIFT = 6;
 /** Fade time after a rampage ends or a roar charge plays. */
 const FX_FADE_MS = 150;
-/** Guan Yu's fire dragon on the special ball (its length, a square frame), and the impact burst (rampage bumps, the ball's end). */
-const DRAGON_FX_LEN = 120;
+/** Guan Yu's fire dragon around him during the rampage (its width), and the impact burst (rampage bumps). */
+const DRAGON_FX_LEN = 150;
 const IMPACT_FX_SIZE = 80;
 /** Roar spark on each victim, and the height of a hit's burst over the victim's feet. */
 const SPARK_FX_SIZE = 60;
@@ -440,9 +440,6 @@ export class MatchScene extends Phaser.Scene {
   private poseUntil: number[] = [];
   private poseAnim: SpriteAnim[] = [];
   private fx: FxInstance[] = [];
-  /** Guan Yu's special ball in flight: its fire dragon (hidden otherwise) and the player who fired it. */
-  private dragonSprite: Phaser.GameObjects.Sprite | null = null;
-  private dragonOf: number | null = null;
   private riderViews = new Map<number, RiderView>();
   /** Zhuge Liang's energy ball in flight (hidden otherwise). */
   private beamBall: Phaser.GameObjects.Sprite | null = null;
@@ -555,8 +552,6 @@ export class MatchScene extends Phaser.Scene {
     this.poseUntil = [];
     this.poseAnim = [];
     this.fx = [];
-    this.dragonSprite = null;
-    this.dragonOf = null;
     this.scorers = [];
     this.resultQueued = false;
     this.prevHumanL = false;
@@ -726,9 +721,6 @@ export class MatchScene extends Phaser.Scene {
         }
       } else if (e.type === 'specialShot') {
         this.playPose(e.playerIdx, 'shot', SHOT_POSE_MS);
-        this.dragonShotFx(e.playerIdx);
-      } else if (e.type === 'specialEnd') {
-        this.endDragon();
       } else if (e.type === 'rampageStart') {
         this.rampageStartFx(e.playerIdx);
       } else if (e.type === 'rampageEnd') {
@@ -1120,7 +1112,7 @@ export class MatchScene extends Phaser.Scene {
     this.playFx(owner.fx, 'burst', { x: pt.sx, y: pt.sy, w: BURST_FX_SIZE, h: BURST_FX_SIZE, depth: y + 0.5 });
   }
 
-  /** Guan Yu's rampage: the aura over him and the exhaust behind his rear wheel, following him until the rampage ends. */
+  /** Guan Yu's rampage: the aura and fire dragon over him and the exhaust behind his rear wheel, following him until the rampage ends. */
   private rampageStartFx(idx: number): void {
     const owner = this.fxOwner(idx);
     if (!owner) return;
@@ -1141,6 +1133,21 @@ export class MatchScene extends Phaser.Scene {
       mirror: true,
       depthOff: -0.5,
       alpha: RAMPAGE_AURA_ALPHA,
+      holdMs: forever,
+      endMs: forever,
+      rampageOf: idx,
+    });
+    this.playFx(owner.fx, 'dragon', {
+      x: feet.sx,
+      y: feet.sy - lift,
+      w: DRAGON_FX_LEN,
+      h: (DRAGON_FX_LEN * owner.fx.frameHeight) / owner.fx.frameWidth,
+      depth: p.y + 0.6,
+      follow: idx,
+      offX: 0,
+      offY: -lift,
+      mirror: true,
+      depthOff: 0.6,
       holdMs: forever,
       endMs: forever,
       rampageOf: idx,
@@ -1229,60 +1236,6 @@ export class MatchScene extends Phaser.Scene {
       h: (size * owner.fx.frameHeight) / owner.fx.frameWidth,
       depth: y + 0.5,
     });
-  }
-
-  /** Guan Yu's special ball is fired: its fire dragon is added and follows the ball until the ball ends. */
-  private dragonShotFx(idx: number): void {
-    const owner = this.fxOwner(idx);
-    if (!owner || owner.fx.anims.dragon === undefined) return;
-    this.clearDragon();
-    this.dragonOf = idx;
-    this.dragonSprite = this.add
-      .sprite(0, 0, owner.fx.key)
-      .setName('fx:dragon')
-      .setBlendMode(Phaser.BlendModes.ADD)
-      .setDisplaySize(DRAGON_FX_LEN, (DRAGON_FX_LEN * owner.fx.frameHeight) / owner.fx.frameWidth)
-      .setVisible(false)
-      .play(fxAnimKey(owner.fx, 'dragon'));
-  }
-
-  /** The special ball ends (landed, saved, out of play): the dragon's impact where the ball stops, and the dragon goes. */
-  private endDragon(): void {
-    if (this.dragonOf === null) return;
-    const ball = this.state.ball;
-    this.ownerImpact(this.dragonOf, ball.x, ball.y, ball.z, IMPACT_FX_SIZE);
-    this.clearDragon();
-  }
-
-  private clearDragon(): void {
-    this.dragonSprite?.destroy();
-    this.dragonSprite = null;
-    this.dragonOf = null;
-  }
-
-  /** The fire dragon on the special ball while it flies, turned to its flight direction (as the beam ball does). */
-  private drawDragonBall(): void {
-    const sprite = this.dragonSprite;
-    if (!sprite) return;
-    const ball = this.state.ball;
-    const special = ball.special;
-    if (special === null) {
-      this.clearDragon();
-      return;
-    }
-    const from = worldToScreen(ball.x, ball.y, ball.z);
-    const to = worldToScreen(ball.x + special.dirX * 100, ball.y + special.dirY * 100, ball.z);
-    const len = Math.hypot(to.sx - from.sx, to.sy - from.sy) || 1;
-    const ux = (to.sx - from.sx) / len;
-    const uy = (to.sy - from.sy) / len;
-    const flip = special.dirX < 0;
-    const angle = flip ? Math.atan2(-uy, -ux) : Math.atan2(uy, ux);
-    sprite
-      .setVisible(true)
-      .setPosition(from.sx, from.sy - BALL_LIFT)
-      .setDepth(ball.y + 0.6)
-      .setFlipX(flip)
-      .setRotation(angle);
   }
 
   /** Keeps the attached effects on their player and removes each effect once its end time has passed. */
@@ -1668,7 +1621,6 @@ export class MatchScene extends Phaser.Scene {
     this.spinBall(ball.x, ball.y);
     this.ballSprite.setPosition(pos.sx, pos.sy - BALL_LIFT).setFrame(this.ballSpinFrame).setDepth(ball.y + 0.5);
     this.drawBeamBall();
-    this.drawDragonBall();
   }
 
   /** Advances the ball's rotation frame by the ground distance it rolled since the last draw. Reversed when moving left. */

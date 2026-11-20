@@ -162,7 +162,8 @@ describe('lunge bumps and protection', () => {
     const events = run(state, LUNGE_TICKS);
 
     expect(events).toContainEqual(expect.objectContaining({ type: 'hit', attackerIdx: 0, victimIdx: 5, kind: 'special' }));
-    expect(victim.action).toBe('hitstun');
+    expect(events).toContainEqual({ type: 'down', playerIdx: 5 });
+    expect(victim.action).toBe('down');
     expect(victim.vx).toBeGreaterThan(0);
     expect(state.ball.ownerIdx).toBe(0);
   });

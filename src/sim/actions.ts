@@ -104,7 +104,7 @@ const HIT_VZ = 80;
 const LOOSE_BALL_SPEED = 90;
 const LOOSE_BALL_SPREAD = 30;
 const LOOSE_BALL_VZ = 120;
-const RAMPAGE_BUMP_VZ = 90;
+const RAMPAGE_BUMP_VZ = 220;
 const ROAR_VZ = 140;
 /** A rampager bumps opponents whose circle comes within this many px of its own. */
 const RAMPAGE_BUMP_PAD = 4;
@@ -510,7 +510,7 @@ function updateLunge(state: GameState, p: Player): void {
   integrate(p);
   p.actionTimer--;
   if (onGoalLine && inMouth && state.ball.ownerIdx === p.idx) {
-    lungeIntoGoal(state, p, side);
+    ballIntoGoal(state, p, side, p.vx, p.vy);
     endLunge(state, p);
   } else if (atEdge || p.actionTimer <= 0) {
     endLunge(state, p);
@@ -518,11 +518,11 @@ function updateLunge(state: GameState, p: Player): void {
 }
 
 /**
- * The lunger's ball leaves his feet at lunge speed and is placed just past the goal line of `side`, so the goal check
- * in updateMatch scores it this tick (the ball is past the line, so pickup and possession skip it).
+ * A lunger's or rampager's ball leaves his feet at (vx, vy) and is placed just past the goal line of `side`, so the goal
+ * check in updateMatch scores it this tick (the ball is past the line, so pickup and possession skip it).
  */
-function lungeIntoGoal(state: GameState, p: Player, side: 0 | 1): void {
-  releaseBall(state, p, p.vx, p.vy, 0);
+function ballIntoGoal(state: GameState, p: Player, side: 0 | 1, vx: number, vy: number): void {
+  releaseBall(state, p, vx, vy, 0);
   const ball = state.ball;
   ball.x = side === 1 ? FIELD_W + BALL_RADIUS + 1 : -(BALL_RADIUS + 1);
   ball.y = p.y;
@@ -883,7 +883,21 @@ function tickRampage(state: GameState, p: Player): void {
   if (p.rampageTicks === 0) return;
   p.rampageTicks--;
   const holding = state.match.phase === 'play' && state.ball.ownerIdx === p.idx;
+  if (holding && rampageAtGoalMouth(state, p)) {
+    const side: 0 | 1 = attackDir(state, p.team) === 1 ? 1 : 0;
+    endRampage(state, p);
+    ballIntoGoal(state, p, side, attackDir(state, p.team) * maxSpeedOf(p), 0);
+    return;
+  }
   if (!holding || p.rampageTicks === 0) endRampage(state, p);
+}
+
+/** True if the rampager stands on the goal line he attacks (the field clamp stops him there), inside the mouth. */
+function rampageAtGoalMouth(state: GameState, p: Player): boolean {
+  const side: 0 | 1 = attackDir(state, p.team) === 1 ? 1 : 0;
+  const mouth = goalMouth(side);
+  const onGoalLine = side === 1 ? p.x >= FIELD_W : p.x <= 0;
+  return onGoalLine && p.y >= mouth.yMin + BALL_RADIUS && p.y <= mouth.yMax - BALL_RADIUS;
 }
 
 /** Ball leaves the owner. The ball keeps its current (dribble) position. */
@@ -1138,14 +1152,8 @@ function rampageBump(state: GameState, rampager: Player, victim: Player, dist: n
   victim.bumpCooldown = RAMPAGE_BUMP_COOLDOWN;
   victim.stamina = Math.max(0, victim.stamina - RAMPAGE_BUMP_STAMINA);
 
-  let down = false;
-  if (victim.stamina <= 0) {
-    setDown(victim, DOWN_TICKS_EXHAUSTED);
-    down = true;
-  } else {
-    victim.action = 'hitstun';
-    victim.actionTimer = HITSTUN_TICKS;
-  }
+  // Sent flying: always knocked down (longer when it empties his stamina).
+  setDown(victim, victim.stamina <= 0 ? DOWN_TICKS_EXHAUSTED : DOWN_TICKS_KNOCKED);
 
   state.events.push({
     type: 'hit',
@@ -1154,7 +1162,7 @@ function rampageBump(state: GameState, rampager: Player, victim: Player, dist: n
     kind: 'special',
     damage: RAMPAGE_BUMP_STAMINA,
   });
-  if (down) state.events.push({ type: 'down', playerIdx: victim.idx });
+  state.events.push({ type: 'down', playerIdx: victim.idx });
 }
 
 function applyHit(state: GameState, attacker: Player, victim: Player, kind: AttackKind): void {

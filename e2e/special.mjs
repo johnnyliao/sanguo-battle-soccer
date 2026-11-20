@@ -152,6 +152,14 @@ try {
   }).catch(() => {});
   const r1 = await human(guan);
   report('rampage plays the fire loop sprite', r1.anim === 'sprite-guanyu:rampage', `anim ${r1.anim}`);
+  await guan.waitForFunction(() => window.__sg.scene.children.list.some((o) => o.name === 'fx:dragon' && o.active), null, {
+    timeout: 3000,
+  }).catch(() => {});
+  const dragon = await guan.evaluate(() => ({
+    active: window.__sg.scene.children.list.some((o) => o.name === 'fx:dragon' && o.active),
+    rampageTicks: window.__sg.state().players[window.__sg.humanIdx].rampageTicks,
+  }));
+  report('rampage shows the fire dragon on Guan Yu', dragon.active && dragon.rampageTicks > 0, `fx:dragon active ${dragon.active}, rampageTicks ${dragon.rampageTicks}`);
   await guan.screenshot({ path: shot('special-rampage.png') });
   await guan.close();
 
