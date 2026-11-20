@@ -199,6 +199,17 @@ export const SLASH_HITSTUN_TICKS = 18;
 /** Share of Cao Cao's own maxStamina that each blade wave hit restores (5%), capped at maxStamina. */
 export const SLASH_HEAL_RATIO = 0.05;
 
+/** Zhen Ji's ice field (冰雨招來): radius around the cast point in px. The field stays where it was cast. */
+export const ICE_RADIUS = 110;
+/** How long the ice field lasts: 4 s. */
+export const ICE_TICKS = 240;
+/** Opponents inside the field move at this share of their normal max speed (15%). */
+export const ICE_SLOW_MULT = 0.15;
+/** Every this many ticks after the cast the field pulses (0.5 s): 240 / 30 = 8 pulses. */
+export const ICE_DOT_INTERVAL = 30;
+/** Share of each pulse victim's maxStamina that a pulse takes (5%). */
+export const ICE_DOT_RATIO = 0.05;
+
 export const KICKOFF_TICKS = 60;
 export const GOAL_CELEBRATE_TICKS = 150;
 export const HALFTIME_TICKS = 120;

@@ -34,12 +34,14 @@ import {
   applySpecialHit,
   clampPlayerToField,
   clearRiders,
+  endIcefields,
   endSlashWindows,
   endTigerWindows,
   isInvincible,
   tigerBallHit,
   updateAction,
   updateBladeWaves,
+  updateIcefields,
   updateRiders,
 } from './actions';
 import { attackDir, inOwnArea, goalMouth, isInGoalMouth } from './field';
@@ -87,17 +89,19 @@ export function step(state: GameState, inputs: InputFrame[]): GameState {
 
     updateRiders(state);
     updateBladeWaves(state);
+    updateIcefields(state);
     applyRampageBumps(state);
     resolvePlayerCollisions(state.players);
     updatePossession(state);
     updateBall(state);
     updatePickup(state);
     updateMatch(state);
-    // Riders, tiger guards, slash buffs and blade waves only live while the phase is play: a goal, half time, kickoff or PK start clears them.
+    // Riders, tiger guards, slash buffs, blade waves and ice fields only live while the phase is play: a goal, half time, kickoff or PK start clears them.
     if (state.match.phase !== 'play') {
       clearRiders(state);
       endTigerWindows(state);
       endSlashWindows(state);
+      endIcefields(state);
     }
   }
 

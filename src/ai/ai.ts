@@ -96,6 +96,14 @@ const SLASH_CARRIER_RANGE = 200;
 const SLASH_CHASE_CARRIER_RANGE = 260;
 /** Slash, buff: holds this far from the chased opponent once facing him (inside the 120 px wave range). */
 const SLASH_STANDOFF = 80;
+/** Ice field (Zhen Ji), off the ball: cast when an enemy carrier is this close, or ICE_OFF_BALL_MIN_OPPONENTS standing opponents are within ICE_OFF_BALL_RANGE. */
+const ICE_CARRIER_RANGE = 90;
+const ICE_OFF_BALL_RANGE = 100;
+const ICE_OFF_BALL_MIN_OPPONENTS = 2;
+/** Ice field, owner: cast when an opponent is within ICE_OWNER_NEAR_RANGE (a chaser), or ICE_OWNER_MIN_OPPONENTS are within ICE_OWNER_RANGE. */
+const ICE_OWNER_NEAR_RANGE = 70;
+const ICE_OWNER_RANGE = 110;
+const ICE_OWNER_MIN_OPPONENTS = 2;
 
 const PRESSURE_RANGE = 40;
 const PRESSURE_PASS_CHANCE = 0.04;
@@ -333,6 +341,20 @@ function ownerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPla
     return frame(NO_MOVE, { l: true });
   }
 
+  // Zhen Ji's icefield: slows the opponents around her and keeps them in the field, so cast it when they are close.
+  if (
+    p.specialMode === 'icefield' &&
+    !p.prevInput.l &&
+    p.specialCooldown === 0 &&
+    p.stamina >= SHOT_MIN_STAMINA &&
+    (opponentsWithin(state, p, ICE_OWNER_NEAR_RANGE) >= 1 ||
+      opponentsWithin(state, p, ICE_OWNER_RANGE) >= ICE_OWNER_MIN_OPPONENTS) &&
+    nextRandom(ai) < SHOT_FULL_CHANCE
+  ) {
+    s.intent = 'icefield';
+    return frame(NO_MOVE, { l: true });
+  }
+
   const goalDist = Math.abs(goalX - p.x);
   const shotRange = p.role === 'DF' ? SHOT_RANGE_DF : SHOT_RANGE_FWD;
   const inShotRange = goalDist < shotRange;
@@ -443,6 +465,11 @@ function offBallSpecialFrame(
       break;
     case 'slash':
       wanted = slashWanted(state, p);
+      break;
+    case 'icefield':
+      wanted =
+        (enemyCarrier !== null && dist(p.x, p.y, enemyCarrier.x, enemyCarrier.y) <= ICE_CARRIER_RANGE) ||
+        opponentsWithin(state, p, ICE_OFF_BALL_RANGE) >= ICE_OFF_BALL_MIN_OPPONENTS;
       break;
     default:
       return null;

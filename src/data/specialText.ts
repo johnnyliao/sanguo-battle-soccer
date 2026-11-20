@@ -20,22 +20,24 @@ export function specialDescription(def: CharacterDef): { condition: string; effe
     case 'rampage':
       return { condition, effect: `無敵撞飛敵人，可帶球進門或射${SHOT_NAME[kind]}球` };
     case 'roar':
-      return { condition: '持球或不持球', effect: '震開周圍敵人並暈眩，持球者掉球' };
+      return { condition: '持球或不持球', effect: '震開周圍敵人暈眩、震飛範圍內的球，持球者掉球' };
     case 'lunge':
-      return { condition, effect: '無敵突進撞開敵人，每撞一人回 20%' };
+      return { condition, effect: '無敵突進撞開敵人，撞敵扣20%、每撞一人回20%' };
     case 'beam':
-      return { condition, effect: '集氣後光彈擊倒隨機一名敵人' };
+      return { condition, effect: '集氣後隨機擊倒一名敵人1秒、扣30%，持球者掉球' };
     case 'summon':
-      return { condition, effect: '召喚 5 名鐵騎追擊，撞倒對手' };
+      return { condition, effect: '5名鐵騎追擊3秒，撞倒扣10%，持球者掉球' };
     case 'fear':
-      return { condition, effect: '周圍敵人恐懼定身 3 秒並扣體力' };
+      return { condition, effect: '周圍200px敵定身3秒、扣10%，持球者掉球' };
     case 'leap':
-      return { condition: '持球或不持球', effect: '後跳飛撲，落地扣敵人體力並沉默 2 秒' };
+      return { condition: '持球或不持球', effect: '後跳飛撲，落地周圍敵扣15%並沉默2秒' };
     case 'tiger':
-      return { condition: '持球或不持球', effect: '5秒吞射門，吐球砸人扣80%，沒吞則震退' };
+      return { condition: '持球或不持球', effect: '5秒吞射正門，吐球砸敵扣80%暈3秒；沒吞則震退扣10%' };
     case 'slash':
-      return { condition: '持球或不持球', effect: '5秒連斬刀氣，命中扣體力並回補自己' };
+      return { condition: '持球或不持球', effect: '5秒每0.3秒揮刀，刀氣命中扣5%、回補自己5%' };
     case 'ride':
       return { condition: '持球或不持球', effect: '騎車衝刺，撞開路上敵人扣 20%' };
+    case 'icefield':
+      return { condition: '持球或不持球', effect: '原地冰雨4秒(半徑110)，內敵緩速85%、每0.5秒扣5%' };
   }
 }

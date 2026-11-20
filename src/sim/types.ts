@@ -34,7 +34,8 @@ export type PlayerAction =
   | 'leap'
   | 'tiger'
   | 'slash'
-  | 'ride';
+  | 'ride'
+  | 'icefield';
 
 export type AttackKind = 'punch' | 'tackle' | 'special';
 
@@ -75,7 +76,7 @@ export interface Player {
   /** Ticks during which this player cannot be bumped by a rampaging opponent again. */
   bumpCooldown: number;
   /** What the special button (L) does: a rampage, a roar (shockwave) for Zhang Fei, a lunge (long dash) for Zhao Yun, a beam (channel, then strikes one opponent) for Zhuge Liang, a summon (cavalry riders) for Ma Chao, a fear (opponents stand still) for Zhang Liao, or a tiger guard (swallows a shot, spits it at opponents) for Xu Chu. */
-  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger' | 'slash' | 'ride';
+  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger' | 'slash' | 'ride' | 'icefield';
   /** Ticks until the special can be used again. Set when a rampage starts or a roar fires. */
   specialCooldown: number;
   /** Ticks left silenced (a leap landing): only movement works, no J, K or L. 0 = not silenced. */
@@ -152,6 +153,20 @@ export interface Ball {
   special: SpecialShot | null;
   /** A swallowed shot (held, then spat) or a spat tiger ball in flight. null otherwise. See TigerBall. */
   tiger: TigerBall | null;
+}
+
+/**
+ * An ice field from Zhen Ji's icefield (冰雨招來). It is fixed at the cast point (x, y) and does not move with the caster.
+ * ticks counts the ticks since the cast. Exists only while the phase is 'play'.
+ */
+export interface IceField {
+  id: number;
+  /** Idx of the caster (Zhen Ji). */
+  ownerIdx: number;
+  team: 0 | 1;
+  x: number;
+  y: number;
+  ticks: number;
 }
 
 /**
@@ -264,6 +279,12 @@ export type SimEvent =
   | { type: 'slashWaveEnd'; waveId: number; x: number; y: number; hitIdx: number }
   /** Cao Cao restores stamina from a blade wave hit (amount is the gain after the maxStamina cap). */
   | { type: 'slashHeal'; playerIdx: number; amount: number }
+  /** Zhen Ji's ice field is cast at (x, y) with this radius. */
+  | { type: 'iceStart'; playerIdx: number; fieldId: number; x: number; y: number; radius: number }
+  /** An ice field pulse: victimIdxs are the opponents it took stamina from. */
+  | { type: 'icePulse'; fieldId: number; victimIdxs: number[] }
+  /** An ice field ends (timer, or the phase left play). */
+  | { type: 'iceEnd'; fieldId: number }
   | { type: 'whistle'; reason: 'kickoff' | 'half' | 'full' }
   | { type: 'goal'; team: 0 | 1; scorerIdx: number }
   | { type: 'matchEnd'; score: [number, number] }
@@ -331,6 +352,10 @@ export interface GameState {
   riders: Rider[];
   /** Blade waves from a slash. Empty outside play. */
   waves: BladeWave[];
+  /** Ice fields from Zhen Ji's icefield. Empty outside play. */
+  iceFields: IceField[];
+  /** Id given to the next ice field. */
+  nextIceId: number;
   ball: Ball;
   match: MatchState;
   /** Cleared at the start of every step. */

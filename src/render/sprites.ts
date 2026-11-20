@@ -20,7 +20,8 @@ export type SpriteAnim = 'idle' | 'run' | 'attack' | 'charge' | 'special' | 'cas
  * For Xu Chu's tiger guard: the ground smash (punch), the fire ring running round him, the tiger maw over him while a shot is
  * held, the fire roar (spit and forward roar), and the flaming trail of the spat ball. For Cao Cao's slash: the blue sword arc
  * (punch, and a faint one per wave), the seven stars over his head, the blade wave in flight, the sparks where a wave hits, and
- * the heal ring at his feet.
+ * the heal ring at his feet. For Zhen Ji's icefield: the icy whip arc (punch), the falling ice rain over the field, the ground ice
+ * spikes (and their melt when the field ends), the snowflake burst at her cast, and the shatter on each victim and at the field's end.
  */
 export type FxAnim =
   | 'thrust'
@@ -49,7 +50,12 @@ export type FxAnim =
   | 'constellation'
   | 'bladeWave'
   | 'sparks'
-  | 'heal';
+  | 'heal'
+  | 'whip'
+  | 'rain'
+  | 'spikes'
+  | 'melt'
+  | 'snow';
 
 export interface SpriteMeta {
   frameWidth: number;
@@ -120,6 +126,7 @@ const ZHANGLIAO_META: SpriteMeta = { frameWidth: 421, frameHeight: 272, cols: 4,
 const SIMAYI_META: SpriteMeta = { frameWidth: 263, frameHeight: 244, cols: 4, rows: 6, anchorX: 132, anchorY: 240 };
 const XUCHU_META: SpriteMeta = { frameWidth: 282, frameHeight: 290, cols: 4, rows: 6, anchorX: 116, anchorY: 214 };
 const CAOCAO_META: SpriteMeta = { frameWidth: 320, frameHeight: 273, cols: 4, rows: 6, anchorX: 150, anchorY: 249 };
+const ZHENJI_META: SpriteMeta = { frameWidth: 355, frameHeight: 273, cols: 4, rows: 5, anchorX: 192, anchorY: 268 };
 
 /** Frame index of a sheet cell (row-major) for a sheet with this meta. */
 const cellAt = (meta: SpriteMeta) => (row: number, col: number): number => row * meta.cols + col;
@@ -133,6 +140,7 @@ const lat = cellAt(ZHANGLIAO_META);
 const sat = cellAt(SIMAYI_META);
 const xat = cellAt(XUCHU_META);
 const ccat = cellAt(CAOCAO_META);
+const zjat = cellAt(ZHENJI_META);
 /** The Zhao Yun and Zhuge Liang effect sheets are 4 columns of 181 px frames. */
 const fxat = (row: number, col: number): number => row * 4 + col;
 
@@ -473,6 +481,44 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
         bladeWave: { frames: [fxat(2, 0), fxat(2, 1), fxat(2, 2), fxat(2, 3)], fps: 12, repeat: -1 },
         sparks: { frames: [fxat(3, 0), fxat(3, 1), fxat(3, 2), fxat(3, 3)], fps: 14, repeat: 0 },
         heal: { frames: [fxat(4, 0), fxat(4, 1), fxat(4, 2), fxat(4, 3)], fps: 10, repeat: 0 },
+      },
+    },
+  },
+  zhenji: {
+    key: 'sprite-zhenji',
+    url: 'sprites/zhenji.png',
+    meta: ZHENJI_META,
+    displayHeight: 56,
+    shadowScale: 1.0,
+    anims: {
+      idle: { frames: [zjat(0, 0), zjat(0, 1), zjat(0, 2), zjat(0, 3)], fps: 6, repeat: -1 },
+      run: { frames: [zjat(1, 0), zjat(1, 1), zjat(1, 2), zjat(1, 3)], fps: 10, repeat: -1 },
+      attack: { frames: [zjat(2, 0), zjat(2, 1), zjat(2, 2), zjat(2, 3)], fps: 14, repeat: 0 },
+      charge: { frames: [zjat(2, 0)], fps: 1, repeat: -1 },
+      cast: { frames: [zjat(3, 2)], fps: 1, repeat: -1 },
+      special: { frames: [zjat(3, 0), zjat(3, 1), zjat(3, 2)], fps: 8, repeat: 0 },
+      rampage: { frames: [zjat(3, 1)], fps: 1, repeat: -1 },
+      lunge: { frames: [zjat(3, 1)], fps: 1, repeat: -1 },
+      shot: { frames: [zjat(2, 2)], fps: 1, repeat: -1 },
+      dive: { frames: [zjat(4, 1)], fps: 1, repeat: -1 },
+      hitstun: { frames: [zjat(4, 0)], fps: 1, repeat: -1 },
+      down: { frames: [zjat(4, 1), zjat(4, 2)], fps: 6, repeat: 0 },
+      recover: { frames: [zjat(4, 3)], fps: 1, repeat: -1 },
+    },
+    fx: {
+      key: 'fx-zhenji',
+      url: 'sprites/zhenji-fx.png',
+      frameWidth: 180,
+      frameHeight: 180,
+      punch: 'whip',
+      punchWidth: 90,
+      anims: {
+        whip: { frames: [fxat(0, 0), fxat(0, 1), fxat(0, 2), fxat(0, 3)], fps: 20, repeat: 0 },
+        rain: { frames: [fxat(1, 0), fxat(1, 1), fxat(1, 2), fxat(1, 3)], fps: 12, repeat: -1 },
+        spikes: { frames: [fxat(2, 0), fxat(2, 1), fxat(2, 2)], fps: 10, repeat: 0 },
+        melt: { frames: [fxat(2, 3)], fps: 1, repeat: -1 },
+        snow: { frames: [fxat(3, 0), fxat(3, 1), fxat(3, 2), fxat(3, 3)], fps: 12, repeat: 0 },
+        shatter: { frames: [fxat(4, 0), fxat(4, 1), fxat(4, 2), fxat(4, 3)], fps: 14, repeat: 0 },
       },
     },
   },

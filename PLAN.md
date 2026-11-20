@@ -129,3 +129,18 @@
 - [x] 2. render（頭上體力條、移除中央招式名、移除左上體力條）＋e2e — worker B（與 1 平行）
 - [x] 3. CLAUDE.md、commit、push、部署、正式網址 e2e — me＋worker
 - [x] 4. 許褚顯示放大：displayHeight 60→84（縮放比 0.21→0.29，張飛 0.28、關羽 0.27），只動畫面 — me
+
+---
+# Goal 9（2026-11-20 晚）甄姬
+魏國陣容改為 許褚 GK／曹操 DF／甄姬 MF／司馬懿 MF／張遼 FW（典韋下場，列入未入選）。甄姬大招「冰雨招來」：以施放位置為中心半徑 110px 的冰雨＋冰刺圈，持續 4 秒，固定在原地；範圍內敵人速度剩 15%（離開即恢復），每 0.5 秒扣 5%（最多 8 次）；持球不持球皆可。
+
+# Constraints / decisions
+- 甄姬：體型 S，能力 4/6/5/9/5（技巧型中場）；曹操改 DF 能力 7/5/7/6/8（使用者要求依位置調整）；每隊總和自動正規化 150。
+- 圖：art-src/zhenji-sheet.png（1122×1402，5×4：待機、走、鏈攻擊、施法姿勢（甩鏈、舉鏈旋、閉眼施法、收）、受擊/倒地/起身）、art-src/zhenji-fx.png（1122×1402，5×4：冰弧（攻擊）、冰雨（循環）、冰刺圈（地面）、雪花爆（施放）、冰晶碎（命中/結束））。
+
+# Steps 9
+- [x] 1. data＋sim：陣容、mode 'icefield'＋測試 — worker — verify: vitest
+- [x] 2. AI — worker（與 3 平行）
+- [x] 3. 切圖、fx、sprites.ts、MatchScene、e2e — worker（me 看截圖）
+- [ ] 4. CLAUDE.md、commit、push、部署、正式網址 e2e — me＋worker
+- 11-20：諸葛亮 e2e 偶發失敗的真因＝擊倒後才截圖、受害者已起身；改成每格記錄是否有人倒地。e2e/sprite-machao.mjs、sprite-zhaoyun.mjs 截圖路徑仍指向舊 session，待改。

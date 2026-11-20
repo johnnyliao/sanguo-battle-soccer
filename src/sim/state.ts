@@ -24,6 +24,8 @@ export function createInitialState(
     players: [],
     riders: [],
     waves: [],
+    iceFields: [],
+    nextIceId: 1,
     ball: {
       x: FIELD_W / 2,
       y: FIELD_D / 2,

@@ -589,10 +589,10 @@ describe('AI tiger guard (Xu Chu, off the ball)', () => {
 });
 
 describe('AI slash (Cao Cao, off the ball and owner)', () => {
-  const CAO_CAO = 7;
+  const CAO_CAO = 6;
   const TICKS = 400;
 
-  /** Wei Cao Cao at idx 7, facing the opponent goal, with the ball loose at midfield. */
+  /** Wei Cao Cao at idx 6, facing the opponent goal, with the ball loose at midfield. */
   function caoState(seed: number): GameState {
     const state = specialState(seed);
     expect(state.players[CAO_CAO].specialMode).toBe('slash');
@@ -673,6 +673,81 @@ describe('AI slash (Cao Cao, off the ball and owner)', () => {
     const frame = computeAIInputs(state, createAIState(58), NO_HUMANS)[CAO_CAO];
     expect(frame.moveX).toBe(1);
     expect(frame.l).toBe(false);
+  });
+});
+
+describe('AI icefield (Zhen Ji, off the ball and owner)', () => {
+  const ZHEN_JI = 7;
+  const TICKS = 400;
+
+  /** Wei Zhen Ji at idx 7, with the ball loose at midfield. */
+  function zhenState(seed: number): GameState {
+    const state = specialState(seed);
+    expect(state.players[ZHEN_JI].specialMode).toBe('icefield');
+    place(state, ZHEN_JI, 500, FIELD_D / 2, 1);
+    return state;
+  }
+
+  it('casts off the ball when an enemy carrier is within 90 px, and not at 150 px', () => {
+    const near = zhenState(61);
+    place(near, 0, 580, FIELD_D / 2);
+    carry(near, 0);
+    expect(driveOne(near, createAIState(61), ZHEN_JI, TICKS, true).pressedL).toBe(true);
+
+    const far = zhenState(61);
+    place(far, 0, 650, FIELD_D / 2);
+    carry(far, 0);
+    expect(driveOne(far, createAIState(61), ZHEN_JI, TICKS, true).pressedL).toBe(false);
+  });
+
+  it('casts off the ball with two opponents within 100 px and the ball loose, but not with one at 100 px', () => {
+    const two = zhenState(62);
+    place(two, 0, 560, FIELD_D / 2);
+    place(two, 1, 500, FIELD_D / 2 + 60);
+    expect(driveOne(two, createAIState(62), ZHEN_JI, TICKS, true).pressedL).toBe(true);
+
+    const one = zhenState(62);
+    place(one, 0, 600, FIELD_D / 2);
+    expect(driveOne(one, createAIState(62), ZHEN_JI, TICKS, true).pressedL).toBe(false);
+  });
+
+  it('does not cast with nobody near and the ball loose', () => {
+    const state = zhenState(63);
+    expect(driveOne(state, createAIState(63), ZHEN_JI, TICKS, true).pressedL).toBe(false);
+  });
+
+  it('casts as the owner when an opponent is within 70 px', () => {
+    const state = zhenState(64);
+    place(state, 0, 560, FIELD_D / 2);
+    carry(state, ZHEN_JI);
+    expect(driveOne(state, createAIState(64), ZHEN_JI, TICKS, true).pressedL).toBe(true);
+  });
+
+  it('casts as the owner with two opponents within 110 px, but not with one at 80 px', () => {
+    const two = zhenState(65);
+    place(two, 0, 600, FIELD_D / 2);
+    place(two, 1, 400, FIELD_D / 2);
+    carry(two, ZHEN_JI);
+    expect(driveOne(two, createAIState(65), ZHEN_JI, TICKS, true).pressedL).toBe(true);
+
+    const one = zhenState(65);
+    place(one, 0, 580, FIELD_D / 2);
+    carry(one, ZHEN_JI);
+    expect(driveOne(one, createAIState(65), ZHEN_JI, TICKS, true).pressedL).toBe(false);
+  });
+
+  it('does not cast as the owner with nobody near', () => {
+    const state = zhenState(66);
+    carry(state, ZHEN_JI);
+    expect(driveOne(state, createAIState(66), ZHEN_JI, TICKS, true).pressedL).toBe(false);
+  });
+
+  it('a silenced Zhen Ji off the ball never presses L, even with two opponents next to her', () => {
+    const state = zhenState(67);
+    place(state, 0, 560, FIELD_D / 2);
+    place(state, 1, 500, FIELD_D / 2 + 60);
+    state.players[ZHEN_JI].silenceTicks = SILENCE_TICKS;
+    expect(driveOne(state, createAIState(67), ZHEN_JI, SILENCE_TICKS / 2, true).pressedL).toBe(false);
   });
 });
 

@@ -36,7 +36,7 @@ describe('specialDescription', () => {
     const d = specialDescription(def('pierce', 'lunge'));
     expect(d.condition).toBe('持球');
     expect(d.effect).toContain('突進');
-    expect(d.effect).toContain('每撞一人回 20%');
+    expect(d.effect).toContain('每撞一人回20%');
   });
 
   it('beam works with or without the ball when the character is no-ball', () => {
@@ -48,19 +48,19 @@ describe('specialDescription', () => {
   it('fear works with or without the ball and stops the opponents', () => {
     const d = specialDescription(def('straight', 'fear', true));
     expect(d.condition).toBe('持球或不持球');
-    expect(d.effect).toContain('周圍敵人');
+    expect(d.effect).toContain('定身3秒');
   });
 
   it('leap works with or without the ball and silences the landing area', () => {
     const d = specialDescription(def('zigzag', 'leap', true));
     expect(d.condition).toBe('持球或不持球');
-    expect(d.effect).toContain('沉默 2 秒');
+    expect(d.effect).toContain('沉默2秒');
   });
 
   it('summon needs the ball and calls cavalry', () => {
     const d = specialDescription(def('straight', 'summon'));
     expect(d.condition).toBe('持球');
-    expect(d.effect).toContain('5 名鐵騎');
+    expect(d.effect).toContain('5名鐵騎');
   });
 
   it('ride (騎士衝擊) works with or without the ball and names the knockdown share', () => {
@@ -69,11 +69,22 @@ describe('specialDescription', () => {
     expect(d.effect).toContain('扣 20%');
   });
 
+  it('wei specials work with or without the ball and state their key numbers', () => {
+    const tiger = specialDescription(def('pierce', 'tiger', true));
+    expect(tiger.condition).toBe('持球或不持球');
+    expect(tiger.effect).toContain('扣80%');
+    expect(tiger.effect).toContain('沒吞則震退扣10%');
+    expect(specialDescription(def('zigzag', 'slash', true)).effect).toContain('扣5%');
+    expect(specialDescription(def('zigzag', 'icefield', true)).effect).toContain('緩速85%');
+    expect(specialDescription(def('zigzag', 'leap', true)).effect).toContain('扣15%');
+    expect(specialDescription(def('straight', 'fear', true)).effect).toContain('扣10%');
+  });
+
   it('keeps effect texts short enough for one team-select line', () => {
-    const modes = ['rampage', 'roar', 'lunge', 'beam', 'summon', 'fear', 'leap', 'tiger', 'ride'] as const;
+    const modes = ['rampage', 'roar', 'lunge', 'beam', 'summon', 'fear', 'leap', 'tiger', 'slash', 'ride', 'icefield'] as const;
     for (const mode of modes) {
       for (const kind of ['straight', 'zigzag', 'lob', 'pierce', 'beam'] as const) {
-        expect(specialDescription(def(kind, mode)).effect.length).toBeLessThanOrEqual(20);
+        expect(specialDescription(def(kind, mode)).effect.length).toBeLessThanOrEqual(30);
       }
     }
   });

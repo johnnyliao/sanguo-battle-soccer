@@ -18,7 +18,7 @@ if (!base) {
 
 const FIELD_MID_Y = 130;
 const OWN_HALF_X = 300;
-const outDir = '/tmp/claude-1000/-home-safe3admin/481f0680-3ee3-4058-9195-12539132c87d/scratchpad/zg';
+const outDir = '/tmp/claude-1000/-home-safe3admin/0b7bc786-6b15-4a7f-930c-d14bce7049d1/scratchpad/zg';
 mkdirSync(outDir, { recursive: true });
 const shot = (name) => resolve(outDir, name);
 
@@ -139,6 +139,10 @@ try {
         if (typeof c.name !== 'string' || !c.name.startsWith('fx:') || !c.visible) continue;
         if (!window.__fxSeen.includes(c.name)) window.__fxSeen.push(c.name);
       }
+      // Latch a rival knockdown: the 1 s knockdown can be over before a slow screenshot returns.
+      const st = window.__sg.state();
+      const me = st.players[window.__sg.humanIdx];
+      if (st.players.some((p) => p.team !== me.team && p.action === 'down')) window.__downSeen = true;
       requestAnimationFrame(loop);
     };
     loop();
@@ -171,11 +175,7 @@ try {
   await page
     .waitForFunction(() => window.__sg.state().players[window.__sg.humanIdx].action !== 'cast', null, { timeout: 8000 })
     .catch(() => {});
-  const struck = await page.evaluate(() => {
-    const s = window.__sg.state();
-    const me = s.players[window.__sg.humanIdx];
-    return s.players.some((p) => p.team !== me.team && p.action === 'down');
-  });
+  const struck = await page.evaluate(() => window.__downSeen === true);
   await page.waitForTimeout(60);
   const seenStrike = await page.evaluate(() => window.__fxSeen);
   report('beam strike knocks an opponent down', struck, `struck ${struck}`);

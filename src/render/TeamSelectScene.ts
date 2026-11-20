@@ -418,16 +418,18 @@ export class TeamSelectScene extends Phaser.Scene {
 
       const specialX = this.view.W - 178;
       const desc = specialDescription(c);
-      add(this.add.text(specialX, y0 + 4, c.special.name, this.textStyle('13px', '#ffd98a')));
+      add(this.add.text(specialX, y0 + 3, c.special.name, this.textStyle('13px', '#ffd98a')));
       add(
         this.add.text(
           specialX,
-          y0 + 21,
+          y0 + 18,
           `${desc.condition}｜冷卻 ${SPECIAL_COOLDOWN_SECONDS} 秒`,
           this.textStyle('10px', '#d0d8e0', false),
         ),
       );
-      add(this.add.text(specialX, y0 + 32, desc.effect, this.textStyle('10px', '#ffffff', false)));
+      const effectStyle = this.textStyle('9px', '#ffffff', false);
+      effectStyle.wordWrap = { width: this.view.W - 10 - specialX, useAdvancedWrap: true };
+      add(this.add.text(specialX, y0 + 30, desc.effect, effectStyle));
 
       const pr = previewRect(slot, this.view);
       const pg = this.add.graphics();

@@ -12,6 +12,7 @@ import {
   FIELD_W,
   EMPTY_INPUT,
   GOAL_HALF_W,
+  ICE_RADIUS,
   LEAP_FLY_TICKS,
   LUNGE_TICKS,
   RIDER_HIT_RADIUS,
@@ -116,6 +117,8 @@ interface FxInstance {
   fearOf: number | null;
   /** Leaping player idx whose flight this effect is (the crow trail), so the landing fades it. */
   leapOf: number | null;
+  /** Ice field id this effect belongs to (the rain and spikes), so the field's end fades it. */
+  iceOf: number | null;
   /** A follower that rises with his height z (a leap's crow trail). */
   lifted: boolean;
   /** Draw alpha while held. */
@@ -144,6 +147,7 @@ interface FxSpawn {
   rideOf?: number;
   fearOf?: number;
   leapOf?: number;
+  iceOf?: number;
   lifted?: boolean;
   alpha?: number;
   mirror?: boolean;
@@ -354,6 +358,17 @@ const FEAR_GHOST_FX_SIZE = 150;
 const FEAR_CHAIN_FX_SIZE = 80;
 const FEAR_ICON_FX_SIZE = 40;
 const FEAR_ICON_GAP = 4;
+/** Zhen Ji's icefield: the snowflake burst at her cast (its size), the falling ice rain (sheet size, the sheets' x offsets along the field, their lift above the ground point, their depth above the players), the ground spikes (depth under the players, melt time once the field ends), the shatter on each victim and at the field's end (sizes), and the light blue tint on a slowed opponent. */
+const ICE_SNOW_FX_SIZE = 100;
+const ICE_RAIN_FX_SIZE = 130;
+const ICE_RAIN_OFFSETS = [-60, 0, 60];
+const ICE_RAIN_LIFT = 65;
+const ICE_RAIN_DEPTH = FIELD_D + 50;
+const ICE_GROUND_DEPTH = -20;
+const ICE_MELT_MS = 250;
+const ICE_VICTIM_FX_SIZE = 50;
+const ICE_END_FX_SIZE = 150;
+const ICE_SLOW_TINT = 0xa8d8ff;
 /** Lunge start: a small shake. The dragon holds for the dash, then fades for LUNGE_FADE_MS. */
 const LUNGE_SHAKE_MS = 120;
 const LUNGE_SHAKE_INTENSITY = 0.002;
@@ -549,6 +564,8 @@ export class MatchScene extends Phaser.Scene {
   /** Zhang Liao's fear: the caster of each player feared by him, and the feared players whose chains are on (see updateFearFx). */
   private fearCaster = new Map<number, number>();
   private fearShown = new Set<number>();
+  /** Zhen Ji's ice fields in play, by field id: her idx, the field's centre, and its ground spikes (for the melt at the end). */
+  private iceFieldFx = new Map<number, { caster: number; x: number; y: number; spikes: FxInstance | null }>();
   /** Xu Chu's tiger guard effects: the fire ring round him, the maw over him while a shot is held, and the trail of the spat ball. */
   private tigerRing = new Map<number, FxInstance>();
   private tigerMaw = new Map<number, FxInstance>();
@@ -665,6 +682,7 @@ export class MatchScene extends Phaser.Scene {
     this.fx = [];
     this.fearCaster.clear();
     this.fearShown.clear();
+    this.iceFieldFx.clear();
     this.tigerRing.clear();
     this.tigerMaw.clear();
     this.tigerTrail = null;
@@ -874,6 +892,12 @@ export class MatchScene extends Phaser.Scene {
         this.slashWaveEndFx(e);
       } else if (e.type === 'slashHeal') {
         this.slashHealFx(e.playerIdx);
+      } else if (e.type === 'iceStart') {
+        this.iceStartFx(e);
+      } else if (e.type === 'icePulse') {
+        this.icePulseFx(e.fieldId, e.victimIdxs);
+      } else if (e.type === 'iceEnd') {
+        this.iceEndFx(e.fieldId);
       } else if (e.type === 'attack') {
         if (e.kind === 'punch') this.punchFx(e.playerIdx);
       } else if (e.type === 'lungeStart') {
@@ -987,6 +1011,7 @@ export class MatchScene extends Phaser.Scene {
     this.drawRiders();
     this.drawBall();
     this.updateFearFx();
+    this.updateIceTint();
     this.updateTigerTrail();
     this.updateWaveFx();
     this.drawFx();
@@ -1035,6 +1060,7 @@ export class MatchScene extends Phaser.Scene {
       rideOf: s.rideOf ?? null,
       fearOf: s.fearOf ?? null,
       leapOf: s.leapOf ?? null,
+      iceOf: s.iceOf ?? null,
       lifted: s.lifted ?? false,
       alpha: s.alpha ?? 1,
       mirror: s.mirror ?? false,
@@ -1446,6 +1472,81 @@ export class MatchScene extends Phaser.Scene {
     if (caster === undefined) return;
     const p = this.state.players[idx];
     this.groundFx(caster, 'shatter', p.x, p.y, FEAR_CHAIN_FX_SIZE);
+  }
+
+  /**
+   * Zhen Ji's icefield cast: the snowflake burst at her feet, the ground spikes at the field's centre (held until the field
+   * ends), and the falling ice rain over the field (three sheets, held until the field ends).
+   */
+  private iceStartFx(e: Extract<SimEvent, { type: 'iceStart' }>): void {
+    const owner = this.fxOwner(e.playerIdx);
+    if (!owner) return;
+    this.groundFx(e.playerIdx, 'snow', e.x, e.y, ICE_SNOW_FX_SIZE);
+    const ground = worldToScreen(e.x, e.y, 0);
+    const spikesW = 2 * ICE_RADIUS;
+    const spikes = this.playFx(owner.fx, 'spikes', {
+      x: ground.sx,
+      y: ground.sy,
+      w: spikesW,
+      h: spikesW * DEPTH_SCALE,
+      depth: ICE_GROUND_DEPTH,
+      holdMs: Number.POSITIVE_INFINITY,
+      endMs: Number.POSITIVE_INFINITY,
+      iceOf: e.fieldId,
+    });
+    for (const dx of ICE_RAIN_OFFSETS) {
+      this.playFx(owner.fx, 'rain', {
+        x: ground.sx + dx,
+        y: ground.sy - ICE_RAIN_LIFT,
+        w: ICE_RAIN_FX_SIZE,
+        h: ICE_RAIN_FX_SIZE,
+        depth: ICE_RAIN_DEPTH,
+        holdMs: Number.POSITIVE_INFINITY,
+        endMs: Number.POSITIVE_INFINITY,
+        iceOf: e.fieldId,
+      });
+    }
+    this.iceFieldFx.set(e.fieldId, { caster: e.playerIdx, x: e.x, y: e.y, spikes });
+  }
+
+  /** An ice pulse: a small shatter on the feet of each victim. */
+  private icePulseFx(fieldId: number, victimIdxs: number[]): void {
+    const field = this.iceFieldFx.get(fieldId);
+    if (!field) return;
+    for (const v of victimIdxs) {
+      const victim = this.state.players[v];
+      this.groundFx(field.caster, 'shatter', victim.x, victim.y, ICE_VICTIM_FX_SIZE);
+    }
+  }
+
+  /**
+   * The field ends: the spikes melt (frame 3) and then fade with the rain, and one bigger shatter breaks at the centre.
+   */
+  private iceEndFx(fieldId: number): void {
+    const field = this.iceFieldFx.get(fieldId);
+    if (!field) return;
+    this.iceFieldFx.delete(fieldId);
+    const now = this.time.now;
+    const owner = this.fxOwner(field.caster);
+    if (owner && field.spikes) field.spikes.sprite.play(fxAnimKey(owner.fx, 'melt'));
+    for (const f of this.fx) {
+      if (f.iceOf !== fieldId) continue;
+      f.holdMs = now - f.startMs + (f === field.spikes ? ICE_MELT_MS : 0);
+      f.endMs = f.holdMs + FX_FADE_MS;
+    }
+    this.groundFx(field.caster, 'shatter', field.x, field.y, ICE_END_FX_SIZE);
+  }
+
+  /** An opponent standing within ICE_RADIUS of a live ice field is tinted light blue (the slow); the tint clears when he leaves it or the field ends. */
+  private updateIceTint(): void {
+    const { players, iceFields } = this.state;
+    for (const p of players) {
+      const sprite = this.playerViews[p.idx].sprite;
+      if (!sprite) continue;
+      const slowed = iceFields.some((f) => f.team !== p.team && Math.hypot(f.x - p.x, f.y - p.y) <= ICE_RADIUS);
+      if (slowed) sprite.setTint(ICE_SLOW_TINT);
+      else sprite.clearTint();
+    }
   }
 
   /** Zhang Fei's roar: the charge at his feet, then the soundwave in front of him once the charge has played. */

@@ -24,6 +24,11 @@ import {
   GOAL_H,
   GRAVITY,
   HITSTUN_TICKS,
+  ICE_DOT_INTERVAL,
+  ICE_DOT_RATIO,
+  ICE_RADIUS,
+  ICE_SLOW_MULT,
+  ICE_TICKS,
   KICK_NO_TOUCH,
   KICK_RECOVER_TICKS,
   KNOCKBACK_SPEED,
@@ -122,6 +127,7 @@ import {
   type AttackKind,
   type BladeWave,
   type GameState,
+  type IceField,
   type InputFrame,
   type Player,
   type Rider,
@@ -264,8 +270,20 @@ function coast(p: Player, damp: number): boolean {
   return p.actionTimer <= 0;
 }
 
-function maxSpeedOf(p: Player): number {
-  return PLAYER_BASE_SPEED + p.stats.speed * PLAYER_SPEED_PER_STAT;
+function maxSpeedOf(state: GameState, p: Player): number {
+  return (PLAYER_BASE_SPEED + p.stats.speed * PLAYER_SPEED_PER_STAT) * iceSlowMult(state, p);
+}
+
+/**
+ * Speed multiplier from Zhen Ji's ice fields: ICE_SLOW_MULT while the player stands within ICE_RADIUS of a field cast by an
+ * opponent. Invincible players are unaffected. It is computed from position each tick, so leaving a field restores speed at once.
+ */
+function iceSlowMult(state: GameState, p: Player): number {
+  if (isInvincible(p)) return 1;
+  for (const f of state.iceFields) {
+    if (f.team !== p.team && distance(f.x, f.y, p.x, p.y) <= ICE_RADIUS) return ICE_SLOW_MULT;
+  }
+  return 1;
 }
 
 /** Unit vector of the held direction, or zero when no direction is held. */
@@ -324,7 +342,7 @@ function updateNormal(state: GameState, p: Player, input: InputFrame): void {
   p.stamina = Math.min(p.maxStamina, Math.max(0, p.stamina));
 
   const ownsBall = state.ball.ownerIdx === p.idx;
-  const baseSpeed = maxSpeedOf(p);
+  const baseSpeed = maxSpeedOf(state, p);
   // Silenced (a leap landing): only movement works, so J and K do nothing.
   const silenced = p.silenceTicks > 0;
 
@@ -343,7 +361,7 @@ function updateNormal(state: GameState, p: Player, input: InputFrame): void {
     if (input.j && !p.prevInput.j) {
       p.action = 'charge';
       p.chargeTicks = 0;
-      moveCharging(p, input);
+      moveCharging(state, p, input);
       return;
     }
   }
@@ -455,16 +473,16 @@ function updateCharge(state: GameState, p: Player, input: InputFrame): void {
     p.chargeTicks++;
     if (p.chargeTicks === CHARGE_FULL) state.events.push({ type: 'chargeFull', playerIdx: p.idx });
   }
-  moveCharging(p, input);
+  moveCharging(state, p, input);
 }
 
-function moveCharging(p: Player, input: InputFrame): void {
+function moveCharging(state: GameState, p: Player, input: InputFrame): void {
   const dir = inputDir(input);
   if (dir.x !== 0 || dir.y !== 0) {
     p.facingX = dir.x;
     p.facingY = dir.y;
   }
-  const maxSpeed = maxSpeedOf(p) * CHARGE_MOVE_MULT;
+  const maxSpeed = maxSpeedOf(state, p) * CHARGE_MOVE_MULT;
   const k = Math.min(1, (PLAYER_ACCEL * DT) / p.mass);
   p.vx += (dir.x * maxSpeed - p.vx) * k;
   p.vy += (dir.y * maxSpeed - p.vy) * k;
@@ -511,6 +529,7 @@ function trySpecial(state: GameState, p: Player, input: InputFrame): boolean {
   else if (p.specialMode === 'tiger') startTiger(state, p);
   else if (p.specialMode === 'slash') startSlash(state, p);
   else if (p.specialMode === 'ride') startRide(state, p);
+  else if (p.specialMode === 'icefield') startIcefield(state, p);
   else startRampage(state, p);
   return true;
 }
@@ -588,7 +607,7 @@ function ballIntoGoal(state: GameState, p: Player, side: 0 | 1, vx: number, vy: 
 
 /** Back to normal play. The lunge speed is scaled down to the player's normal top speed, keeping its direction. */
 function endLunge(state: GameState, p: Player): void {
-  const maxSpeed = maxSpeedOf(p);
+  const maxSpeed = maxSpeedOf(state, p);
   const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
   if (speed > maxSpeed) {
     p.vx = (p.vx / speed) * maxSpeed;
@@ -761,7 +780,7 @@ function updateRide(state: GameState, p: Player): void {
 
 /** Back to normal play, with the ride speed scaled down to the player's normal top speed, keeping its direction. */
 function endRide(state: GameState, p: Player): void {
-  const maxSpeed = maxSpeedOf(p);
+  const maxSpeed = maxSpeedOf(state, p);
   const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
   if (speed > maxSpeed) {
     p.vx = (p.vx / speed) * maxSpeed;
@@ -1538,6 +1557,62 @@ export function endSlashWindows(state: GameState): void {
   state.waves = [];
 }
 
+/**
+ * Zhen Ji's icefield (冰雨招來): an instant cast, with or without the ball. The field is fixed at her cast point and does not
+ * move with her. She keeps acting normally, and any ball she holds stays at her feet.
+ */
+function startIcefield(state: GameState, p: Player): void {
+  p.stamina -= SPECIAL_STAMINA_COST;
+  p.specialCooldown = SPECIAL_COOLDOWN_TICKS;
+  const fieldId = state.nextIceId++;
+  state.iceFields.push({ id: fieldId, ownerIdx: p.idx, team: p.team, x: p.x, y: p.y, ticks: 0 });
+  state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
+  state.events.push({ type: 'iceStart', playerIdx: p.idx, fieldId, x: p.x, y: p.y, radius: ICE_RADIUS });
+}
+
+/**
+ * One tick for every ice field in play: counts it up, pulses on every ICE_DOT_INTERVAL-th tick after the cast, and ends it
+ * once ICE_TICKS have passed (the last pulse fires on that same tick, before the end).
+ */
+export function updateIcefields(state: GameState): void {
+  if (state.match.phase !== 'play') return;
+  for (const f of state.iceFields) {
+    f.ticks++;
+    if (f.ticks % ICE_DOT_INTERVAL === 0) icePulse(state, f);
+  }
+  const ended = state.iceFields.filter((f) => f.ticks >= ICE_TICKS);
+  if (ended.length === 0) return;
+  state.iceFields = state.iceFields.filter((f) => f.ticks < ICE_TICKS);
+  for (const f of ended) state.events.push({ type: 'iceEnd', fieldId: f.id });
+}
+
+/**
+ * One pulse of an ice field: every standing opponent inside ICE_RADIUS that is not invincible loses ICE_DOT_RATIO of his
+ * maxStamina. Emptying his stamina knocks him down. No knockback, no hitstun, and a ball holder keeps the ball.
+ */
+function icePulse(state: GameState, f: IceField): void {
+  const victimIdxs: number[] = [];
+  for (const v of state.players) {
+    if (v.team === f.team || v.action === 'down' || isInvincible(v)) continue;
+    if (distance(f.x, f.y, v.x, v.y) > ICE_RADIUS) continue;
+    const cost = ICE_DOT_RATIO * v.maxStamina;
+    v.stamina = Math.max(0, v.stamina - cost);
+    victimIdxs.push(v.idx);
+    state.events.push({ type: 'hit', attackerIdx: f.ownerIdx, victimIdx: v.idx, kind: 'special', damage: cost });
+    if (v.stamina <= 0) {
+      setDown(v, DOWN_TICKS_EXHAUSTED);
+      state.events.push({ type: 'down', playerIdx: v.idx });
+    }
+  }
+  state.events.push({ type: 'icePulse', fieldId: f.id, victimIdxs });
+}
+
+/** Ends every ice field (the phase left play). */
+export function endIcefields(state: GameState): void {
+  for (const f of state.iceFields) state.events.push({ type: 'iceEnd', fieldId: f.id });
+  state.iceFields = [];
+}
+
 /** Clears a rampage and reports it. Callers only call this while the player is rampaging. */
 export function endRampage(state: GameState, p: Player): void {
   p.rampageTicks = 0;
@@ -1556,7 +1631,7 @@ function tickRampage(state: GameState, p: Player): void {
   if (holding && rampageAtGoalMouth(state, p)) {
     const side: 0 | 1 = attackDir(state, p.team) === 1 ? 1 : 0;
     endRampage(state, p);
-    ballIntoGoal(state, p, side, attackDir(state, p.team) * maxSpeedOf(p), 0);
+    ballIntoGoal(state, p, side, attackDir(state, p.team) * maxSpeedOf(state, p), 0);
     return;
   }
   const ends = p.specialNoBall

@@ -5,10 +5,13 @@
 // Cao Cao's slash: 3 swings (slashSwing) land within ~1 s of the special, and the blade waves are drawn (slash-caocao.png).
 // Xu Chu's guard: once it starts, a test-staged opponent shot comes in at his goal. The swallow shot (tiger-xuchu-swallow.png) is
 // taken while the ball is held in his mouth, and the spit shot (tiger-xuchu-spit.png) while the fire trail follows the lob.
+// Zhen Ji's icefield: the field is cast at her feet (iceStart); after the first pulse (icePulse) the staged opponents inside it are
+// tinted, and the mid-field shot (test-results/ice-zhenji.png) shows the rain, the spikes and the tinted victims.
 // Usage: node e2e/preview.mjs <url>
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const require = createRequire('/home/safe3admin/mountain-race-dev/node_modules/');
 const { chromium } = require('playwright');
@@ -32,7 +35,8 @@ const CASES = [
   { id: 'xuchu', name: '許褚', slot: 0, effect: 'tigerSwallow', wei: true },
   { id: 'zhangliao', name: '張遼', slot: 4, effect: 'fear', wei: true },
   { id: 'simayi', name: '司馬懿', slot: 3, effect: 'leapLand', wei: true },
-  { id: 'caocao', name: '曹操', slot: 2, effect: 'slashWave', wei: true },
+  { id: 'caocao', name: '曹操', slot: 1, effect: 'slashWave', wei: true },
+  { id: 'zhenji', name: '甄姬', slot: 2, effect: 'iceStart', wei: true },
 ];
 
 const errors = [];
@@ -303,6 +307,25 @@ try {
     await page.screenshot({ path: shot(`preview-${c.id}.png`) });
     const events = await page.evaluate(() => window.__sg.preview().events);
     report(`${name} special fires (${c.effect})`, fired, `events ${[...new Set(events)].join(',')}`);
+
+    if (c.effect === 'iceStart') {
+      // Mid-field (the first pulse is 0.5 s after the cast): the rain and spikes are on, and the staged opponents inside are tinted.
+      const pulsed = await page
+        .waitForFunction(() => window.__sg.preview().events.includes('icePulse'), null, { timeout: 4000 })
+        .then(
+          () => true,
+          () => false,
+        );
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: resolve(dirname(fileURLToPath(import.meta.url)), '..', 'test-results', 'ice-zhenji.png') });
+      const tinted = await page.evaluate(() => {
+        const s = window.__sg.state();
+        const scene = window.__sg.scene;
+        const me = s.players[window.__sg.humanIdx];
+        return s.players.filter((p) => p.team !== me.team && scene.playerViews[p.idx].sprite?.isTinted).length;
+      });
+      report(`${name} ice field pulses and tints the opponents inside (icePulse)`, pulsed && tinted > 0, `tinted ${tinted}`);
+    }
 
     if (c.effect === 'slashWave') {
       // The first blade wave hits the defenders staged 55 px in front: a heal (slashHeal) and the hit sparks, shot mid-buff.
