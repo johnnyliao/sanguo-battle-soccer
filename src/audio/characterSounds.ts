@@ -317,6 +317,8 @@ export function cueBus(name: string): Bus {
 export const SYNTH_RECIPES: Record<string, Recipe> = Object.fromEntries(
   SHU_CHARS.flatMap((c) => Object.entries(RECIPES[c]).map(([stage, recipe]) => [`${c}.${stage}`, recipe] as const)),
 );
+// The user picked the short bark (C) as the in-game cry for these three (2026-11-20).
+for (const c of ['guanyu', 'machao', 'zhaoyun'] as const) SYNTH_RECIPES[`${c}.shout`] = SYNTH_RECIPES[`${c}.shoutC`];
 
 /**
  * Which stages each Shu character plays for an event key (sim event type, or 'hit' for a special hit).

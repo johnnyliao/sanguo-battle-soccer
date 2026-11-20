@@ -95,7 +95,7 @@ export function mountAudition(parent: HTMLElement = document.body): HTMLElement 
     const row = document.createElement('div');
     row.appendChild(button('普攻', () => playCues([`${id}.attack`])));
     const alts = ALT_SHOUT_IDS.includes(id);
-    row.appendChild(button(alts ? '呼喊(現行)' : '呼喊', () => playCues([`${id}.shout`])));
+    row.appendChild(button(alts ? '呼喊(現行=C)' : '呼喊', () => playCues([`${id}.shout`])));
     if (alts) {
       for (const alt of ALT_SHOUTS) {
         row.appendChild(button(alt.label, () => playCues([`${id}.${alt.stage}`])));
