@@ -202,6 +202,8 @@ try {
       const tick = () => {
         if (window.__sg.scene !== scene) return;
         for (const c of scene.children.list) if (c.name?.startsWith('fx:')) seen.add(c.name);
+        // Latch the spat lob: its flight is ~0.9 s, and a slow screenshot can outlast it.
+        if (window.__sg.state().ball.tiger?.phase === 'flight') window.__tigerFlightSeen = true;
         requestAnimationFrame(tick);
       };
       tick();
@@ -221,6 +223,9 @@ try {
 
     if (c.effect === 'tigerSwallow') {
       // Guard starts (tigerStart), then the staged shot is swallowed; the hold is 0.5 s, so the swallow shot is taken right away.
+      await page.evaluate(() => {
+        window.__tigerFlightSeen = false;
+      });
       await page.waitForFunction(() => window.__sg.preview().events.includes('tigerStart'), null, { timeout: 6000 });
       await page.evaluate(stageTigerShot);
       const held = await page
@@ -230,10 +235,11 @@ try {
       await page.screenshot({ path: shot('tiger-xuchu-swallow.png'), scale: 'css' });
       report(`${name} swallows the shot (ball held)`, held);
       // The spit: the lob flies with the fire trail, and the shot is taken as soon as the flight is seen.
+      // The flight is read from the per-frame latch (set by the recorder above), so a slow shot cannot miss it.
       const spat = await page
-        .waitForFunction(() => window.__sg.state().ball.tiger?.phase === 'flight', null, { timeout: 4000, polling: 'raf' })
+        .waitForFunction(() => window.__tigerFlightSeen === true, null, { timeout: 4000, polling: 'raf' })
         .then(() => true, () => false);
-      await page.screenshot({ path: shot('tiger-xuchu-spit.png'), scale: 'css' });
+      await page.screenshot({ path: shot('tiger-xuchu-spit.png'), scale: 'css' }).catch(() => {});
       report(`${name} spits the ball (lob in flight)`, spat);
     }
 

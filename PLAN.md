@@ -114,7 +114,7 @@
 # Steps 7
 - [x] 1. sim＋render＋e2e — worker — verify: vitest、e2e
 - [x] 2. CLAUDE.md、commit、push、部署、正式網址 e2e — me＋worker
-- 11-20：許褚 preview e2e「spits the ball」偶發失敗一次（重跑通過），疑似截圖時機，待追。
+- 11-20：許褚 preview e2e「spits the ball」偶發失敗＝讀取時機太晚（吐球只飛約 0.9 秒）；已改為逐格記錄（已修）。
 
 ---
 # Goal 8（2026-11-20 晚）
