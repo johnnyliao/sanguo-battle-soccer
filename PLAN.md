@@ -69,4 +69,24 @@
 - [x] 1. sim：mode 'tiger' + 測試 — worker — verify: vitest
 - [x] 2. AI：放招時機 — worker（與 3 平行）
 - [x] 3. 切圖、sprites.ts、MatchScene 特效、e2e — worker（me 看截圖）
+- [x] 4. CLAUDE.md、驗證 → commit、push、部署、正式網址 e2e — me＋worker
+
+---
+# Goal 5（2026-11-20 晚）
+曹操（MF）新大招「霸刀連斬」：5 秒內每秒 2 刀（共 10 刀），每刀朝前方最近敵人射出短程刀氣；命中扣對方 5%、曹操回 5%、對方硬直 0.3 秒。不需持球、可移動、持球時球留腳下。新角色圖（6 排）與七星刀氣特效。完成後 commit、push、部署、正式網址 e2e。
+
+# Constraints / decisions（未指定處由 me 先定，已告知使用者）
+- 刀氣射程 ~120px、命中第一個敵人即消失；目標＝面向那側最近敵人，沒有則正前方。
+- 扣對方 5%（對方最大體力）、回曹操 5%（曹操最大體力，不超過上限）；硬直 18 tick。
+- 不無敵；倒地／硬直中不出刀但 5 秒照算；J 照常。
+- 體力歸零倒地改 1.5 秒（DOWN_TICKS_EXHAUSTED 150→90，使用者 11-20 決定），起身回 50% 不變；併入 sim worker。
+- 圖：art-src/caocao-sheet.png（6×4：待機、跑、攻擊、第 4 排起手（舉刀×2、刺、架式）、第 5 排連斬循環、受擊/倒地/起身）、art-src/caocao-fx.png（5×4：藍色刀弧、七星點亮、刀氣飛行、紅色受傷火花、紅旋→藍金回復光圈）。
+
+# Steps 5
+- [x] 1. sim：mode 'slash' + 測試 — worker — verify: vitest
+- [x] 2. AI：放招時機 — worker（與 3 平行）
+- [x] 3. 切圖、sprites.ts、MatchScene 特效、e2e — worker（me 看截圖）
 - [ ] 4. CLAUDE.md、驗證 → commit、push、部署、正式網址 e2e — me＋worker
+
+# Steps 5b（使用者 11-20：張遼太強）
+- [x] 5. 張遼「遼來了」改成以自身為中心半徑 FEAR_RADIUS=200px（不再全體）；AI 改成範圍內有敵方持球者或 ≥2 人才放；preview e2e 的「5 人被定身」改成範圍內人數；特效爆圈大小對應範圍 — worker（已派；e2e 檢查由曹操畫面 worker 放寬為 ≥1）

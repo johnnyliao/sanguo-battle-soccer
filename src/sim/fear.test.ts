@@ -5,6 +5,7 @@ import {
   DOWN_TICKS_EXHAUSTED,
   DRIBBLE_OFFSET,
   EMPTY_INPUT,
+  FEAR_RADIUS,
   FEAR_STAMINA_RATIO,
   FEAR_TICKS,
   FIELD_D,
@@ -60,9 +61,18 @@ function parkAway(state: GameState, keep: number[] = []): void {
   });
 }
 
+/** Offsets from Zhang Liao of team 1 players 5-9, all inside FEAR_RADIUS. */
+const NEAR_OFFSETS: [number, number][] = [
+  [60, 0],
+  [-60, 30],
+  [0, -90],
+  [120, 60],
+  [-150, -40],
+];
+
 /**
  * Team 0 player 0 is Zhang Liao: the fear special, no-ball, at x facing +x. The ball lies loose and far away. Team 1
- * (idx 5-9) is parked in a corner.
+ * (idx 5-9) stands around him inside FEAR_RADIUS, so they are all feared.
  */
 function fearerState(x = 600, seed = 1): GameState {
   const state = createInitialState(makeSetup(seed), SIZE_PARAMS);
@@ -76,6 +86,10 @@ function fearerState(x = 600, seed = 1): GameState {
   p.specialKind = 'straight';
   p.specialName = '遼來了';
   p.specialNoBall = true;
+  OPPONENTS.forEach((i, n) => {
+    state.players[i].x = p.x + NEAR_OFFSETS[n][0];
+    state.players[i].y = p.y + NEAR_OFFSETS[n][1];
+  });
   state.ball.ownerIdx = -1;
   state.ball.lastTouchIdx = -1;
   state.ball.x = 300;
@@ -122,6 +136,20 @@ describe('fear (遼來了)', () => {
       expect(v.action).toBe('fear');
       expect(v.stamina).toBeCloseTo(victimStamina[n] - FEAR_STAMINA_RATIO * v.maxStamina, 6);
     });
+  });
+
+  it('an opponent beyond FEAR_RADIUS is not feared and keeps his stamina, the ones inside are', () => {
+    const state = fearerState(300);
+    const far = state.players[9];
+    far.x = state.players[0].x + FEAR_RADIUS + 50;
+    far.y = state.players[0].y;
+    const stamina0 = far.stamina;
+
+    const events = pressL(state);
+
+    expect(events).toContainEqual({ type: 'fear', playerIdx: 0, victimIdxs: [5, 6, 7, 8] });
+    expect(far.action).toBe('normal');
+    expect(far.stamina).toBe(stamina0);
   });
 
   it('a feared opponent stays in fear for exactly FEAR_TICKS ticks, then returns to normal', () => {

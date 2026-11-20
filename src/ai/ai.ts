@@ -1,5 +1,6 @@
 import {
   EMPTY_INPUT,
+  FEAR_RADIUS,
   FIELD_D,
   FIELD_W,
   GK_AREA_DEPTH,
@@ -60,11 +61,8 @@ const RAMPAGE_FIRE_LEFT = 15;
 /** Ma Chao's summon is called when at least SUMMON_AI_MIN_OPPONENTS standing opponents are within this range. */
 const SUMMON_AI_RANGE = 200;
 const SUMMON_AI_MIN_OPPONENTS = 2;
-/** Fear (Zhang Liao), owner: cast when an opponent is this close, or the owner is within CHARGE_SHOT_RANGE of goal. */
-const FEAR_OWNER_RANGE = 80;
-/** Fear, off the ball: cast when at least FEAR_GOAL_MIN standing opponents are within FEAR_GOAL_RANGE of our goal. */
-const FEAR_GOAL_RANGE = 250;
-const FEAR_GOAL_MIN = 3;
+/** Fear (Zhang Liao): cast when an enemy carrier is within FEAR_RADIUS, or at least FEAR_MIN_OPPONENTS standing opponents are. */
+const FEAR_MIN_OPPONENTS = 2;
 /** Rampage (Guan Yu), off the ball: cast when an opponent carrier is within this range. */
 const RAMPAGE_BALL_RANGE = 160;
 /** Lunge (Zhao Yun), off the ball: cast when an opponent carrier is this far away, roughly in front of the lunger. */
@@ -85,6 +83,13 @@ const TIGER_AI_CHANCE = 0.1;
 const TIGER_CARRIER_RANGE = 260;
 /** Tiger, off the ball: a moving loose ball last touched by an opponent, heading at his goal, this close (in x) to the goal line. */
 const TIGER_SHOT_RANGE = 350;
+/** Slash (Cao Cao), cast: an opponent this close, or an opponent carrier within SLASH_CARRIER_RANGE. */
+const SLASH_CAST_RANGE = 140;
+const SLASH_CARRIER_RANGE = 200;
+/** Slash, buff: the enemy carrier within this range is chased in preference to the nearest opponent. */
+const SLASH_CHASE_CARRIER_RANGE = 260;
+/** Slash, buff: holds this far from the chased opponent once facing him (inside the 120 px wave range). */
+const SLASH_STANDOFF = 80;
 
 const PRESSURE_RANGE = 40;
 const PRESSURE_PASS_CHANCE = 0.04;
@@ -161,6 +166,10 @@ function activeFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPl
     return p.role === 'GK' ? gkOwnerFrame(state, ai, p, s) : ownerFrame(state, ai, p, s);
   }
   if (p.rampageTicks > 0) return rampageChaseFrame(state, p, s);
+  if (p.specialMode === 'slash' && p.slashTicks > 0) {
+    const chase = slashChaseFrame(state, ai, p, s);
+    if (chase !== null) return chase;
+  }
   const special = offBallSpecialFrame(state, ai, p, s);
   if (special !== null) return special;
   return freeFrame(state, ai, p, s);
@@ -230,13 +239,26 @@ function ownerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPla
     return frame(NO_MOVE, { l: true });
   }
 
-  // Zhang Liao's fear: freezes every opponent and makes this carrier drop the ball, so cast it when they are close.
+  // Cao Cao's slash: the blade buff needs no ball, so cast it when an opponent is close.
+  if (
+    p.specialMode === 'slash' &&
+    !p.prevInput.l &&
+    p.specialCooldown === 0 &&
+    p.stamina >= SHOT_MIN_STAMINA &&
+    slashWanted(state, p) &&
+    nextRandom(ai) < SHOT_FULL_CHANCE
+  ) {
+    s.intent = 'slash';
+    return frame(NO_MOVE, { l: true });
+  }
+
+  // Zhang Liao's fear: freezes the opponents around him and makes this carrier drop the ball, so cast it when they are close.
   if (
     p.specialMode === 'fear' &&
     !p.prevInput.l &&
     p.specialCooldown === 0 &&
     p.stamina >= SHOT_MIN_STAMINA &&
-    (opponentsWithin(state, p, FEAR_OWNER_RANGE) > 0 || Math.abs(goalX - p.x) < CHARGE_SHOT_RANGE) &&
+    opponentsWithin(state, p, FEAR_RADIUS) >= FEAR_MIN_OPPONENTS &&
     nextRandom(ai) < SHOT_FULL_CHANCE
   ) {
     s.intent = 'fear';
@@ -323,8 +345,8 @@ function offBallSpecialFrame(
   switch (p.specialMode) {
     case 'fear':
       wanted =
-        enemyCarrier !== null ||
-        opponentsNear(state, p.team, ownGoalX(state, p.team), CENTER_Y, FEAR_GOAL_RANGE) >= FEAR_GOAL_MIN;
+        (enemyCarrier !== null && dist(p.x, p.y, enemyCarrier.x, enemyCarrier.y) <= FEAR_RADIUS) ||
+        opponentsWithin(state, p, FEAR_RADIUS) >= FEAR_MIN_OPPONENTS;
       break;
     case 'beam':
       wanted = enemyCarrier !== null && Math.abs(enemyCarrier.x - ownGoalX(state, p.team)) < FIELD_W / 2;
@@ -360,6 +382,9 @@ function offBallSpecialFrame(
       break;
     case 'summon':
       wanted = opponentsWithin(state, p, SUMMON_AI_RANGE) >= SUMMON_AI_MIN_OPPONENTS;
+      break;
+    case 'slash':
+      wanted = slashWanted(state, p);
       break;
     default:
       return null;
@@ -404,6 +429,54 @@ function leapOwnerWanted(state: GameState, p: Player): boolean {
     opponentsWithin(state, p, LEAP_OWNER_ESCAPE_RANGE) >= 1 ||
     opponentsNear(state, p.team, land.x, land.y, LEAP_RADIUS) >= LEAP_TARGET_MIN_OPPONENTS
   );
+}
+
+/**
+ * Cao Cao's slash is worth casting: no blade buff running, and either an opponent stands within SLASH_CAST_RANGE or an
+ * opponent carrier is within SLASH_CARRIER_RANGE.
+ */
+function slashWanted(state: GameState, p: Player): boolean {
+  if (p.slashTicks > 0) return false;
+  if (opponentsWithin(state, p, SLASH_CAST_RANGE) >= 1) return true;
+  const carrier = state.ball.ownerIdx === -1 ? null : state.players[state.ball.ownerIdx];
+  return (
+    carrier !== null &&
+    carrier.team !== p.team &&
+    carrier.action !== 'down' &&
+    dist(p.x, p.y, carrier.x, carrier.y) < SLASH_CARRIER_RANGE
+  );
+}
+
+/**
+ * Cao Cao's slash buff, off the ball: target the enemy carrier if within SLASH_CHASE_CARRIER_RANGE, else the nearest
+ * standing opponent. Closes in, then holds once about SLASH_STANDOFF px away and facing him, so the waves reach him.
+ * A carrier inside a punch or tackle trigger is attacked by chaseFrame. Null when no opponent stands.
+ */
+function slashChaseFrame(
+  state: GameState,
+  ai: AIState,
+  p: Player,
+  s: AIState['perPlayer'][number],
+): InputFrame | null {
+  const carrier = state.ball.ownerIdx === -1 ? null : state.players[state.ball.ownerIdx];
+  const enemyCarrier =
+    carrier !== null &&
+    carrier.team !== p.team &&
+    carrier.action !== 'down' &&
+    dist(p.x, p.y, carrier.x, carrier.y) <= SLASH_CHASE_CARRIER_RANGE
+      ? carrier
+      : null;
+  const target = enemyCarrier ?? nearestOpponent(state, p.team, p.x, p.y, Infinity);
+  if (target === null) return null;
+  if (target === enemyCarrier) {
+    const chase = chaseFrame(state, ai, p, s, target);
+    if (chase.j) return chase;
+  }
+  s.intent = 'slashChase';
+  const d = dist(p.x, p.y, target.x, target.y);
+  if (d <= SLASH_STANDOFF && facingDot(p, target.x, target.y) > 0.5) return frame(NO_MOVE);
+  const dashOk = p.stamina > DASH_STAMINA_FRAC * p.maxStamina;
+  return frame(steerTo(p, target.x, target.y), { dash: dashOk && d > 160 });
 }
 
 /** Rampaging without the ball: steer at the ball (carrier or loose) and never press J. */

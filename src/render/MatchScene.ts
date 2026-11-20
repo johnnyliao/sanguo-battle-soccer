@@ -360,6 +360,19 @@ const TIGER_ROAR_FX_MS = 400;
 const TIGER_POSE_MS = 400;
 const TIGER_SHAKE_MS = 160;
 const TIGER_SHAKE_INTENSITY = 0.004;
+/**
+ * Cao Cao's slash: the seven stars over his head (its width, the time it is held: the stars light, then hold, then fade),
+ * the faint arc in front of him per blade wave (its alpha), each blade wave (its width, at SLASH_WAVE_Z px high), the
+ * sparks where a wave hits (its size), and the heal ring at his feet (its width).
+ */
+const SLASH_STARS_FX_SIZE = 120;
+const SLASH_STARS_LIFT = 30;
+const SLASH_STARS_HOLD_MS = 1000;
+const SLASH_ARC_ALPHA = 0.5;
+const SLASH_WAVE_FX_SIZE = 90;
+const SLASH_WAVE_Z = 28;
+const SLASH_HIT_FX_SIZE = 70;
+const SLASH_HEAL_FX_SIZE = 100;
 /** Why-not hint above the human's name: shown for HINT_MS, rising HINT_RISE px while it fades. */
 const HINT_MS = 1000;
 const HINT_RISE = 8;
@@ -394,6 +407,13 @@ const SPECIAL_COLORS: Record<SpecialKind, number> = {
   pierce: 0xff3b3b,
   beam: 0xfff27a,
 };
+
+/** Screen flip and angle of a sim direction for an effect whose art faces right: a leftward direction is mirrored, and the angle is taken from the reversed direction. */
+function screenFacing(dirX: number, dirY: number): { flip: boolean; angle: number } {
+  const vy = dirY * DEPTH_SCALE;
+  if (dirX < 0) return { flip: true, angle: Math.atan2(-vy, -dirX) };
+  return { flip: false, angle: Math.atan2(vy, dirX) };
+}
 
 function hexCss(color: number): string {
   return `#${color.toString(16).padStart(6, '0')}`;
@@ -494,6 +514,8 @@ export class MatchScene extends Phaser.Scene {
   private tigerRing = new Map<number, FxInstance>();
   private tigerMaw = new Map<number, FxInstance>();
   private tigerTrail: FxInstance | null = null;
+  /** Cao Cao's blade waves in flight, by wave id: the sprite and the caster (for the sparks where it ends). */
+  private bladeWaves = new Map<number, { fx: FxInstance; ownerIdx: number }>();
 
   private homeText!: Phaser.GameObjects.Text;
   private awayText!: Phaser.GameObjects.Text;
@@ -606,6 +628,7 @@ export class MatchScene extends Phaser.Scene {
     this.tigerRing.clear();
     this.tigerMaw.clear();
     this.tigerTrail = null;
+    this.bladeWaves.clear();
     this.scorers = [];
     this.resultQueued = false;
     this.prevHumanL = false;
@@ -799,6 +822,14 @@ export class MatchScene extends Phaser.Scene {
       } else if (e.type === 'tigerEnd') {
         this.fadeTigerRing(e.playerIdx);
         this.fadeTigerMaw(e.playerIdx);
+      } else if (e.type === 'slashStart') {
+        this.slashStartFx(e.playerIdx);
+      } else if (e.type === 'slashWave') {
+        this.slashWaveFx(e);
+      } else if (e.type === 'slashWaveEnd') {
+        this.slashWaveEndFx(e);
+      } else if (e.type === 'slashHeal') {
+        this.slashHealFx(e.playerIdx);
       } else if (e.type === 'attack') {
         if (e.kind === 'punch') this.punchFx(e.playerIdx);
       } else if (e.type === 'lungeStart') {
@@ -918,6 +949,7 @@ export class MatchScene extends Phaser.Scene {
     this.drawBall();
     this.updateFearFx();
     this.updateTigerTrail();
+    this.updateWaveFx();
     this.drawFx();
     this.drawHud();
     this.drawMinimap();
@@ -1512,6 +1544,113 @@ export class MatchScene extends Phaser.Scene {
     trail.sprite.setPosition(pt.sx, pt.sy - BALL_LIFT).setFlipX(flip).setRotation(angle).setDepth(ball.y + 0.4);
   }
 
+  /** Cao Cao's slash starts: the seven stars over his head, following him, lit once then held and faded. */
+  private slashStartFx(idx: number): void {
+    const owner = this.fxOwner(idx);
+    if (!owner) return;
+    const p = this.state.players[idx];
+    this.playFx(owner.fx, 'constellation', {
+      x: 0,
+      y: 0,
+      w: SLASH_STARS_FX_SIZE,
+      h: (SLASH_STARS_FX_SIZE * owner.fx.frameHeight) / owner.fx.frameWidth,
+      depth: p.y + 0.5,
+      follow: idx,
+      offY: -(owner.cfg.displayHeight + SLASH_STARS_LIFT),
+      holdMs: SLASH_STARS_HOLD_MS,
+      endMs: SLASH_STARS_HOLD_MS + FX_FADE_MS,
+    });
+  }
+
+  /** The faint slash arc in front of Cao Cao, turned to a wave's direction (the punch's place and size, at alpha SLASH_ARC_ALPHA). */
+  private slashArcFx(idx: number, dirX: number, dirY: number): void {
+    const owner = this.fxOwner(idx);
+    if (!owner) return;
+    const p = this.state.players[idx];
+    const feet = worldToScreen(p.x, p.y, 0);
+    const len = owner.fx.punchWidth ?? THRUST_FX_LEN;
+    const facing = screenFacing(dirX, dirY);
+    this.playFx(owner.fx, owner.fx.punch, {
+      x: feet.sx + (dirX < 0 ? -1 : 1) * THRUST_FX_AHEAD,
+      y: feet.sy - owner.cfg.displayHeight * THRUST_FX_HEIGHT,
+      w: len,
+      h: (len * owner.fx.frameHeight) / owner.fx.frameWidth,
+      depth: p.y + 0.5,
+      flip: facing.flip,
+      angle: facing.angle,
+      alpha: SLASH_ARC_ALPHA,
+    });
+  }
+
+  /** A blade wave fires: the faint arc in front of him, and the wave sprite at its start point (it follows the wave in flight). */
+  private slashWaveFx(e: Extract<SimEvent, { type: 'slashWave' }>): void {
+    this.slashArcFx(e.playerIdx, e.dirX, e.dirY);
+    const owner = this.fxOwner(e.playerIdx);
+    if (!owner) return;
+    const pt = worldToScreen(e.x, e.y, SLASH_WAVE_Z);
+    const facing = screenFacing(e.dirX, e.dirY);
+    const size = SLASH_WAVE_FX_SIZE;
+    const fx = this.playFx(owner.fx, 'bladeWave', {
+      x: pt.sx,
+      y: pt.sy,
+      w: size,
+      h: (size * owner.fx.frameHeight) / owner.fx.frameWidth,
+      depth: e.y + 0.5,
+      flip: facing.flip,
+      angle: facing.angle,
+      holdMs: Number.POSITIVE_INFINITY,
+    });
+    if (fx) this.bladeWaves.set(e.waveId, { fx, ownerIdx: e.playerIdx });
+  }
+
+  /**
+   * Each blade wave in flight sits at its sim point at chest height, turned to its direction. A wave's sprite is removed
+   * when its slashWaveEnd comes (see slashWaveEndFx), so it is only drawn here while the sim still has it.
+   */
+  private updateWaveFx(): void {
+    for (const w of this.state.waves) {
+      const view = this.bladeWaves.get(w.id);
+      if (!view) continue;
+      const pt = worldToScreen(w.x, w.y, SLASH_WAVE_Z);
+      const facing = screenFacing(w.dirX, w.dirY);
+      view.fx.sprite.setPosition(pt.sx, pt.sy).setFlipX(facing.flip).setRotation(facing.angle).setDepth(w.y + 0.5);
+    }
+  }
+
+  /** A blade wave ends: its sprite goes at once, and a hit gives sparks at the point where it struck. */
+  private slashWaveEndFx(e: Extract<SimEvent, { type: 'slashWaveEnd' }>): void {
+    const view = this.bladeWaves.get(e.waveId);
+    if (!view) return;
+    this.bladeWaves.delete(e.waveId);
+    view.fx.endMs = this.time.now - view.fx.startMs;
+    if (e.hitIdx < 0) return;
+    const owner = this.fxOwner(view.ownerIdx);
+    if (!owner) return;
+    const pt = worldToScreen(e.x, e.y, SLASH_WAVE_Z);
+    this.playFx(owner.fx, 'sparks', {
+      x: pt.sx,
+      y: pt.sy,
+      w: SLASH_HIT_FX_SIZE,
+      h: (SLASH_HIT_FX_SIZE * owner.fx.frameHeight) / owner.fx.frameWidth,
+      depth: e.y + 0.5,
+    });
+  }
+
+  /** Cao Cao's heal from a blade hit: the ring at his feet, following him, one-shot. */
+  private slashHealFx(idx: number): void {
+    const owner = this.fxOwner(idx);
+    if (!owner) return;
+    const p = this.state.players[idx];
+    this.playFx(owner.fx, 'heal', {
+      x: 0,
+      y: 0,
+      w: SLASH_HEAL_FX_SIZE,
+      h: (SLASH_HEAL_FX_SIZE * owner.fx.frameHeight) / owner.fx.frameWidth,
+      depth: p.y + 0.5,
+      follow: idx,
+    });
+  }
+
   /** A special's hit: Zhang Fei's roar gives a spark on the victim, Guan Yu's rampage bump an impact burst. */
   private specialHitFx(e: Extract<SimEvent, { type: 'hit' }>): void {
     if (e.kind !== 'special') return;
@@ -1737,6 +1876,7 @@ export class MatchScene extends Phaser.Scene {
       default:
         break;
     }
+    if (p.slashTicks > 0) return 'slashLoop';
     if (p.rampageTicks > 0) return 'rampage';
     if (p.chargeTicks > 0) return 'charge';
     return Math.abs(p.vx) > RUN_SPEED ? 'run' : 'idle';

@@ -8,6 +8,8 @@ import {
   createInitialState,
   RAMPAGE_TICKS,
   SILENCE_TICKS,
+  SLASH_TICKS,
+  SLASH_WAVE_RANGE,
   TIGER_GUARD_TICKS,
   hashState,
   ownGoalX,
@@ -207,43 +209,47 @@ function driveOne(
 describe('AI specials (no-ball and owner rules)', () => {
   const TICKS = 400;
 
-  it('Zhang Liao casts fear as the owner when an opponent is within 80 px, and not when none is near and he is far from goal', () => {
-    const near = specialState(21);
+  it('Zhang Liao casts fear as the owner when two opponents are within 200 px, and not with only one near', () => {
+    const two = specialState(21);
+    place(two, 9, 900, FIELD_D / 2);
+    place(two, 0, 860, FIELD_D / 2);
+    place(two, 1, 860, FIELD_D / 2 + 40);
+    carry(two, 9);
+    expect(driveOne(two, createAIState(21), 9, TICKS, true).pressedL).toBe(true);
+
+    const one = specialState(21);
+    place(one, 9, 900, FIELD_D / 2);
+    place(one, 0, 780, FIELD_D / 2);
+    carry(one, 9);
+    expect(driveOne(one, createAIState(21), 9, TICKS, true).pressedL).toBe(false);
+  });
+
+  it('Zhang Liao casts fear off the ball when an opponent carries it within 200 px, and not from 300 px with one opponent near', () => {
+    const near = specialState(22);
     place(near, 9, 900, FIELD_D / 2);
-    place(near, 0, 860, FIELD_D / 2);
-    carry(near, 9);
-    expect(driveOne(near, createAIState(21), 9, TICKS, true).pressedL).toBe(true);
+    place(near, 2, 760, FIELD_D / 2);
+    carry(near, 2);
+    expect(driveOne(near, createAIState(22), 9, TICKS, true).pressedL).toBe(true);
 
-    const far = specialState(21);
+    const far = specialState(22);
     place(far, 9, 900, FIELD_D / 2);
-    carry(far, 9);
-    expect(driveOne(far, createAIState(21), 9, TICKS, true).pressedL).toBe(false);
+    place(far, 0, 800, FIELD_D / 2);
+    place(far, 2, 600, FIELD_D / 2);
+    carry(far, 2);
+    expect(driveOne(far, createAIState(22), 9, TICKS, true).pressedL).toBe(false);
   });
 
-  it('Zhang Liao casts fear off the ball when an opponent carries it, at any distance', () => {
-    const state = specialState(22);
-    place(state, 9, 900, FIELD_D / 2);
-    place(state, 2, 300, FIELD_D / 2);
-    carry(state, 2);
-    expect(driveOne(state, createAIState(22), 9, TICKS, true).pressedL).toBe(true);
-  });
-
-  it('Zhang Liao casts fear off the ball with three opponents near our goal, but not with two and no carrier', () => {
-    const goalX = ownGoalX(specialState(23), 1);
-    const inward = goalX === 0 ? 1 : -1;
-
+  it('Zhang Liao casts fear off the ball with two opponents within 200 px, but not with one and no carrier', () => {
     const two = specialState(23);
     place(two, 9, 900, FIELD_D / 2);
-    place(two, 0, goalX + inward * 100, FIELD_D / 2);
-    place(two, 1, goalX + inward * 100, FIELD_D / 2 + 40);
-    expect(driveOne(two, createAIState(23), 9, TICKS, true).pressedL).toBe(false);
+    place(two, 0, 860, FIELD_D / 2);
+    place(two, 1, 860, FIELD_D / 2 + 40);
+    expect(driveOne(two, createAIState(23), 9, TICKS, true).pressedL).toBe(true);
 
-    const three = specialState(23);
-    place(three, 9, 900, FIELD_D / 2);
-    place(three, 0, goalX + inward * 100, FIELD_D / 2);
-    place(three, 1, goalX + inward * 100, FIELD_D / 2 + 40);
-    place(three, 2, goalX + inward * 100, FIELD_D / 2 - 40);
-    expect(driveOne(three, createAIState(23), 9, TICKS, true).pressedL).toBe(true);
+    const one = specialState(23);
+    place(one, 9, 900, FIELD_D / 2);
+    place(one, 0, 860, FIELD_D / 2);
+    expect(driveOne(one, createAIState(23), 9, TICKS, true).pressedL).toBe(false);
   });
 
   it('Zhuge Liang casts the beam off the ball when an opponent carries it in our defensive half, and not in their half', () => {
@@ -366,13 +372,16 @@ describe('AI specials (no-ball and owner rules)', () => {
   });
 
   it('Sima Yi carrying toward goal leaps when an opponent is within 100 px or two sit in the landing spot, and not otherwise', () => {
+    // Zhang Liao is parked far from the x=100 cluster: near it, his own fear would fire and shift the shared AI draws.
     const escape = specialState(32);
+    place(escape, 9, 1100, FIELD_D / 2);
     place(escape, 8, 600, FIELD_D / 2, -1);
     place(escape, 2, 540, FIELD_D / 2);
     carry(escape, 8);
     expect(driveOne(escape, createAIState(32), 8, TICKS, true).pressedL).toBe(true);
 
     const twoAtLanding = specialState(32);
+    place(twoAtLanding, 9, 1100, FIELD_D / 2);
     place(twoAtLanding, 8, 600, FIELD_D / 2, -1);
     place(twoAtLanding, 0, 310, FIELD_D / 2);
     place(twoAtLanding, 1, 310, FIELD_D / 2 + 30);
@@ -380,17 +389,20 @@ describe('AI specials (no-ball and owner rules)', () => {
     expect(driveOne(twoAtLanding, createAIState(32), 8, TICKS, true).pressedL).toBe(true);
 
     const facingAway = specialState(32);
+    place(facingAway, 9, 1100, FIELD_D / 2);
     place(facingAway, 8, 600, FIELD_D / 2, 1);
     place(facingAway, 2, 540, FIELD_D / 2);
     carry(facingAway, 8);
     expect(driveOne(facingAway, createAIState(32), 8, TICKS, true).pressedL).toBe(false);
 
     const alone = specialState(32);
+    place(alone, 9, 1100, FIELD_D / 2);
     place(alone, 8, 600, FIELD_D / 2, -1);
     carry(alone, 8);
     expect(driveOne(alone, createAIState(32), 8, TICKS, true).pressedL).toBe(false);
 
     const offField = specialState(32);
+    place(offField, 9, 1100, FIELD_D / 2);
     place(offField, 8, 200, FIELD_D / 2, -1);
     place(offField, 2, 140, FIELD_D / 2);
     carry(offField, 8);
@@ -513,6 +525,94 @@ describe('AI tiger guard (Xu Chu, off the ball)', () => {
     }
     expect(press).not.toBeNull();
     expect({ ...press, l: false }).toEqual(normal);
+  });
+});
+
+describe('AI slash (Cao Cao, off the ball and owner)', () => {
+  const CAO_CAO = 7;
+  const TICKS = 400;
+
+  /** Wei Cao Cao at idx 7, facing the opponent goal, with the ball loose at midfield. */
+  function caoState(seed: number): GameState {
+    const state = specialState(seed);
+    expect(state.players[CAO_CAO].specialMode).toBe('slash');
+    place(state, CAO_CAO, 500, FIELD_D / 2, 1);
+    return state;
+  }
+
+  it('casts off the ball when an opponent stands within 140 px, and not at 200 px', () => {
+    const near = caoState(51);
+    place(near, 0, 600, FIELD_D / 2);
+    expect(driveOne(near, createAIState(51), CAO_CAO, TICKS, true).pressedL).toBe(true);
+
+    const far = caoState(51);
+    place(far, 0, 700, FIELD_D / 2);
+    expect(driveOne(far, createAIState(51), CAO_CAO, TICKS, true).pressedL).toBe(false);
+  });
+
+  it('casts off the ball when an opponent carrier is within 200 px, and not at 300 px', () => {
+    const near = caoState(52);
+    place(near, 2, 680, FIELD_D / 2);
+    carry(near, 2);
+    expect(driveOne(near, createAIState(52), CAO_CAO, TICKS, true).pressedL).toBe(true);
+
+    const far = caoState(52);
+    place(far, 2, 800, FIELD_D / 2);
+    carry(far, 2);
+    expect(driveOne(far, createAIState(52), CAO_CAO, TICKS, true).pressedL).toBe(false);
+  });
+
+  it('does not cast with nobody near and the ball loose', () => {
+    const state = caoState(53);
+    expect(driveOne(state, createAIState(53), CAO_CAO, TICKS, true).pressedL).toBe(false);
+  });
+
+  it('casts as the carrier when an opponent stands within 140 px', () => {
+    const state = caoState(54);
+    place(state, 0, 580, FIELD_D / 2);
+    carry(state, CAO_CAO);
+    expect(driveOne(state, createAIState(54), CAO_CAO, TICKS, true).pressedL).toBe(true);
+  });
+
+  it('does not cast again while the blade buff runs', () => {
+    const state = caoState(55);
+    place(state, 0, 600, FIELD_D / 2);
+    state.players[CAO_CAO].slashTicks = SLASH_TICKS;
+    expect(driveOne(state, createAIState(55), CAO_CAO, SLASH_TICKS / 2, true).pressedL).toBe(false);
+  });
+
+  it('a silenced Cao Cao never presses L, even with an opponent next to him', () => {
+    const state = caoState(56);
+    place(state, 0, 600, FIELD_D / 2);
+    state.players[CAO_CAO].silenceTicks = SILENCE_TICKS;
+    expect(driveOne(state, createAIState(56), CAO_CAO, SILENCE_TICKS / 2, true).pressedL).toBe(false);
+  });
+
+  it('during the buff, off the ball, steers toward the enemy carrier within 260 px rather than the nearer opponent', () => {
+    const state = caoState(57);
+    place(state, 0, 560, FIELD_D / 2); // nearest opponent, 60 px on his right
+    place(state, 2, 300, FIELD_D / 2); // carrier, 200 px on his left
+    carry(state, 2);
+    state.players[CAO_CAO].slashTicks = SLASH_TICKS;
+
+    const first = computeAIInputs(state, createAIState(57), NO_HUMANS)[CAO_CAO];
+    expect(first.moveX).toBe(-1);
+    expect(first.l).toBe(false);
+
+    driveOne(state, createAIState(57), CAO_CAO, 60, false);
+    const cao = state.players[CAO_CAO];
+    expect(Math.abs(cao.x - state.players[2].x)).toBeLessThanOrEqual(SLASH_WAVE_RANGE);
+    expect(cao.facingX).toBe(-1);
+  });
+
+  it('during the buff, off the ball, steers toward the nearest opponent when no carrier is within 260 px', () => {
+    const state = caoState(58);
+    place(state, 0, 700, FIELD_D / 2); // 200 px on his right, ball loose
+    state.players[CAO_CAO].slashTicks = SLASH_TICKS;
+
+    const frame = computeAIInputs(state, createAIState(58), NO_HUMANS)[CAO_CAO];
+    expect(frame.moveX).toBe(1);
+    expect(frame.l).toBe(false);
   });
 });
 

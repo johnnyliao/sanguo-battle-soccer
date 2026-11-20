@@ -28,10 +28,12 @@ export function specialDescription(def: CharacterDef): { condition: string; effe
     case 'summon':
       return { condition, effect: '召喚 5 名鐵騎追擊，撞倒對手' };
     case 'fear':
-      return { condition, effect: '震懾全場敵人，3 秒內無法行動' };
+      return { condition, effect: '周圍敵人恐懼定身 3 秒並扣體力' };
     case 'leap':
       return { condition: '持球或不持球', effect: '後跳飛撲，落地扣敵人體力並沉默 2 秒' };
     case 'tiger':
       return { condition: '持球或不持球', effect: '5秒吞射門，吐球砸人扣80%，沒吞則震退' };
+    case 'slash':
+      return { condition: '持球或不持球', effect: '5秒連斬刀氣，命中扣體力並回補自己' };
   }
 }

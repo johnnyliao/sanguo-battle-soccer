@@ -23,6 +23,7 @@ export function createInitialState(
     rng: (setup.seed >>> 0) || 0x9e3779b9,
     players: [],
     riders: [],
+    waves: [],
     ball: {
       x: FIELD_W / 2,
       y: FIELD_D / 2,
@@ -89,6 +90,7 @@ export function createInitialState(
         bumpCooldown: 0,
         silenceTicks: 0,
         tigerTicks: 0,
+        slashTicks: 0,
         specialMode: def.special.mode ?? 'rampage',
         specialCooldown: 0,
         specialBuffer: 0,

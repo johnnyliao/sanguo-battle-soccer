@@ -30,7 +30,8 @@ export const STAMINA_BASE = 40;
 export const STAMINA_PER_STAT = 6;
 export const STAMINA_REGEN = 4;
 export const DASH_STAMINA_COST = 6;
-export const DOWN_TICKS_EXHAUSTED = 150;
+/** Down time when a hit empties the victim's stamina (1.5 s). */
+export const DOWN_TICKS_EXHAUSTED = 90;
 export const DOWN_TICKS_KNOCKED = 60;
 export const GETUP_STAMINA_RATIO = 0.5;
 export const HITSTUN_TICKS = 18;
@@ -86,6 +87,8 @@ export const BEAM_SPEED = 560;
 export const FEAR_TICKS = 180;
 /** Share of each feared opponent's maxStamina that the fear takes. */
 export const FEAR_STAMINA_RATIO = 0.1;
+/** Only opponents within this distance of Zhang Liao are feared. */
+export const FEAR_RADIUS = 200;
 /** Simayi's leap (鷹視狼顧): the back-hop, moving LEAP_BACK_DISTANCE opposite his facing over LEAP_BACK_TICKS. */
 export const LEAP_BACK_TICKS = 9;
 export const LEAP_BACK_DISTANCE = 30;
@@ -155,6 +158,22 @@ export const TIGER_STUN_TICKS = 180;
 export const TIGER_ROAR_RADIUS = 90;
 /** Share of each expiry-roar victim's maxStamina that the roar takes (10%). */
 export const TIGER_ROAR_STAMINA_RATIO = 0.1;
+/** Cao Cao's slash (霸刀連斬): how long the buff lasts (5 s). */
+export const SLASH_TICKS = 300;
+/** Ticks from the cast to the first blade wave (0.5 s). */
+export const SLASH_FIRST_DELAY = 30;
+/** Ticks between blade waves while the buff runs (2 per second). A slash skipped while he is not normal is lost. */
+export const SLASH_INTERVAL = 30;
+/** Blade wave speed in px per second. */
+export const SLASH_WAVE_SPEED = 480;
+/** A blade wave ends after travelling this many px without a hit. */
+export const SLASH_WAVE_RANGE = 120;
+/** Share of the victim's maxStamina that a blade wave hit takes (5%). */
+export const SLASH_DAMAGE_RATIO = 0.05;
+/** Stun for a blade wave victim who is not knocked down (0.3 s). */
+export const SLASH_HITSTUN_TICKS = 18;
+/** Share of Cao Cao's own maxStamina that each blade wave hit restores (5%), capped at maxStamina. */
+export const SLASH_HEAL_RATIO = 0.05;
 
 export const KICKOFF_TICKS = 60;
 export const GOAL_CELEBRATE_TICKS = 150;

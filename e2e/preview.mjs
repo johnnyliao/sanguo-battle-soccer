@@ -31,6 +31,7 @@ const CASES = [
   { id: 'xuchu', name: '許褚', slot: 0, effect: 'tigerSwallow', wei: true },
   { id: 'zhangliao', name: '張遼', slot: 4, effect: 'fear', wei: true },
   { id: 'simayi', name: '司馬懿', slot: 3, effect: 'leapLand', wei: true },
+  { id: 'caocao', name: '曹操', slot: 2, effect: 'slashWave', wei: true },
 ];
 
 const errors = [];
@@ -176,6 +177,19 @@ try {
     const banner = await page.evaluate(() => window.__sg.state().players[window.__sg.humanIdx].charId);
     report(`${name} preview human is the character`, banner === c.id, `charId ${banner}`);
 
+    // Test-only: every fx:* sprite that shows up in this match's scene, per frame (stops when the scene is replaced).
+    await page.evaluate(() => {
+      const seen = new Set();
+      window.__sgFxSeen = seen;
+      const scene = window.__sg.scene;
+      const tick = () => {
+        if (window.__sg.scene !== scene) return;
+        for (const c of scene.children.list) if (c.name?.startsWith('fx:')) seen.add(c.name);
+        requestAnimationFrame(tick);
+      };
+      tick();
+    });
+
     if (c.effect === 'leapLand') {
       // Mid-air (the flight is above 20 px high): the crow trail is on him.
       const airborne = await page
@@ -220,14 +234,36 @@ try {
         () => true,
         () => false,
       );
+    // Silence lasts 2 s, so the victims are counted at the landing itself, not after the 250 ms wait below.
+    const silencedAtLand =
+      c.effect === 'leapLand'
+        ? await page.evaluate(() => window.__sg.state().players.filter((p) => p.silenceTicks > 0).length)
+        : null;
     await page.waitForTimeout(250);
     await page.screenshot({ path: shot(`preview-${c.id}.png`) });
     const events = await page.evaluate(() => window.__sg.preview().events);
     report(`${name} special fires (${c.effect})`, fired, `events ${[...new Set(events)].join(',')}`);
 
+    if (c.effect === 'slashWave') {
+      // The first blade wave hits the defenders staged 55 px in front: a heal (slashHeal) and the hit sparks, shot mid-buff.
+      const healed = await page
+        .waitForFunction(() => window.__sg.preview().events.includes('slashHeal'), null, { timeout: 6000 })
+        .then(
+          () => true,
+          () => false,
+        );
+      // The heal ring is added in the same tick as slashHeal; shot right then, while it is on him.
+      await page.screenshot({ path: shot('slash-caocao.png') });
+      report(`${name} blade wave hits and heals (slashHeal)`, healed);
+      const fxSeen = await page.evaluate(() => [...window.__sgFxSeen]);
+      const hasWave = fxSeen.includes('fx:bladeWave');
+      const hasHeal = fxSeen.includes('fx:heal');
+      report(`${name} blade wave and heal fx are drawn`, hasWave && hasHeal, `fx seen ${fxSeen.join(',')}`);
+    }
+
     if (c.effect === 'leapLand') {
       // Landing: the victims are silenced (沉默 label) and the burst is on them.
-      const silenced = await page.evaluate(() => window.__sg.state().players.filter((p) => p.silenceTicks > 0).length);
+      const silenced = silencedAtLand;
       await page.screenshot({ path: shot('leap-simayi.png') });
       report(`${name} victims are silenced at landing`, silenced > 0, `silenced ${silenced}`);
     }

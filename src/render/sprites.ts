@@ -6,8 +6,8 @@ import type Phaser from 'phaser';
  * copies that JSON, so re-run the tool and update the numbers here if the sheet changes.
  */
 
-/** `rampage` loops while invincible with the ball; `shot` is the special ball's launch pose; `lunge` is the dash pose; `cast` is the beam channel; `land` is a leap's landing crouch (Simayi only). */
-export type SpriteAnim = 'idle' | 'run' | 'attack' | 'charge' | 'special' | 'cast' | 'rampage' | 'shot' | 'hitstun' | 'down' | 'dive' | 'recover' | 'lunge' | 'land';
+/** `rampage` loops while invincible with the ball; `shot` is the special ball's launch pose; `lunge` is the dash pose; `cast` is the beam channel; `land` is a leap's landing crouch (Simayi only); `slashLoop` is Cao Cao's blade loop while his slash buff runs. */
+export type SpriteAnim = 'idle' | 'run' | 'attack' | 'charge' | 'special' | 'cast' | 'rampage' | 'shot' | 'hitstun' | 'down' | 'dive' | 'recover' | 'lunge' | 'land' | 'slashLoop';
 
 /**
  * Effects played over the character (see MatchScene): a spear thrust or fan slash, the lunge's dragon, an impact burst,
@@ -17,7 +17,9 @@ export type SpriteAnim = 'idle' | 'run' | 'attack' | 'charge' | 'special' | 'cas
  * the '!' icon over each feared player, and the chains' shatter when the fear ends. For Simayi's leap: the feather fan slash
  * (punch), the smoke at his start, the crow flock trailing him in the air, the green ring where he lands, and the green burst on each victim.
  * For Xu Chu's tiger guard: the ground smash (punch), the fire ring running round him, the tiger maw over him while a shot is
- * held, the fire roar (spit and forward roar), and the flaming trail of the spat ball.
+ * held, the fire roar (spit and forward roar), and the flaming trail of the spat ball. For Cao Cao's slash: the blue sword arc
+ * (punch, and a faint one per wave), the seven stars over his head, the blade wave in flight, the sparks where a wave hits, and
+ * the heal ring at his feet.
  */
 export type FxAnim =
   | 'thrust'
@@ -43,7 +45,11 @@ export type FxAnim =
   | 'fireRing'
   | 'maw'
   | 'roar'
-  | 'trail';
+  | 'trail'
+  | 'constellation'
+  | 'bladeWave'
+  | 'sparks'
+  | 'heal';
 
 export interface SpriteMeta {
   frameWidth: number;
@@ -113,6 +119,7 @@ const MACHAO_CAVALRY_META: SpriteMeta = { frameWidth: 280, frameHeight: 206, col
 const ZHANGLIAO_META: SpriteMeta = { frameWidth: 421, frameHeight: 272, cols: 4, rows: 5, anchorX: 272, anchorY: 265 };
 const SIMAYI_META: SpriteMeta = { frameWidth: 263, frameHeight: 244, cols: 4, rows: 6, anchorX: 132, anchorY: 240 };
 const XUCHU_META: SpriteMeta = { frameWidth: 282, frameHeight: 290, cols: 4, rows: 6, anchorX: 116, anchorY: 214 };
+const CAOCAO_META: SpriteMeta = { frameWidth: 320, frameHeight: 273, cols: 4, rows: 6, anchorX: 150, anchorY: 249 };
 
 /** Frame index of a sheet cell (row-major) for a sheet with this meta. */
 const cellAt = (meta: SpriteMeta) => (row: number, col: number): number => row * meta.cols + col;
@@ -125,6 +132,7 @@ const cat = cellAt(MACHAO_CAVALRY_META);
 const lat = cellAt(ZHANGLIAO_META);
 const sat = cellAt(SIMAYI_META);
 const xat = cellAt(XUCHU_META);
+const ccat = cellAt(CAOCAO_META);
 /** The Zhao Yun and Zhuge Liang effect sheets are 4 columns of 181 px frames. */
 const fxat = (row: number, col: number): number => row * 4 + col;
 
@@ -426,6 +434,44 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
         maw: { frames: [fxat(2, 0), fxat(2, 1), fxat(2, 2), fxat(2, 3)], fps: 6, repeat: 0 },
         roar: { frames: [fxat(3, 0), fxat(3, 1), fxat(3, 2), fxat(3, 3)], fps: 10, repeat: 0 },
         trail: { frames: [fxat(4, 0), fxat(4, 1), fxat(4, 2), fxat(4, 3)], fps: 14, repeat: -1 },
+      },
+    },
+  },
+  caocao: {
+    key: 'sprite-caocao',
+    url: 'sprites/caocao.png',
+    meta: CAOCAO_META,
+    displayHeight: 58,
+    shadowScale: 1.1,
+    anims: {
+      idle: { frames: [ccat(0, 0), ccat(0, 1), ccat(0, 2), ccat(0, 3)], fps: 6, repeat: -1 },
+      run: { frames: [ccat(1, 0), ccat(1, 1), ccat(1, 2), ccat(1, 3)], fps: 10, repeat: -1 },
+      attack: { frames: [ccat(2, 0), ccat(2, 1), ccat(2, 2), ccat(2, 3)], fps: 14, repeat: 0 },
+      charge: { frames: [ccat(2, 0)], fps: 1, repeat: -1 },
+      cast: { frames: [ccat(3, 1)], fps: 1, repeat: -1 },
+      special: { frames: [ccat(3, 0), ccat(3, 1), ccat(3, 2), ccat(3, 3)], fps: 6, repeat: 0 },
+      slashLoop: { frames: [ccat(4, 0), ccat(4, 1), ccat(4, 2), ccat(4, 3)], fps: 10, repeat: -1 },
+      rampage: { frames: [ccat(4, 1), ccat(4, 2)], fps: 8, repeat: -1 },
+      lunge: { frames: [ccat(4, 1), ccat(4, 2)], fps: 8, repeat: -1 },
+      shot: { frames: [ccat(2, 1)], fps: 1, repeat: -1 },
+      dive: { frames: [ccat(5, 1)], fps: 1, repeat: -1 },
+      hitstun: { frames: [ccat(5, 0)], fps: 1, repeat: -1 },
+      down: { frames: [ccat(5, 1), ccat(5, 2)], fps: 6, repeat: 0 },
+      recover: { frames: [ccat(5, 3)], fps: 1, repeat: -1 },
+    },
+    fx: {
+      key: 'fx-caocao',
+      url: 'sprites/caocao-fx.png',
+      frameWidth: 180,
+      frameHeight: 180,
+      punch: 'slash',
+      punchWidth: 90,
+      anims: {
+        slash: { frames: [fxat(0, 0), fxat(0, 1), fxat(0, 2), fxat(0, 3)], fps: 20, repeat: 0 },
+        constellation: { frames: [fxat(1, 0), fxat(1, 1), fxat(1, 2), fxat(1, 3)], fps: 8, repeat: 0 },
+        bladeWave: { frames: [fxat(2, 0), fxat(2, 1), fxat(2, 2), fxat(2, 3)], fps: 12, repeat: -1 },
+        sparks: { frames: [fxat(3, 0), fxat(3, 1), fxat(3, 2), fxat(3, 3)], fps: 14, repeat: 0 },
+        heal: { frames: [fxat(4, 0), fxat(4, 1), fxat(4, 2), fxat(4, 3)], fps: 10, repeat: 0 },
       },
     },
   },

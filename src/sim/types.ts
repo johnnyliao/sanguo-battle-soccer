@@ -32,7 +32,8 @@ export type PlayerAction =
   | 'cast'
   | 'fear'
   | 'leap'
-  | 'tiger';
+  | 'tiger'
+  | 'slash';
 
 export type AttackKind = 'punch' | 'tackle' | 'special';
 
@@ -73,13 +74,15 @@ export interface Player {
   /** Ticks during which this player cannot be bumped by a rampaging opponent again. */
   bumpCooldown: number;
   /** What the special button (L) does: a rampage, a roar (shockwave) for Zhang Fei, a lunge (long dash) for Zhao Yun, a beam (channel, then strikes one opponent) for Zhuge Liang, a summon (cavalry riders) for Ma Chao, a fear (opponents stand still) for Zhang Liao, or a tiger guard (swallows a shot, spits it at opponents) for Xu Chu. */
-  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger';
+  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger' | 'slash';
   /** Ticks until the special can be used again. Set when a rampage starts or a roar fires. */
   specialCooldown: number;
   /** Ticks left silenced (a leap landing): only movement works, no J, K or L. 0 = not silenced. */
   silenceTicks: number;
   /** Ticks left in a tiger guard window (Xu Chu). 0 = no window. Reaching 0 without a swallow fires the expiry roar. */
   tigerTicks: number;
+  /** Ticks left in a slash buff (Cao Cao, 霸刀連斬). 0 = no buff. Blade waves fire while it runs. */
+  slashTicks: number;
   /** Ticks left on a buffered L press. A press made while busy waits here and fires once the player can act. 0 = none. */
   specialBuffer: number;
   specialKind: SpecialKind;
@@ -146,6 +149,24 @@ export interface Ball {
   special: SpecialShot | null;
   /** A swallowed shot (held, then spat) or a spat tiger ball in flight. null otherwise. See TigerBall. */
   tiger: TigerBall | null;
+}
+
+/**
+ * A blade wave from Cao Cao's slash. It flies straight from its start point and ends on the first opponent it touches
+ * or after SLASH_WAVE_RANGE px. Exists only while the phase is 'play'.
+ */
+export interface BladeWave {
+  id: number;
+  /** Idx of the caster (Cao Cao). */
+  ownerIdx: number;
+  team: 0 | 1;
+  x: number;
+  y: number;
+  /** Unit direction of flight. */
+  dirX: number;
+  dirY: number;
+  /** Distance flown so far, in px. */
+  travelled: number;
 }
 
 /**
@@ -218,6 +239,16 @@ export type SimEvent =
   | { type: 'tigerRoar'; playerIdx: number; victimIdxs: number[] }
   /** The guard ends without a roar (the phase left play). */
   | { type: 'tigerEnd'; playerIdx: number }
+  /** Cao Cao's slash buff starts (cast without the ball). */
+  | { type: 'slashStart'; playerIdx: number }
+  /** The slash buff ends (timer, or the phase left play). */
+  | { type: 'slashEnd'; playerIdx: number }
+  /** A blade wave is fired at (x, y) flying along (dirX, dirY). */
+  | { type: 'slashWave'; playerIdx: number; waveId: number; x: number; y: number; dirX: number; dirY: number }
+  /** A blade wave ends at (x, y): hitIdx is the opponent it struck, or -1 when it ran out of range (or the phase left play). */
+  | { type: 'slashWaveEnd'; waveId: number; x: number; y: number; hitIdx: number }
+  /** Cao Cao restores stamina from a blade wave hit (amount is the gain after the maxStamina cap). */
+  | { type: 'slashHeal'; playerIdx: number; amount: number }
   | { type: 'whistle'; reason: 'kickoff' | 'half' | 'full' }
   | { type: 'goal'; team: 0 | 1; scorerIdx: number }
   | { type: 'matchEnd'; score: [number, number] }
@@ -283,6 +314,8 @@ export interface GameState {
   players: Player[];
   /** Cavalry riders from a summon. Empty outside play. */
   riders: Rider[];
+  /** Blade waves from a slash. Empty outside play. */
+  waves: BladeWave[];
   ball: Ball;
   match: MatchState;
   /** Cleared at the start of every step. */

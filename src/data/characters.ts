@@ -11,7 +11,7 @@ function ch(
   stats: [number, number, number, number, number],
   specialName: string,
   specialKind: SpecialKind,
-  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger' = 'rampage',
+  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger' | 'slash' = 'rampage',
   opts: { noBall?: boolean; bumpPct?: number } = {},
 ): CharacterDef {
   const [power, speed, stamina, technique, defense] = stats;
@@ -34,7 +34,7 @@ export const RAW_CHARACTERS: CharacterDef[] = [
   ch('zhaoyun', '趙雲', 'shu', 'FW', 'M', [7, 9, 6, 8, 2], '遊龍穿刺', 'pierce', 'lunge', { noBall: true, bumpPct: 0.2 }),
   ch('xuchu', '許褚', 'wei', 'GK', 'L', [9, 3, 10, 2, 9], '惡虎吞天', 'pierce', 'tiger', { noBall: true }),
   ch('dianwei', '典韋', 'wei', 'DF', 'L', [10, 4, 9, 2, 8], '雙戟旋風', 'lob'),
-  ch('caocao', '曹操', 'wei', 'MF', 'M', [6, 6, 6, 8, 5], '挾天子令', 'zigzag'),
+  ch('caocao', '曹操', 'wei', 'MF', 'M', [6, 6, 6, 8, 5], '霸刀連斬', 'zigzag', 'slash', { noBall: true }),
   ch('simayi', '司馬懿', 'wei', 'MF', 'S', [4, 5, 7, 9, 6], '鷹視狼顧', 'zigzag', 'leap', { noBall: true }),
   ch('zhangliao', '張遼', 'wei', 'FW', 'M', [7, 10, 6, 7, 2], '遼來了', 'straight', 'fear', { noBall: true }),
   ch('huanggai', '黃蓋', 'wu', 'GK', 'L', [8, 3, 10, 3, 9], '苦肉火船', 'pierce'),

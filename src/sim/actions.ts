@@ -12,6 +12,7 @@ import {
   DOWN_TICKS_EXHAUSTED,
   DOWN_TICKS_KNOCKED,
   DT,
+  FEAR_RADIUS,
   FEAR_STAMINA_RATIO,
   FEAR_TICKS,
   FIELD_D,
@@ -72,6 +73,14 @@ import {
   SHOT_SPEED_PER_CHARGE,
   SHOT_SPEED_PER_POWER,
   SILENCE_TICKS,
+  SLASH_DAMAGE_RATIO,
+  SLASH_FIRST_DELAY,
+  SLASH_HEAL_RATIO,
+  SLASH_HITSTUN_TICKS,
+  SLASH_INTERVAL,
+  SLASH_TICKS,
+  SLASH_WAVE_RANGE,
+  SLASH_WAVE_SPEED,
   SPECIAL_BUFFER_TICKS,
   SPECIAL_COOLDOWN_TICKS,
   SPECIAL_FLAT_Z,
@@ -99,6 +108,7 @@ import { attackDir, goalMouth, inOwnArea, opponentGoalX } from './field';
 import { rngInt, rngNext } from './rng';
 import {
   type AttackKind,
+  type BladeWave,
   type GameState,
   type InputFrame,
   type Player,
@@ -147,6 +157,7 @@ export function updateAction(state: GameState, p: Player, input: InputFrame): vo
   applyGravity(p);
   tickRampage(state, p);
   tickTiger(state, p);
+  tickSlash(state, p);
   tickSpecialCooldown(state, p);
   if (p.silenceTicks > 0) p.silenceTicks--;
   if (input.l && !p.prevInput.l && p.action !== 'fear' && p.silenceTicks === 0) p.specialBuffer = SPECIAL_BUFFER_TICKS;
@@ -483,6 +494,7 @@ function trySpecial(state: GameState, p: Player, input: InputFrame): boolean {
   else if (p.specialMode === 'summon') startSummon(state, p);
   else if (p.specialMode === 'leap') startLeap(state, p);
   else if (p.specialMode === 'tiger') startTiger(state, p);
+  else if (p.specialMode === 'slash') startSlash(state, p);
   else startRampage(state, p);
   return true;
 }
@@ -1022,8 +1034,8 @@ function roarKnock(state: GameState, p: Player, v: Player): void {
 }
 
 /**
- * Zhang Liao's fear (遼來了): an instant cast, with or without the ball. Every opponent that is not invincible is feared
- * (see fearVictim). The caster keeps any ball it has.
+ * Zhang Liao's fear (遼來了): an instant cast, with or without the ball. Every opponent within FEAR_RADIUS that is not
+ * invincible is feared (see fearVictim). The caster keeps any ball it has.
  */
 function castFear(state: GameState, p: Player): void {
   p.stamina = Math.max(0, p.stamina - SPECIAL_STAMINA_COST);
@@ -1033,6 +1045,7 @@ function castFear(state: GameState, p: Player): void {
   const victimIdxs: number[] = [];
   for (const v of state.players) {
     if (v.team === p.team || isInvincible(v)) continue;
+    if (distance(p.x, p.y, v.x, v.y) > FEAR_RADIUS) continue;
     fearVictim(state, p, v);
     victimIdxs.push(v.idx);
   }
@@ -1183,6 +1196,151 @@ export function endTigerWindows(state: GameState): void {
     state.events.push({ type: 'tigerEnd', playerIdx: p.idx });
   }
   state.ball.tiger = null;
+}
+
+/**
+ * Cao Cao's slash (霸刀連斬): an instant cast, with or without the ball. He keeps full control while the buff runs (see
+ * tickSlash), so he is not in a special action. Any ball he holds stays at his feet.
+ */
+function startSlash(state: GameState, p: Player): void {
+  p.stamina -= SPECIAL_STAMINA_COST;
+  p.specialCooldown = SPECIAL_COOLDOWN_TICKS;
+  p.chargeTicks = 0;
+  p.slashTicks = SLASH_TICKS;
+  p.action = 'normal';
+  p.actionTimer = 0;
+  state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
+  state.events.push({ type: 'slashStart', playerIdx: p.idx });
+}
+
+/**
+ * Counts the slash buff down and fires a blade wave every SLASH_INTERVAL ticks from SLASH_FIRST_DELAY after the cast. A
+ * slash that falls while he is not normal (hitstun, down, a punch...) is lost; the timer keeps running. The buff ends
+ * when its timer runs out.
+ */
+function tickSlash(state: GameState, p: Player): void {
+  if (p.slashTicks === 0) return;
+  p.slashTicks--;
+  const elapsed = SLASH_TICKS - p.slashTicks;
+  const due = elapsed >= SLASH_FIRST_DELAY && (elapsed - SLASH_FIRST_DELAY) % SLASH_INTERVAL === 0;
+  if (due && p.action === 'normal') fireBladeWave(state, p);
+  if (p.slashTicks === 0) state.events.push({ type: 'slashEnd', playerIdx: p.idx });
+}
+
+/**
+ * One blade wave from his position, aimed at the nearest opponent that is not down or recovering and is on his facing side
+ * (the sign of facingX, or his attack direction when facingX is 0). With no such opponent it flies straight to that side.
+ */
+function fireBladeWave(state: GameState, p: Player): void {
+  const side = p.facingX !== 0 ? Math.sign(p.facingX) : attackDir(state, p.team);
+  let target: Player | null = null;
+  let targetDist = Infinity;
+  for (const v of state.players) {
+    if (v.team === p.team || v.action === 'down' || v.action === 'recover') continue;
+    if ((v.x - p.x) * side <= 0) continue;
+    const d = distance(p.x, p.y, v.x, v.y);
+    if (d < targetDist) {
+      target = v;
+      targetDist = d;
+    }
+  }
+  let dirX = side;
+  let dirY = 0;
+  if (target !== null) {
+    dirX = (target.x - p.x) / targetDist;
+    dirY = (target.y - p.y) / targetDist;
+  }
+  // One fire per player per tick, so this id is unique among the waves in play.
+  const wave: BladeWave = {
+    id: state.tick * state.players.length + p.idx,
+    ownerIdx: p.idx,
+    team: p.team,
+    x: p.x,
+    y: p.y,
+    dirX,
+    dirY,
+    travelled: 0,
+  };
+  state.waves.push(wave);
+  state.events.push({ type: 'slashWave', playerIdx: p.idx, waveId: wave.id, x: wave.x, y: wave.y, dirX, dirY });
+}
+
+/**
+ * One tick for every blade wave in play: it flies on, hits the first opponent whose body circle it touches (skipping
+ * invincible, down and recovering players), and ends on that hit or when it has flown SLASH_WAVE_RANGE.
+ */
+export function updateBladeWaves(state: GameState): void {
+  state.waves = state.waves.filter((w) => advanceBladeWave(state, w));
+}
+
+/** Moves one blade wave. Returns false on the tick it ends (its end event is already pushed). */
+function advanceBladeWave(state: GameState, w: BladeWave): boolean {
+  const step = SLASH_WAVE_SPEED * DT;
+  w.x += w.dirX * step;
+  w.y += w.dirY * step;
+  w.travelled += step;
+  const victim = state.players.find(
+    (v) =>
+      v.team !== w.team &&
+      v.action !== 'down' &&
+      v.action !== 'recover' &&
+      !isInvincible(v) &&
+      distance(w.x, w.y, v.x, v.y) < v.radius,
+  );
+  if (victim !== undefined) {
+    slashVictim(state, state.players[w.ownerIdx], victim);
+    state.events.push({ type: 'slashWaveEnd', waveId: w.id, x: w.x, y: w.y, hitIdx: victim.idx });
+    return false;
+  }
+  if (w.travelled >= SLASH_WAVE_RANGE) {
+    state.events.push({ type: 'slashWaveEnd', waveId: w.id, x: w.x, y: w.y, hitIdx: -1 });
+    return false;
+  }
+  return true;
+}
+
+/**
+ * One blade wave hit: cancels a beam channel, loses SLASH_DAMAGE_RATIO of maxStamina and is stunned for SLASH_HITSTUN_TICKS.
+ * Going to zero stamina knocks him down instead. He keeps any ball he holds. The caster restores SLASH_HEAL_RATIO of his own
+ * maxStamina, capped at maxStamina.
+ */
+function slashVictim(state: GameState, p: Player, v: Player): void {
+  reportCastCancel(state, v);
+  v.chargeTicks = 0;
+  const cost = SLASH_DAMAGE_RATIO * v.maxStamina;
+  v.stamina = Math.max(0, v.stamina - cost);
+
+  let down = false;
+  if (v.stamina <= 0) {
+    setDown(v, DOWN_TICKS_EXHAUSTED);
+    down = true;
+  } else {
+    v.action = 'hitstun';
+    v.actionTimer = SLASH_HITSTUN_TICKS;
+  }
+
+  state.events.push({ type: 'hit', attackerIdx: p.idx, victimIdx: v.idx, kind: 'special', damage: cost });
+  if (down) state.events.push({ type: 'down', playerIdx: v.idx });
+
+  const before = p.stamina;
+  p.stamina = Math.min(p.maxStamina, p.stamina + SLASH_HEAL_RATIO * p.maxStamina);
+  state.events.push({ type: 'slashHeal', playerIdx: p.idx, amount: p.stamina - before });
+}
+
+/**
+ * Ends every slash buff (emitting slashEnd) and clears every blade wave (each reported as a miss) when the phase leaves
+ * play. Called from step after the match phase is updated.
+ */
+export function endSlashWindows(state: GameState): void {
+  for (const p of state.players) {
+    if (p.slashTicks === 0) continue;
+    p.slashTicks = 0;
+    state.events.push({ type: 'slashEnd', playerIdx: p.idx });
+  }
+  for (const w of state.waves) {
+    state.events.push({ type: 'slashWaveEnd', waveId: w.id, x: w.x, y: w.y, hitIdx: -1 });
+  }
+  state.waves = [];
 }
 
 /** Clears a rampage and reports it. Callers only call this while the player is rampaging. */

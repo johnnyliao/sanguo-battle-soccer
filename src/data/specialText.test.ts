@@ -47,7 +47,7 @@ describe('specialDescription', () => {
   it('fear works with or without the ball and stops the opponents', () => {
     const d = specialDescription(def('straight', 'fear', true));
     expect(d.condition).toBe('持球或不持球');
-    expect(d.effect).toContain('無法行動');
+    expect(d.effect).toContain('周圍敵人');
   });
 
   it('leap works with or without the ball and silences the landing area', () => {
