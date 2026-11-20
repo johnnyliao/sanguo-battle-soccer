@@ -35,6 +35,7 @@ import {
   LEAP_RADIUS,
   LEAP_STAMINA_RATIO,
   LOOSE_BALL_NO_TOUCH,
+  LUNGE_HEAL_RATIO,
   LUNGE_SPEED,
   LUNGE_TICKS,
   PASS_LOB_DIST,
@@ -71,6 +72,8 @@ import {
   RIDE_PUSH_SIDE,
   RIDE_SPEED,
   RIDE_TICKS,
+  ROAR_BALL_SPEED,
+  ROAR_BALL_VZ,
   ROAR_FORWARD,
   ROAR_KNOCK_SPEED,
   ROAR_RADIUS,
@@ -1122,7 +1125,8 @@ function tickSpecialCooldown(state: GameState, p: Player): void {
 
 /**
  * Zhang Fei's roar: a shockwave centred ROAR_FORWARD in front of the player. Every standing opponent in the circle
- * (rampaging ones are immune) is knocked away from the roarer and stunned. The roarer keeps any ball it has.
+ * (rampaging ones are immune) is knocked away from the roarer and stunned. The roarer keeps any ball it has. A ball that
+ * was free when the roar fired and lies in the circle is knocked away too (see roarBall).
  */
 function castRoar(state: GameState, p: Player): void {
   p.stamina = Math.max(0, p.stamina - SPECIAL_STAMINA_COST);
@@ -1130,6 +1134,8 @@ function castRoar(state: GameState, p: Player): void {
   toNormal(p);
   const cx = p.x + p.facingX * ROAR_FORWARD;
   const cy = p.y + p.facingY * ROAR_FORWARD;
+  // Taken before the victims are knocked: a carrier dropped by this roar is not a free ball for it.
+  const ballFree = state.ball.ownerIdx === -1;
   state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
   state.events.push({ type: 'roar', playerIdx: p.idx, x: cx, y: cy, radius: ROAR_RADIUS });
   for (const v of state.players) {
@@ -1137,6 +1143,31 @@ function castRoar(state: GameState, p: Player): void {
     if (distance(cx, cy, v.x, v.y) > ROAR_RADIUS) continue;
     roarKnock(state, p, v);
   }
+  if (ballFree) roarBall(state, p, cx, cy);
+}
+
+/**
+ * The roar's hit on a free ball whose x, y lies in the circle, at any height. A special shot ends (specialEnd). A tiger
+ * ball held in Xu Chu's mouth is left alone; one in flight is cleared. The ball leaves the roarer at ROAR_BALL_SPEED,
+ * launched upward at ROAR_BALL_VZ, and the roarer is credited with the last touch.
+ */
+function roarBall(state: GameState, p: Player, cx: number, cy: number): void {
+  const b = state.ball;
+  if (b.tiger?.phase === 'hold') return;
+  if (distance(cx, cy, b.x, b.y) > ROAR_RADIUS) return;
+  b.tiger = null;
+  if (b.special !== null) {
+    b.special = null;
+    state.events.push({ type: 'specialEnd' });
+  }
+  const dist = distance(p.x, p.y, b.x, b.y);
+  const dirX = dist > 0 ? (b.x - p.x) / dist : p.facingX;
+  const dirY = dist > 0 ? (b.y - p.y) / dist : p.facingY;
+  b.vx = dirX * ROAR_BALL_SPEED;
+  b.vy = dirY * ROAR_BALL_SPEED;
+  b.vz = ROAR_BALL_VZ;
+  b.lastTouchIdx = p.idx;
+  state.events.push({ type: 'roarBall', playerIdx: p.idx, x: b.x, y: b.y });
 }
 
 /** One roar victim: pushed away from the roarer, stunned, loses stamina (down when empty), drops the ball if holding it. */
@@ -1811,6 +1842,14 @@ function rampageBump(state: GameState, rampager: Player, victim: Player, dist: n
     damage: cost,
   });
   state.events.push({ type: 'down', playerIdx: victim.idx });
+  if (rampager.action === 'lunge') lungeHeal(state, rampager);
+}
+
+/** A lunge bump restores Zhao Yun LUNGE_HEAL_RATIO of his own maxStamina, capped at maxStamina. */
+function lungeHeal(state: GameState, p: Player): void {
+  const before = p.stamina;
+  p.stamina = Math.min(p.maxStamina, p.stamina + LUNGE_HEAL_RATIO * p.maxStamina);
+  state.events.push({ type: 'lungeHeal', playerIdx: p.idx, amount: p.stamina - before });
 }
 
 function applyHit(state: GameState, attacker: Player, victim: Player, kind: AttackKind): void {

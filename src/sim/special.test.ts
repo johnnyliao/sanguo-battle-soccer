@@ -13,6 +13,7 @@ import {
   SPECIAL_BUFFER_TICKS,
   SPECIAL_COOLDOWN_TICKS,
   SPECIAL_STAMINA_COST,
+  SPECIAL_STRAIGHT_SPEED,
   createInitialState,
   hashState,
   step,
@@ -433,5 +434,104 @@ describe('determinism', () => {
       return state;
     };
     expect(hashState(play())).toBe(hashState(play()));
+  });
+});
+
+/** Zhang Fei on his own goal line at the mouth centre, facing the field, with the ball loose and everyone else parked. */
+function goalLineRoarState(seed = 1): GameState {
+  const state = roarOwnerState(0, seed);
+  looseBallAway(state);
+  return state;
+}
+
+/** Puts the loose ball at (x, y, z) moving with (vx, vy, vz), last touched by team 1 idx 5. */
+function shotAt(state: GameState, x: number, y: number, z: number, vx: number, vy: number, vz: number): void {
+  const b = state.ball;
+  Object.assign(b, { x, y, z, vx, vy, vz, ownerIdx: -1, lastTouchIdx: 5, special: null, tiger: null });
+}
+
+describe('roar knocks a free ball away from the goal', () => {
+  it.each([
+    ['the near post', 96, 0],
+    ['the far post', 164, 0],
+    ['the centre', 130, 0],
+    ['a high lob (z 60)', 130, 60],
+  ])('a shot at %s inside the circle is knocked away and does not score', (_name, y, z) => {
+    const state = goalLineRoarState();
+    shotAt(state, 40, y, z, -420, 0, 0);
+
+    const events = pressL(state);
+    expect(events).toContainEqual({ type: 'roarBall', playerIdx: 0, x: 40, y });
+    expect(state.ball.vx).toBeGreaterThan(0);
+    expect(state.ball.vz).toBeGreaterThan(0);
+    expect(state.ball.lastTouchIdx).toBe(0);
+
+    const rest = run(state, 150);
+    expect([...events, ...rest].some((e) => e.type === 'goal')).toBe(false);
+    expect(state.ball.x).toBeGreaterThan(40);
+  });
+
+  it('without the roar the same near-post shot scores (so the shots above are real threats)', () => {
+    const state = goalLineRoarState();
+    shotAt(state, 40, 96, 0, -420, 0, 0);
+
+    const events = run(state, 150);
+
+    expect(events.some((e) => e.type === 'goal')).toBe(true);
+  });
+
+  it('a free ball outside the circle is not knocked', () => {
+    const state = goalLineRoarState();
+    shotAt(state, 200, 130, 0, -420, 0, 0);
+
+    const events = pressL(state);
+
+    expect(events.some((e) => e.type === 'roarBall')).toBe(false);
+    expect(state.ball.vx).toBeLessThan(0);
+  });
+
+  it('a special shot in the circle ends and is knocked away', () => {
+    const state = goalLineRoarState();
+    shotAt(state, 40, 130, 10, -SPECIAL_STRAIGHT_SPEED, 0, 0);
+    state.ball.special = { kind: 'straight', shooterIdx: 5, team: 1, ticks: 0, dirX: -1, dirY: 0, speed: SPECIAL_STRAIGHT_SPEED, hit: [], rolled: [] };
+
+    const events = pressL(state);
+
+    expect(events).toContainEqual({ type: 'specialEnd' });
+    expect(events).toContainEqual({ type: 'roarBall', playerIdx: 0, x: 40, y: 130 });
+    expect(state.ball.special).toBeNull();
+    expect(state.ball.vx).toBeGreaterThan(0);
+  });
+
+  it('a tiger ball held in the mouth is left alone', () => {
+    const state = goalLineRoarState();
+    shotAt(state, 40, 130, 30, 0, 0, 0);
+    state.ball.tiger = { tigerIdx: 5, team: 1, phase: 'hold', holdTicks: 30, hit: [] };
+
+    const events = pressL(state);
+
+    expect(events.some((e) => e.type === 'roarBall')).toBe(false);
+    expect(state.ball.tiger?.phase).toBe('hold');
+  });
+
+  it('a tiger ball in flight is cleared and knocked away', () => {
+    const state = goalLineRoarState();
+    shotAt(state, 40, 130, 30, -200, 0, 0);
+    state.ball.tiger = { tigerIdx: 5, team: 1, phase: 'flight', holdTicks: 0, hit: [] };
+
+    const events = pressL(state);
+
+    expect(events).toContainEqual({ type: 'roarBall', playerIdx: 0, x: 40, y: 130 });
+    expect(state.ball.tiger).toBeNull();
+    expect(state.ball.vx).toBeGreaterThan(0);
+  });
+
+  it('a roar with the ball keeps it at his feet and knocks nothing away', () => {
+    const state = roarOwnerState(0);
+
+    const events = pressL(state);
+
+    expect(events.some((e) => e.type === 'roarBall')).toBe(false);
+    expect(state.ball.ownerIdx).toBe(0);
   });
 });

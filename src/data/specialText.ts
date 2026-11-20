@@ -22,7 +22,7 @@ export function specialDescription(def: CharacterDef): { condition: string; effe
     case 'roar':
       return { condition: '持球或不持球', effect: '震開周圍敵人並暈眩，持球者掉球' };
     case 'lunge':
-      return { condition, effect: '無敵突進撞開敵人，可直接進球' };
+      return { condition, effect: '無敵突進撞開敵人，每撞一人回 20%' };
     case 'beam':
       return { condition, effect: '集氣後光彈擊倒隨機一名敵人' };
     case 'summon':

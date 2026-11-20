@@ -405,7 +405,7 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
     key: 'sprite-xuchu',
     url: 'sprites/xuchu.png',
     meta: XUCHU_META,
-    displayHeight: 60,
+    displayHeight: 84,
     shadowScale: 1.2,
     anims: {
       idle: { frames: [xat(0, 0), xat(0, 1), xat(0, 2), xat(0, 3)], fps: 6, repeat: -1 },

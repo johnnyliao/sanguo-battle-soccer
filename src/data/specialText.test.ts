@@ -36,6 +36,7 @@ describe('specialDescription', () => {
     const d = specialDescription(def('pierce', 'lunge'));
     expect(d.condition).toBe('持球');
     expect(d.effect).toContain('突進');
+    expect(d.effect).toContain('每撞一人回 20%');
   });
 
   it('beam works with or without the ball when the character is no-ball', () => {

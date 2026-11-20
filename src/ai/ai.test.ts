@@ -13,12 +13,15 @@ import {
   SILENCE_TICKS,
   SLASH_TICKS,
   SLASH_WAVE_RANGE,
+  SPECIAL_COOLDOWN_TICKS,
+  SPECIAL_STRAIGHT_SPEED,
   TIGER_GUARD_TICKS,
   hashState,
   ownGoalX,
   step,
   type GameState,
   type InputFrame,
+  type SimEvent,
 } from '../sim';
 import { computeAIInputs, createAIState, type AIState } from './ai';
 
@@ -831,5 +834,125 @@ describe('AI behaviour', () => {
       }
       step(state, frames);
     }
+  });
+});
+
+describe('AI Zhang Fei goalkeeper roar (incoming shot)', () => {
+  const ZHANG_FEI = 0;
+  const OPPONENT_SHOOTER = 5;
+  const TEAMMATE = 1;
+  /** Fastest special shot in constants (straight). */
+  const FASTEST_SHOT = SPECIAL_STRAIGHT_SPEED;
+
+  /** Zhang Fei on his own goal line at the mouth centre, facing the field. Everyone else is parked far from the shot. */
+  function keeperState(seed: number): GameState {
+    const state = specialState(seed);
+    state.players.forEach((p, i) => {
+      if (i === ZHANG_FEI) return;
+      p.x = 600;
+      p.y = 20 + i * 24;
+    });
+    place(state, ZHANG_FEI, 0, FIELD_D / 2, 1);
+    return state;
+  }
+
+  /**
+   * Loose ball at (x0, mid) flying at `speed` toward the goal line at x = 0, where it crosses at yAtGoal. Last touched by
+   * touchIdx. Zhang Fei's roar circle reaches to about 135 px from the goal line along the centre line.
+   */
+  function aimedShot(state: GameState, yAtGoal: number, touchIdx: number, x0 = 120, speed = FASTEST_SHOT): void {
+    const y0 = FIELD_D / 2;
+    const b = state.ball;
+    b.x = x0;
+    b.y = y0;
+    b.z = 0;
+    b.vx = -speed;
+    b.vy = ((yAtGoal - y0) * speed) / x0;
+    b.vz = 0;
+    b.ownerIdx = -1;
+    b.lastTouchIdx = touchIdx;
+  }
+
+  /** True if Zhang Fei presses L on any of `ticks` frames. Nothing is stepped, so the state stays exactly as set up. */
+  function pressesL(state: GameState, seed: number, ticks = 30): boolean {
+    const ai = createAIState(seed);
+    for (let t = 0; t < ticks; t++) {
+      if (computeAIInputs(state, ai, NO_HUMANS)[ZHANG_FEI].l) return true;
+    }
+    return false;
+  }
+
+  it('roars at an on-target opponent shot already inside his circle', () => {
+    const state = keeperState(51);
+    aimedShot(state, 96, OPPONENT_SHOOTER);
+    expect(pressesL(state, 51)).toBe(true);
+  });
+
+  it('does not roar at an on-target shot still outside his circle (no lead)', () => {
+    const state = keeperState(52);
+    aimedShot(state, 96, OPPONENT_SHOOTER, 150);
+    expect(pressesL(state, 52)).toBe(false);
+  });
+
+  it('does not roar at an off-target opponent shot inside his circle', () => {
+    const state = keeperState(53);
+    aimedShot(state, 200, OPPONENT_SHOOTER);
+    expect(pressesL(state, 53)).toBe(false);
+  });
+
+  it('does not roar at a teammate pass heading for his goal', () => {
+    const state = keeperState(54);
+    aimedShot(state, 96, TEAMMATE);
+    expect(pressesL(state, 54)).toBe(false);
+  });
+
+  it('does not roar while the special is on cooldown', () => {
+    const state = keeperState(55);
+    aimedShot(state, 96, OPPONENT_SHOOTER);
+    state.players[ZHANG_FEI].specialCooldown = SPECIAL_COOLDOWN_TICKS;
+    expect(pressesL(state, 55)).toBe(false);
+  });
+
+  it('integration: the fastest special-shot speed from outside his circle is roared at inside it and does not score', () => {
+    const state = keeperState(56);
+    aimedShot(state, 96, OPPONENT_SHOOTER, 200, FASTEST_SHOT);
+    const ai = createAIState(56);
+    const seen: SimEvent[] = [];
+    for (let t = 0; t < 120; t++) {
+      // Only Zhang Fei is driven, with J stripped so a dive cannot be what stops the shot.
+      const frames = computeAIInputs(state, ai, NO_HUMANS).map((f, i) =>
+        i === ZHANG_FEI ? { ...f, j: false } : { ...EMPTY_INPUT },
+      );
+      step(state, frames);
+      seen.push(...state.events);
+    }
+    const roarBall = seen.find((e) => e.type === 'roarBall' && e.playerIdx === ZHANG_FEI);
+    expect(roarBall).toBeDefined();
+    expect(seen.some((e) => e.type === 'goal')).toBe(false);
+    expect(seen.some((e) => e.type === 'save' || e.type === 'dive')).toBe(false);
+  });
+
+  it('integration: the roar reverses the incoming shot (its vx turns away from his goal)', () => {
+    const state = keeperState(57);
+    aimedShot(state, 96, OPPONENT_SHOOTER);
+    const ai = createAIState(57);
+    const frames = computeAIInputs(state, ai, NO_HUMANS).map((f, i) =>
+      i === ZHANG_FEI ? { ...f, j: false } : { ...EMPTY_INPUT },
+    );
+    expect(frames[ZHANG_FEI].l).toBe(true);
+    step(state, frames);
+    expect(state.events).toContainEqual(expect.objectContaining({ type: 'roarBall', playerIdx: ZHANG_FEI }));
+    expect(state.ball.vx).toBeGreaterThan(0);
+  });
+
+  it('control: the same fastest shot with no keeper action scores', () => {
+    const state = keeperState(56);
+    aimedShot(state, 96, OPPONENT_SHOOTER, 200, FASTEST_SHOT);
+    let scored = false;
+    for (let t = 0; t < 120; t++) {
+      step(state, []);
+      scored = scored || state.events.some((e) => e.type === 'goal');
+    }
+    expect(scored).toBe(true);
   });
 });

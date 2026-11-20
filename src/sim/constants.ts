@@ -77,6 +77,8 @@ export const LUNGE_TICKS = 15;
 export const LUNGE_DISTANCE = 200;
 /** Constant lunge speed in px per second (distance per tick, times TICK_HZ). */
 export const LUNGE_SPEED = (LUNGE_DISTANCE / LUNGE_TICKS) * TICK_HZ;
+/** Share of Zhao Yun's own maxStamina that each opponent his lunge bumps restores (20%), capped at maxStamina. */
+export const LUNGE_HEAL_RATIO = 0.2;
 /** Guan Yu's ride (騎士衝擊): duration in ticks (0.5 s) and total distance in px along his facing. */
 export const RIDE_TICKS = 30;
 export const RIDE_DISTANCE = 260;
@@ -128,6 +130,9 @@ export const ROAR_FORWARD = 30;
 export const ROAR_KNOCK_SPEED = 280;
 export const ROAR_STUN_TICKS = 60;
 export const ROAR_STAMINA = 10;
+/** Roar on a free ball inside the circle (any height): the ball's speed away from the roarer, and its upward speed. */
+export const ROAR_BALL_SPEED = 420;
+export const ROAR_BALL_VZ = 160;
 /** Ma Chao's summon (西涼鐵騎): number of cavalry riders called with the ball. */
 export const SUMMON_RIDERS = 5;
 /** How long the riders roam: ticks (3 s). */

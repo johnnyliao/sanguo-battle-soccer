@@ -14,6 +14,7 @@ import {
   ROAR_RADIUS,
   SPECIAL_STAMINA_COST,
   attackDir,
+  goalMouth,
   opponentGoalX,
   ownGoalX,
   type GameState,
@@ -181,13 +182,49 @@ function activeFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPl
 
 /**
  * Zhang Fei's roar (the one special that is not a rampage). While the roar is worth it, L is pressed; the roar fires at
- * once, with or without the ball.
+ * once, with or without the ball. As goalkeeper, an incoming shot in the roar's reach is roared at with certainty, on
+ * the normal goalkeeper frame.
  */
 function roarFrame(state: GameState, p: Player, s: AIState['perPlayer'][number]): InputFrame | null {
   if (p.specialMode !== 'roar') return null;
-  if (p.action !== 'normal' || !roarWanted(state, p)) return null;
+  if (p.action !== 'normal') return null;
+  if (roarShotIncoming(state, p)) {
+    const normal = gkFreeFrame(state, p, s);
+    s.intent = 'roarShot';
+    return { ...normal, l: !p.prevInput.l };
+  }
+  if (!roarWanted(state, p)) return null;
   s.intent = 'roar';
   return frame(NO_MOVE, { l: !p.prevInput.l });
+}
+
+/**
+ * Zhang Fei as goalkeeper can roar at an incoming shot: off cooldown, enough stamina, not silenced and L not held. The
+ * loose ball must have been last touched by an opponent, move toward his goal, cross that goal line inside the mouth
+ * along its straight xy path, and already be inside the roar circle. A roar fires on the tick it is pressed, before the
+ * ball moves, so a ball still outside the circle would not be knocked.
+ */
+function roarShotIncoming(state: GameState, p: Player): boolean {
+  if (p.role !== 'GK' || p.specialCooldown > 0 || p.stamina < SPECIAL_STAMINA_COST) return false;
+  if (p.silenceTicks > 0 || p.prevInput.l) return false;
+  const ball = state.ball;
+  if (ball.ownerIdx !== -1 || ball.lastTouchIdx === -1 || state.players[ball.lastTouchIdx].team === p.team) return false;
+  const goalX = ownGoalX(state, p.team);
+  const towardGoal = goalX === 0 ? ball.vx < 0 : ball.vx > 0;
+  if (!towardGoal || !crossesGoalMouth(ball, goalX)) return false;
+  const cx = p.x + p.facingX * ROAR_FORWARD;
+  const cy = p.y + p.facingY * ROAR_FORWARD;
+  return dist(ball.x, ball.y, cx, cy) <= ROAR_RADIUS;
+}
+
+/** True if the ball's straight xy path crosses the goal line at goalX inside the goal mouth. Mirrors crossesOwnMouth in sim/step.ts. */
+function crossesGoalMouth(ball: { x: number; y: number; vx: number; vy: number }, goalX: number): boolean {
+  if (ball.vx === 0) return false;
+  const mouth = goalMouth(goalX === 0 ? 0 : 1);
+  const t = (mouth.x - ball.x) / ball.vx;
+  if (t <= 0) return false;
+  const y = ball.y + ball.vy * t;
+  return y >= mouth.yMin && y <= mouth.yMax;
 }
 
 /**

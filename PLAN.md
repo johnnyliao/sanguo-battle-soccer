@@ -113,5 +113,19 @@
 
 # Steps 7
 - [x] 1. sim＋render＋e2e — worker — verify: vitest、e2e
-- [ ] 2. CLAUDE.md、commit、push、部署、正式網址 e2e — me＋worker
+- [x] 2. CLAUDE.md、commit、push、部署、正式網址 e2e — me＋worker
 - 11-20：許褚 preview e2e「spits the ball」偶發失敗一次（重跑通過），疑似截圖時機，待追。
+
+---
+# Goal 8（2026-11-20 晚）
+趙雲突進每撞到 1 敵人回自己 20%；張飛 AI 敵方射門時能放就放怒吼，怒吼能把範圍內的球震開（含高球、必殺球）；己方每人頭上顯示龍頭體力條（敵方不顯示，左上主角體力條移除）；大招不再在畫面中間顯示招式名。
+
+# Constraints / decisions
+- 怒吼範圍維持（中心前 30px、半徑 105px：站門中央時兩門柱距圓心約 50px，已全覆蓋），只新增震球。
+- 體力條顏色：>60% 綠、30~60% 黃、<30% 紅。素材 art-src/stamina-bar.png（1448×1086 RGBA，三條：綠滿、黃半、紅少）。
+
+# Steps 8
+- [x] 1. sim＋AI（趙雲回血、怒吼震球、張飛 AI）— worker A — verify: vitest
+- [x] 2. render（頭上體力條、移除中央招式名、移除左上體力條）＋e2e — worker B（與 1 平行）
+- [ ] 3. CLAUDE.md、commit、push、部署、正式網址 e2e — me＋worker
+- [x] 4. 許褚顯示放大：displayHeight 60→84（縮放比 0.21→0.29，張飛 0.28、關羽 0.27），只動畫面 — me

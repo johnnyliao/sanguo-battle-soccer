@@ -7,6 +7,7 @@ import {
   FIELD_W,
   GOAL_HALF_W,
   LUNGE_DISTANCE,
+  LUNGE_HEAL_RATIO,
   LUNGE_TICKS,
   PUNCH_TICKS,
   SPECIAL_COOLDOWN_TICKS,
@@ -314,5 +315,50 @@ describe('lunge without the ball (no-ball special)', () => {
     const hit = events.find((e) => e.type === 'hit' && e.victimIdx === 5);
     if (hit?.type !== 'hit') throw new Error('no bump');
     expect(hit.damage).toBeCloseTo(0.2 * victim.maxStamina, 9);
+  });
+});
+
+describe('lunge heal', () => {
+  it('each opponent a lunge bumps heals Zhao Yun LUNGE_HEAL_RATIO of his own maxStamina, emitted as lungeHeal', () => {
+    const state = lungerState(300);
+    parkAway(state, [0, 5]);
+    placeOpponentAt(state, 60);
+    const p = state.players[0];
+    pressSpecial(state);
+
+    const events = run(state, LUNGE_TICKS);
+
+    const heals = events.filter((e) => e.type === 'lungeHeal');
+    expect(heals).toHaveLength(1);
+    const heal = heals[0];
+    if (heal.type !== 'lungeHeal') throw new Error('no heal');
+    expect(heal.playerIdx).toBe(0);
+    expect(heal.amount).toBeCloseTo(LUNGE_HEAL_RATIO * p.maxStamina, 9);
+  });
+
+  it('the heal stops at maxStamina and reports only the gain', () => {
+    const state = lungerState(300);
+    parkAway(state, [0, 5]);
+    placeOpponentAt(state, 60);
+    const p = state.players[0];
+    pressSpecial(state);
+    p.stamina = p.maxStamina - 4;
+
+    const events = run(state, LUNGE_TICKS);
+
+    expect(p.stamina).toBe(p.maxStamina);
+    expect(events).toContainEqual({ type: 'lungeHeal', playerIdx: 0, amount: 4 });
+  });
+
+  it('a rampage bump does not heal, only the lunge does', () => {
+    const state = lungerState(300);
+    parkAway(state, [0, 5]);
+    state.players[0].specialMode = 'rampage';
+    placeOpponentAt(state, 18);
+
+    const events = pressSpecial(state);
+
+    expect(events).toContainEqual(expect.objectContaining({ type: 'hit', attackerIdx: 0, victimIdx: 5 }));
+    expect(events.some((e) => e.type === 'lungeHeal')).toBe(false);
   });
 });

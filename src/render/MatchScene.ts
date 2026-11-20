@@ -71,10 +71,20 @@ interface PlayerView {
   tag: Phaser.GameObjects.Text;
   /** '沉默' above the name while a leap has silenced him. */
   silence: Phaser.GameObjects.Text;
+  /** Stamina bar above the name: own-team players only (null for opponents). */
+  stamina: StaminaBar | null;
   /** Set when the character's sheet loaded. The block figure is drawn when this is null. */
   sprite: Phaser.GameObjects.Sprite | null;
   spriteCfg: SpriteConfig | null;
 }
+
+/** A player's stamina bar: its container (named 'stambar:<idx>') and one fill strip per colour; only the stamina's colour shows. */
+interface StaminaBar {
+  bar: Phaser.GameObjects.Container;
+  fills: Record<StaminaColour, Phaser.GameObjects.Image>;
+}
+
+type StaminaColour = 'green' | 'yellow' | 'red';
 
 /** A cavalry rider on screen: its container (team shadow and sprite) on the rider's ground point, and its summoner. */
 interface RiderView {
@@ -257,12 +267,32 @@ function orderLayout(H: number) {
 const MINIMAP_SCALE = 0.15;
 const MINIMAP_BOTTOM = 6;
 const MINIMAP_SIDE_CLEAR = 340;
-/** Top-left HUD: the human's stamina bar (under the name) with a tick at the special cost. */
-const STAMINA_BAR_X = 8;
-const STAMINA_BAR_Y = 21;
-const STAMINA_BAR_W = 110;
-const STAMINA_BAR_H = 8;
-const STAMINA_LOW_RATIO = 0.5;
+/**
+ * Stamina bar above each own-team player's name (drawn STAMINA_BAR_W px wide; the art is STAMINA_ART_W px wide and
+ * STAMINA_ART_H px tall). The fill channel sits at STAMINA_FILL_LEFT with STAMINA_FILL_W px of width in the art, and the
+ * bar's centre is STAMINA_BAR_UP px above the name's baseline. Green above 60%, yellow from 30%, red below 30%.
+ */
+const STAMINA_BAR_W = 60;
+const STAMINA_ART_W = 150;
+const STAMINA_ART_H = 35;
+const STAMINA_SCALE = STAMINA_BAR_W / STAMINA_ART_W;
+const STAMINA_BAR_H = STAMINA_ART_H * STAMINA_SCALE;
+const STAMINA_FILL_LEFT = 24;
+const STAMINA_FILL_W = 105;
+const STAMINA_BAR_UP = 24;
+/** The labels above a player with a bar (silence, invincible) sit this far above the name's baseline; each stacked label is STAMINA_STACK_STEP higher. */
+const STAMINA_LABEL_UP = STAMINA_BAR_UP + STAMINA_BAR_H / 2 + 3;
+const STAMINA_STACK_STEP = 13;
+const STAMINA_GREEN_RATIO = 0.6;
+const STAMINA_YELLOW_RATIO = 0.3;
+/** Stamina bar textures (public/sprites/stamina-*.png): the frame on top, the dark track under it, and the fill strips. */
+const STAMINA_TEX = {
+  frame: 'stamina-frame',
+  track: 'stamina-track',
+  green: 'stamina-fill-green',
+  yellow: 'stamina-fill-yellow',
+  red: 'stamina-fill-red',
+} as const;
 /** Off-screen arrow: shown when the human is closer than ARROW_MARGIN to a view edge. The arrow is clamped to
  * the band between the top bar and the bottom edge (or the minimap / touch buttons). */
 const ARROW_MARGIN = 10;
@@ -539,12 +569,8 @@ export class MatchScene extends Phaser.Scene {
   /** Base view height for this device: MATCH_BASE_H_TOUCH on touch devices, BASE_H otherwise. */
   private baseH = BASE_H;
   private clockText!: Phaser.GameObjects.Text;
-  private hudNameText!: Phaser.GameObjects.Text;
-  private hudStaminaGfx!: Phaser.GameObjects.Graphics;
   private bannerText!: Phaser.GameObjects.Text;
   private bannerUntil = 0;
-  private specialText!: Phaser.GameObjects.Text;
-  private specialUntil = 0;
   private hintText!: Phaser.GameObjects.Text;
   private hintUntil = 0;
   private lastHintText = '';
@@ -608,6 +634,11 @@ export class MatchScene extends Phaser.Scene {
 
   preload(): void {
     preloadSprites(this.load);
+    this.load.image(STAMINA_TEX.frame, 'sprites/stamina-frame.png');
+    this.load.image(STAMINA_TEX.track, 'sprites/stamina-track.png');
+    this.load.image(STAMINA_TEX.green, 'sprites/stamina-fill-green.png');
+    this.load.image(STAMINA_TEX.yellow, 'sprites/stamina-fill-yellow.png');
+    this.load.image(STAMINA_TEX.red, 'sprites/stamina-fill-red.png');
   }
 
   create(): void {
@@ -678,6 +709,7 @@ export class MatchScene extends Phaser.Scene {
       arrowVisible: () => this.arrowShown,
       lastHint: () => this.lastHintText,
       preview: () => ({ events: this.previewEvents.slice(), ended: this.previewEnded }),
+      findByName: (name: string) => this.findDisplayByName(name),
     };
     (window as unknown as { __sgScene: string }).__sgScene = 'MatchScene';
 
@@ -789,7 +821,6 @@ export class MatchScene extends Phaser.Scene {
         this.stadium.cheer(this.time.now);
         if (this.preview) this.time.delayedCall(PREVIEW_GOAL_END_MS, () => this.endPreview());
       } else if (e.type === 'special') {
-        this.showSpecial(`${e.name}！`, SPECIAL_COLORS[e.kind]);
         // A lunge shows its dash pose for the whole dash, a beam its channel pose (spriteAnimFor), and a ride its mount pose (rideStart), not the activation pose.
         if (players[e.playerIdx].specialMode !== 'lunge' && players[e.playerIdx].specialMode !== 'beam' && players[e.playerIdx].specialMode !== 'leap' && players[e.playerIdx].specialMode !== 'ride') {
           this.playPose(e.playerIdx, 'special', SPECIAL_POSE_MS);
@@ -937,11 +968,6 @@ export class MatchScene extends Phaser.Scene {
   private showBanner(text: string, ms: number): void {
     this.bannerText.setText(text).setVisible(true);
     this.bannerUntil = this.time.now + ms;
-  }
-
-  private showSpecial(text: string, color: number): void {
-    this.specialText.setText(text).setColor(hexCss(color)).setVisible(true);
-    this.specialUntil = this.time.now + 1000;
   }
 
   // ---------- drawing ----------
@@ -1843,6 +1869,7 @@ export class MatchScene extends Phaser.Scene {
       strokeThickness: 2,
       resolution: textResolution(),
     };
+    const ownTeam = this.state.players[this.humanIdx].team;
     this.playerViews = this.state.players.map((p) => {
       const gfx = this.add.graphics();
       const spriteCfg = this.spriteConfigFor(p.charId);
@@ -1856,9 +1883,11 @@ export class MatchScene extends Phaser.Scene {
         .text(0, 0, '沉默', { ...style, fontSize: '11px', color: SILENCE_COLOR })
         .setOrigin(0.5, 1)
         .setVisible(false);
-      const parts = sprite ? [gfx, sprite, label, tag, silence] : [gfx, label, tag, silence];
+      const stamina = p.team === ownTeam ? this.createStaminaBar(p.idx) : null;
+      const parts: Phaser.GameObjects.GameObject[] = sprite ? [gfx, sprite, label, tag, silence] : [gfx, label, tag, silence];
+      if (stamina) parts.push(stamina.bar);
       const container = this.add.container(0, 0, parts);
-      return { container, gfx, label, sprite, spriteCfg, tag, silence };
+      return { container, gfx, label, sprite, spriteCfg, tag, silence, stamina };
     });
     // The special hint lives in the human's container, so it follows the figure above the name.
     this.hintText = this.add
@@ -1866,6 +1895,42 @@ export class MatchScene extends Phaser.Scene {
       .setOrigin(0.5, 1)
       .setVisible(false);
     this.playerViews[this.humanIdx].container.add(this.hintText);
+  }
+
+  /** Test hook: the first display object with this name, searched through containers. */
+  private findDisplayByName(name: string): Phaser.GameObjects.GameObject | null {
+    const walk = (list: Phaser.GameObjects.GameObject[]): Phaser.GameObjects.GameObject | null => {
+      for (const o of list) {
+        if (o.name === name) return o;
+        if (o instanceof Phaser.GameObjects.Container) {
+          const found = walk(o.list);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    return walk(this.children.list);
+  }
+
+  /** The stamina bar of player idx: the dark track, the three fill strips and the ornate frame on top. */
+  private createStaminaBar(idx: number): StaminaBar {
+    const image = (key: string) => this.add.image(0, 0, key).setOrigin(0, 0).setScale(STAMINA_SCALE);
+    const track = image(STAMINA_TEX.track);
+    const fills = { green: image(STAMINA_TEX.green), yellow: image(STAMINA_TEX.yellow), red: image(STAMINA_TEX.red) };
+    const frame = image(STAMINA_TEX.frame);
+    const bar = this.add.container(0, 0, [track, fills.green, fills.yellow, fills.red, frame]).setName(`stambar:${idx}`);
+    return { bar, fills };
+  }
+
+  /** Places the bar above the name and cuts its fill to the stamina. Green above 60%, yellow from 30%, red below 30%. */
+  private updateStaminaBar(stamina: StaminaBar, p: Player, labelY: number): void {
+    const ratio = Math.max(0, Math.min(1, p.stamina / p.maxStamina));
+    const colour: StaminaColour = ratio > STAMINA_GREEN_RATIO ? 'green' : ratio >= STAMINA_YELLOW_RATIO ? 'yellow' : 'red';
+    stamina.bar.setPosition(-STAMINA_BAR_W / 2, labelY - STAMINA_BAR_UP - STAMINA_BAR_H / 2);
+    for (const c of ['green', 'yellow', 'red'] as const) stamina.fills[c].setVisible(ratio > 0 && c === colour);
+    if (ratio <= 0) return;
+    // Cut, not squashed: the crop keeps the strip's rounded end at the stamina's edge.
+    stamina.fills[colour].setCrop(0, 0, STAMINA_FILL_LEFT + STAMINA_FILL_W * ratio, STAMINA_ART_H);
   }
 
   /** Sprite config for a character whose sheet loaded. Null means the block figure is drawn. */
@@ -2043,15 +2108,18 @@ export class MatchScene extends Phaser.Scene {
     // Name label above the top of the figure; human marker above the name.
     const labelY = topY - 2;
     view.label.setPosition(0, labelY);
+    // The stamina bar sits above the name; the silence and invincible labels stack above it (or just above the name without a bar).
+    const stackY = labelY - (view.stamina ? STAMINA_LABEL_UP : 22);
+    const silenced = p.silenceTicks > 0;
+    view.silence.setVisible(silenced);
+    if (silenced) view.silence.setPosition(0, stackY);
     const invincible = p.idx === this.humanIdx && isInvincible(p);
     view.tag.setVisible(invincible);
     if (invincible) {
       const ticks = p.action === 'lunge' || p.action === 'leap' || p.action === 'ride' ? p.actionTimer : p.rampageTicks;
-      view.tag.setPosition(0, labelY - 20).setText(`無敵 ${(ticks / TICK_HZ).toFixed(1)}`);
+      view.tag.setPosition(0, stackY - (silenced ? STAMINA_STACK_STEP : 0)).setText(`無敵 ${(ticks / TICK_HZ).toFixed(1)}`);
     }
-    const silenced = p.silenceTicks > 0;
-    view.silence.setVisible(silenced);
-    if (silenced) view.silence.setPosition(0, labelY - 22);
+    if (view.stamina) this.updateStaminaBar(view.stamina, p, labelY);
     if (p.idx === this.humanIdx) {
       const tipY = labelY - 13;
       g.fillStyle(HUMAN_MARK, 1);
@@ -2074,7 +2142,7 @@ export class MatchScene extends Phaser.Scene {
       return;
     }
     const t = 1 - left / HINT_MS;
-    this.hintText.setPosition(0, labelY - 40 - HINT_RISE * t).setAlpha(1 - t);
+    this.hintText.setPosition(0, labelY - 52 - HINT_RISE * t).setAlpha(1 - t);
   }
 
   private drawBall(): void {
@@ -2159,20 +2227,8 @@ export class MatchScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(hudDepth + 1);
 
-    this.hudNameText = this.add
-      .text(0, 0, '', style('#ffffff', '12px'))
-      .setScrollFactor(0)
-      .setDepth(hudDepth + 1);
-    this.hudStaminaGfx = this.add.graphics().setScrollFactor(0).setDepth(hudDepth + 1);
-
     this.bannerText = this.add
       .text(0, 0, '', style('#ffffff', '26px'))
-      .setOrigin(0.5, 0.5)
-      .setScrollFactor(0)
-      .setDepth(hudDepth + 2)
-      .setVisible(false);
-    this.specialText = this.add
-      .text(0, 0, '', style('#ffffff', '36px'))
       .setOrigin(0.5, 0.5)
       .setScrollFactor(0)
       .setDepth(hudDepth + 2)
@@ -2204,9 +2260,7 @@ export class MatchScene extends Phaser.Scene {
     this.awayText.setPosition(W / 2 + 8, 17);
     this.clockText.setPosition(W - 10, 17);
 
-    this.hudNameText.setPosition(STAMINA_BAR_X, 3);
     this.bannerText.setPosition(W / 2, H / 2 - 30);
-    this.specialText.setPosition(W / 2, H / 2 + 20);
     this.pkMeterLabel.setPosition(W - PK_METER_RIGHT - 6, H - PK_METER_BOTTOM + PK_METER_H / 2);
     this.pkLineText.setPosition(W / 2, H - 40);
     this.pkHintText.setPosition(W / 2, H - 2);
@@ -2233,7 +2287,7 @@ export class MatchScene extends Phaser.Scene {
     const hudDepth = 1000;
     const hide = (o: Phaser.GameObjects.Components.Visible) => o.setVisible(false);
     this.touch.setVisible(false);
-    [this.topBarGfx, this.homeText, this.dashText, this.awayText, this.clockText, this.hudNameText].forEach(hide);
+    [this.topBarGfx, this.homeText, this.dashText, this.awayText, this.clockText].forEach(hide);
     const style = (size: string): Phaser.Types.GameObjects.Text.TextStyle => ({
       fontFamily: FONT,
       fontSize: size,
@@ -2413,7 +2467,6 @@ export class MatchScene extends Phaser.Scene {
 
     const now = this.time.now;
     if (now > this.bannerUntil) this.bannerText.setVisible(false);
-    if (now > this.specialUntil) this.specialText.setVisible(false);
   }
 
   private drawMatchHud(): void {
@@ -2428,19 +2481,6 @@ export class MatchScene extends Phaser.Scene {
     const block =
       silenceBlockReason(p) ?? positionBlockReason(this.state, p) ?? (p.stamina < SPECIAL_STAMINA_COST ? '體力不足' : null);
     this.touch.setSpecialStatus({ cooldownTicks: p.specialCooldown, cooldownTotal: SPECIAL_COOLDOWN_TICKS, block });
-    this.hudNameText.setText(p.name).setVisible(true);
-
-    // Stamina bar: green, yellow below half, red below the special cost; a white tick marks the special cost.
-    const staminaRatio = Math.max(0, Math.min(1, p.stamina / p.maxStamina));
-    const costRatio = SPECIAL_STAMINA_COST / p.maxStamina;
-    const fill = staminaRatio < costRatio ? 0xff3b3b : staminaRatio < STAMINA_LOW_RATIO ? 0xf2c94c : 0x6cd46c;
-    const g = this.hudStaminaGfx.clear();
-    g.fillStyle(0x333333, 1);
-    g.fillRect(STAMINA_BAR_X, STAMINA_BAR_Y, STAMINA_BAR_W, STAMINA_BAR_H);
-    g.fillStyle(fill, 1);
-    g.fillRect(STAMINA_BAR_X, STAMINA_BAR_Y, STAMINA_BAR_W * staminaRatio, STAMINA_BAR_H);
-    g.fillStyle(0xffffff, 1);
-    g.fillRect(STAMINA_BAR_X + STAMINA_BAR_W * costRatio - 0.5, STAMINA_BAR_Y - 2, 1, STAMINA_BAR_H + 4);
   }
 
   /** Shootout HUD: title, PK score, per-team kick markers, shooter/keeper line, aim helpers and power meter. */
@@ -2451,8 +2491,6 @@ export class MatchScene extends Phaser.Scene {
     const sudden = pk.kicks[0].length >= PK_ROUNDS && pk.kicks[1].length >= PK_ROUNDS;
     this.clockText.setText(sudden ? 'PK 大戰　驟死' : 'PK 大戰');
     this.pkScoreText.setText(`PK ${pk.score[0]} - ${pk.score[1]}`);
-    this.hudStaminaGfx.clear();
-    this.hudNameText.setVisible(false);
 
     const g = this.pkHudGfx.clear();
     g.fillStyle(0x000000, 0.55);

@@ -197,17 +197,21 @@ try {
     timeout: 3000,
   }).catch(() => {});
   // Read the victim in the same tick as the cooldown check: the stun lasts 1 s, the screenshot takes longer.
-  const { roared, victim } = await zhang.evaluate(() => {
+  const { roared, victim, centreTexts } = await zhang.evaluate(() => {
     const s = window.__sg.state();
     const h = s.players[window.__sg.humanIdx];
     const v = s.players[5];
+    // The special's name no longer shows as big centre text: no visible text ends with the '！' of a special call.
+    const texts = window.__sg.scene.children.list.filter((o) => o.type === 'Text' && o.visible && o.text.endsWith('！')).map((o) => o.text);
     return {
       roared: { specialCooldown: h.specialCooldown, ownsBall: s.ball.ownerIdx === h.idx },
       victim: { action: v.action, stamina: v.stamina },
+      centreTexts: texts,
     };
   });
   await zhang.screenshot({ path: shot('special-roar.png') });
   report('roar fires at once on L without the ball and starts the cooldown', roared.specialCooldown > 0 && roared.specialCooldown <= 720, `specialCooldown ${roared.specialCooldown}`);
+  report('roar shows no centre special name text', centreTexts.length === 0, `visible texts ${JSON.stringify(centreTexts)}`);
   report(
     'roar stuns the opponent in the circle',
     victim.action === 'hitstun' || victim.action === 'down',

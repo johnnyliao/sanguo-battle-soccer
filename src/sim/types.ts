@@ -203,6 +203,8 @@ export type SimEvent =
   | { type: 'specialShot'; playerIdx: number; kind: SpecialKind }
   /** A roar's shockwave centre and radius. */
   | { type: 'roar'; playerIdx: number; x: number; y: number; radius: number }
+  /** Zhang Fei's roar knocks a free ball away from him; x, y is the ball's position at the roar. */
+  | { type: 'roarBall'; playerIdx: number; x: number; y: number }
   | { type: 'rampageStart'; playerIdx: number }
   | { type: 'rampageEnd'; playerIdx: number }
   /** A summon starts: the summoner's position when he calls the riders. */
@@ -217,6 +219,8 @@ export type SimEvent =
   | { type: 'lungeStart'; playerIdx: number; x: number; y: number; dirX: number; dirY: number }
   /** A lunge ends (timer, field edge, or phase change). */
   | { type: 'lungeEnd'; playerIdx: number; x: number; y: number }
+  /** Zhao Yun restores stamina from a lunge bump (amount is the gain after the maxStamina cap). */
+  | { type: 'lungeHeal'; playerIdx: number; amount: number }
   /** A ride starts: the unit direction of the dash. */
   | { type: 'rideStart'; playerIdx: number; dirX: number; dirY: number }
   /** A ride ends (timer, field edge, a goal, or the phase leaving play). */
