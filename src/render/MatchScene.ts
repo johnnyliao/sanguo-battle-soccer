@@ -19,7 +19,6 @@ import {
   TICK_HZ,
   autoPkOrders,
   createInitialState,
-  inAttackingHalf,
   isInvincible,
   pkMeterValue,
   step,
@@ -100,6 +99,8 @@ interface FxInstance {
   castOf: number | null;
   /** Player idx whose rampage this effect is, so the rampage's end fades it. */
   rampageOf: number | null;
+  /** Feared player idx whose fear this effect is (chains, icon), so the fear's end fades it. */
+  fearOf: number | null;
   /** Draw alpha while held. */
   alpha: number;
   /** A follower that turns with his facing: flipped, and its offset x turned around. */
@@ -124,6 +125,7 @@ interface FxSpawn {
   offY?: number;
   castOf?: number;
   rampageOf?: number;
+  fearOf?: number;
   alpha?: number;
   mirror?: boolean;
   depthOff?: number;
@@ -138,13 +140,9 @@ interface PkOrderRow {
 
 type HudStyle = (color: string, size: string, stroke?: boolean) => Phaser.Types.GameObjects.Text.TextStyle;
 
-/**
- * Why the player cannot cast the special where he stands: no ball (a roar needs none), or outside the attacking half
- * for a beam. Null when the position allows it.
- */
+/** Why the player cannot cast the special where he stands: no ball (a no-ball special needs none). Null when it allows it. */
 function positionBlockReason(state: GameState, p: Player): string | null {
-  if (p.specialMode !== 'roar' && state.ball.ownerIdx !== p.idx) return '需持球';
-  if (p.specialMode === 'beam' && !inAttackingHalf(state, p)) return '需在前半場';
+  if (!p.specialNoBall && state.ball.ownerIdx !== p.idx) return '需持球';
   return null;
 }
 
@@ -284,6 +282,11 @@ const IMPACT_FX_SIZE = 80;
 /** Roar spark on each victim, and the height of a hit's burst over the victim's feet. */
 const SPARK_FX_SIZE = 60;
 const HIT_FX_LIFT = 20;
+/** Zhang Liao's fear: the ghost burst over him (its width), the chains ring under each feared player (its width), and the '!' icon over his head (its width, gap above his sprite). */
+const FEAR_GHOST_FX_SIZE = 150;
+const FEAR_CHAIN_FX_SIZE = 80;
+const FEAR_ICON_FX_SIZE = 40;
+const FEAR_ICON_GAP = 4;
 /** Lunge start: a small shake. The dragon holds for the dash, then fades for LUNGE_FADE_MS. */
 const LUNGE_SHAKE_MS = 120;
 const LUNGE_SHAKE_INTENSITY = 0.002;
@@ -308,7 +311,6 @@ const RIDER_SMOKE_FX_SIZE = 80;
 const RIDER_ALPHA = 0.95;
 /** Zhuge Liang's beam: channel circle over his body (its size), energy ball size, impact size, and the impact height over a victim's feet. */
 const BEAM_CHARGE_FX_SIZE = 80;
-const BEAM_BALL_FX_SIZE = 56;
 const BEAM_IMPACT_FX_SIZE = 70;
 const BEAM_HIT_LIFT = 20;
 const BEAM_FADE_MS = 150;
@@ -441,10 +443,9 @@ export class MatchScene extends Phaser.Scene {
   private poseAnim: SpriteAnim[] = [];
   private fx: FxInstance[] = [];
   private riderViews = new Map<number, RiderView>();
-  /** Zhuge Liang's energy ball in flight (hidden otherwise). */
-  private beamBall: Phaser.GameObjects.Sprite | null = null;
-  /** The ball's special kind before this tick's step, so a goal in this tick can tell a beam scored. */
-  private specialBeforeStep: SpecialKind | null = null;
+  /** Zhang Liao's fear: the caster of each player feared by him, and the feared players whose chains are on (see updateFearFx). */
+  private fearCaster = new Map<number, number>();
+  private fearShown = new Set<number>();
 
   private homeText!: Phaser.GameObjects.Text;
   private awayText!: Phaser.GameObjects.Text;
@@ -552,6 +553,8 @@ export class MatchScene extends Phaser.Scene {
     this.poseUntil = [];
     this.poseAnim = [];
     this.fx = [];
+    this.fearCaster.clear();
+    this.fearShown.clear();
     this.scorers = [];
     this.resultQueued = false;
     this.prevHumanL = false;
@@ -576,15 +579,6 @@ export class MatchScene extends Phaser.Scene {
       .setScale(BALL_DISPLAY_D / BALL_SHEET.frameWidth);
     this.ballSpinX = this.state.ball.x;
     this.ballSpinY = this.state.ball.y;
-    const beamFx = this.beamFx();
-    if (beamFx) {
-      this.beamBall = this.add
-        .sprite(0, 0, beamFx.key)
-        .setName('beam-ball')
-        .setBlendMode(Phaser.BlendModes.ADD)
-        .setDisplaySize(BEAM_BALL_FX_SIZE, (BEAM_BALL_FX_SIZE * beamFx.frameHeight) / beamFx.frameWidth)
-        .setVisible(false);
-    }
     this.createHud();
     if (this.preview) this.createPreviewHud();
     this.layoutHud(this.view);
@@ -636,7 +630,6 @@ export class MatchScene extends Phaser.Scene {
       pressedL && this.state.match.phase === 'play'
         ? specialBlockReason(this.state, this.state.players[this.humanIdx])
         : null;
-    this.specialBeforeStep = this.state.ball.special?.kind ?? null;
     step(this.state, inputs);
     const special = this.state.events.some((e) => e.type === 'special' && e.playerIdx === this.humanIdx);
     if (blocked !== null && !special) this.showHint(blocked);
@@ -712,7 +705,6 @@ export class MatchScene extends Phaser.Scene {
         this.showBanner(`進球！ ${scorerName}`, 2000);
         this.stadium.cheer(this.time.now);
         if (this.preview) this.time.delayedCall(PREVIEW_GOAL_END_MS, () => this.endPreview());
-        if (this.specialBeforeStep === 'beam') this.impactFx(this.state.ball.x, this.state.ball.y, this.state.ball.z);
       } else if (e.type === 'special') {
         this.showSpecial(`${e.name}！`, SPECIAL_COLORS[e.kind]);
         // A lunge shows its dash pose for the whole dash, and a beam its channel pose (spriteAnimFor), not the activation pose.
@@ -731,13 +723,16 @@ export class MatchScene extends Phaser.Scene {
         this.beamChargeFx(e.playerIdx);
       } else if (e.type === 'beamCancel') {
         this.beamCancelFx(e.playerIdx);
-      } else if (e.type === 'beamFire') {
+      } else if (e.type === 'beamStrike') {
+        const victim = players[e.victimIdx];
         this.cameras.main.shake(BEAM_SHAKE_MS, BEAM_SHAKE_INTENSITY);
-      } else if (e.type === 'beamHit') {
-        this.impactFx(e.x, e.y, BEAM_HIT_LIFT);
+        this.impactFx(victim.x, victim.y, BEAM_HIT_LIFT);
       } else if (e.type === 'roar') {
         this.cameras.main.shake(ROAR_SHAKE_MS, ROAR_SHAKE_INTENSITY);
         this.roarFx(e.playerIdx);
+      } else if (e.type === 'fear') {
+        for (const v of e.victimIdxs) this.fearCaster.set(v, e.playerIdx);
+        this.fearCastFx(e.playerIdx);
       } else if (e.type === 'attack') {
         if (e.kind === 'punch') this.punchFx(e.playerIdx);
       } else if (e.type === 'lungeStart') {
@@ -846,6 +841,7 @@ export class MatchScene extends Phaser.Scene {
     this.state.players.forEach((p, i) => this.drawPlayer(this.playerViews[i], p, time));
     this.drawRiders();
     this.drawBall();
+    this.updateFearFx();
     this.drawFx();
     this.drawHud();
     this.drawMinimap();
@@ -890,6 +886,7 @@ export class MatchScene extends Phaser.Scene {
       offY: s.offY ?? 0,
       castOf: s.castOf ?? null,
       rampageOf: s.rampageOf ?? null,
+      fearOf: s.fearOf ?? null,
       alpha: s.alpha ?? 1,
       mirror: s.mirror ?? false,
       depthOff: s.depthOff ?? 0.5,
@@ -1045,34 +1042,6 @@ export class MatchScene extends Phaser.Scene {
     });
   }
 
-  /** The beam's energy ball: looping frames on the ball, turned to its flight direction. Hidden for other specials. */
-  private drawBeamBall(): void {
-    const sprite = this.beamBall;
-    const { ball } = this.state;
-    const special = ball.special;
-    const fx = this.beamFx();
-    if (!sprite || !fx || special?.kind !== 'beam') {
-      sprite?.setVisible(false);
-      return;
-    }
-    const from = worldToScreen(ball.x, ball.y, ball.z);
-    // Screen direction of the flight, as the lunge dragon: a leftward shot is mirrored and turned from the reversed direction.
-    const to = worldToScreen(ball.x + special.dirX * 100, ball.y + special.dirY * 100, ball.z);
-    const len = Math.hypot(to.sx - from.sx, to.sy - from.sy) || 1;
-    const ux = (to.sx - from.sx) / len;
-    const uy = (to.sy - from.sy) / len;
-    const flip = special.dirX < 0;
-    const angle = flip ? Math.atan2(-uy, -ux) : Math.atan2(uy, ux);
-    const key = fxAnimKey(fx, 'ball');
-    if (sprite.anims.currentAnim?.key !== key) sprite.play(key);
-    sprite
-      .setVisible(true)
-      .setPosition(from.sx, from.sy - BALL_LIFT)
-      .setDepth(ball.y + 0.6)
-      .setFlipX(flip)
-      .setRotation(angle);
-  }
-
   /** Zhao Yun's lunge: the dragon along the dash, following him for the lunge's length, and a burst where he starts. */
   private lungeFx(e: Extract<SimEvent, { type: 'lungeStart' }>): void {
     this.burstFx(e.playerIdx, e.x, e.y);
@@ -1177,6 +1146,88 @@ export class MatchScene extends Phaser.Scene {
       f.holdMs = now - f.startMs;
       f.endMs = f.holdMs + FX_FADE_MS;
     }
+  }
+
+  /** Zhang Liao's fear cast: the ghost burst over him, not following him. */
+  private fearCastFx(idx: number): void {
+    const owner = this.fxOwner(idx);
+    if (!owner) return;
+    const p = this.state.players[idx];
+    const feet = worldToScreen(p.x, p.y, 0);
+    this.playFx(owner.fx, 'ghost', {
+      x: feet.sx,
+      y: feet.sy - owner.cfg.displayHeight / 2,
+      w: FEAR_GHOST_FX_SIZE,
+      h: (FEAR_GHOST_FX_SIZE * owner.fx.frameHeight) / owner.fx.frameWidth,
+      depth: p.y + 0.5,
+    });
+  }
+
+  /**
+   * Each feared player gets the chains ring under his feet (behind him) and the '!' icon over his head, both following him
+   * for the whole fear. When the fear ends (timer or knock-down) they fade, and the chains shatter once at his feet.
+   */
+  private updateFearFx(): void {
+    for (const p of this.state.players) {
+      const feared = p.action === 'fear';
+      const shown = this.fearShown.has(p.idx);
+      if (feared && !shown) this.fearStartFx(p.idx);
+      else if (!feared && shown) this.fearEndFx(p.idx);
+    }
+  }
+
+  /** The chains and the '!' icon on a feared player, drawn with Zhang Liao's sheet. Nothing when he has no caster or no sheet. */
+  private fearStartFx(idx: number): void {
+    const caster = this.fearCaster.get(idx);
+    const owner = caster === undefined ? null : this.fxOwner(caster);
+    if (!owner) return;
+    const p = this.state.players[idx];
+    const feet = worldToScreen(p.x, p.y, 0);
+    const forever = Number.POSITIVE_INFINITY;
+    const top = this.playerViews[idx].spriteCfg?.displayHeight ?? 40;
+    const iconOffY = -(top + FEAR_ICON_GAP + FEAR_ICON_FX_SIZE / 2);
+    this.playFx(owner.fx, 'chains', {
+      x: feet.sx,
+      y: feet.sy,
+      w: FEAR_CHAIN_FX_SIZE,
+      h: (FEAR_CHAIN_FX_SIZE * owner.fx.frameHeight) / owner.fx.frameWidth,
+      depth: p.y - 0.5,
+      follow: idx,
+      depthOff: -0.5,
+      holdMs: forever,
+      endMs: forever,
+      fearOf: idx,
+    });
+    this.playFx(owner.fx, 'alarm', {
+      x: feet.sx,
+      y: feet.sy + iconOffY,
+      w: FEAR_ICON_FX_SIZE,
+      h: (FEAR_ICON_FX_SIZE * owner.fx.frameHeight) / owner.fx.frameWidth,
+      depth: p.y + 0.6,
+      follow: idx,
+      offY: iconOffY,
+      depthOff: 0.6,
+      holdMs: forever,
+      endMs: forever,
+      fearOf: idx,
+    });
+    this.fearShown.add(idx);
+  }
+
+  /** A feared player's fear ends: his chains and icon fade from now, and the chains shatter once at his feet. */
+  private fearEndFx(idx: number): void {
+    const now = this.time.now;
+    for (const f of this.fx) {
+      if (f.fearOf !== idx) continue;
+      f.holdMs = now - f.startMs;
+      f.endMs = f.holdMs + FX_FADE_MS;
+    }
+    this.fearShown.delete(idx);
+    const caster = this.fearCaster.get(idx);
+    this.fearCaster.delete(idx);
+    if (caster === undefined) return;
+    const p = this.state.players[idx];
+    this.groundFx(caster, 'shatter', p.x, p.y, FEAR_CHAIN_FX_SIZE);
   }
 
   /** True while a rampage's own aura effect plays for this player (it replaces the drawn ring). */
@@ -1414,6 +1465,8 @@ export class MatchScene extends Phaser.Scene {
       case 'punch':
       case 'tackle':
         return 'attack';
+      case 'fear':
+        return 'hitstun';
       case 'hitstun':
       case 'down':
       case 'dive':
@@ -1620,7 +1673,6 @@ export class MatchScene extends Phaser.Scene {
     const pos = worldToScreen(ball.x, ball.y, ball.z);
     this.spinBall(ball.x, ball.y);
     this.ballSprite.setPosition(pos.sx, pos.sy - BALL_LIFT).setFrame(this.ballSpinFrame).setDepth(ball.y + 0.5);
-    this.drawBeamBall();
   }
 
   /** Advances the ball's rotation frame by the ground distance it rolled since the last draw. Reversed when moving left. */

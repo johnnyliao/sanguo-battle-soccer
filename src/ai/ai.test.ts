@@ -13,7 +13,7 @@ import {
   type GameState,
   type InputFrame,
 } from '../sim';
-import { computeAIInputs, createAIState } from './ai';
+import { computeAIInputs, createAIState, type AIState } from './ai';
 
 const NO_HUMANS = Array.from({ length: 10 }, () => false);
 const FULL_MATCH_TIMEOUT_MS = 60_000;
@@ -145,6 +145,179 @@ describe('AI full match', () => {
     console.log(`[AI match seed 11] wall time ${ms.toFixed(0)} ms`);
     expect(ms).toBeLessThan(5000);
   }, FULL_MATCH_TIMEOUT_MS);
+});
+
+/** Players in a row far from the action, ball loose at midfield. Shu is idx 0-4, wei is idx 5-9. */
+function specialState(seed: number): GameState {
+  const state = createInitialState({ seed, teams: [getTeam('shu'), getTeam('wei')], startInPlay: true }, SIZE_PARAMS);
+  state.players.forEach((p, i) => {
+    p.x = 100;
+    p.y = 20 + i * 24;
+  });
+  state.ball.ownerIdx = -1;
+  state.ball.x = 600;
+  state.ball.y = FIELD_D / 2;
+  return state;
+}
+
+function place(state: GameState, idx: number, x: number, y: number, facingX = 1): void {
+  const p = state.players[idx];
+  p.x = x;
+  p.y = y;
+  p.facingX = facingX;
+  p.facingY = 0;
+}
+
+/** Gives the ball to player idx, at his feet. */
+function carry(state: GameState, idx: number): void {
+  const p = state.players[idx];
+  state.ball.x = p.x + p.radius + DRIBBLE_OFFSET;
+  state.ball.y = p.y;
+  state.ball.ownerIdx = idx;
+  state.ball.lastTouchIdx = idx;
+}
+
+/**
+ * Drives only player idx with the AI for `ticks` ticks; the other nine stand still. With `pin`, the player is put back
+ * on its start spot and facing before every tick, so a condition that holds at the start keeps holding.
+ */
+function driveOne(
+  state: GameState,
+  ai: AIState,
+  idx: number,
+  ticks: number,
+  pin: boolean,
+): { pressedL: boolean; pressedJ: boolean } {
+  const p = state.players[idx];
+  const { x, y, facingX, facingY } = p;
+  const seen = { pressedL: false, pressedJ: false };
+  for (let t = 0; t < ticks; t++) {
+    if (pin) Object.assign(p, { x, y, facingX, facingY });
+    const frames = computeAIInputs(state, ai, NO_HUMANS).map((f, i) => (i === idx ? f : { ...EMPTY_INPUT }));
+    seen.pressedL = seen.pressedL || frames[idx].l;
+    seen.pressedJ = seen.pressedJ || frames[idx].j;
+    step(state, frames);
+  }
+  return seen;
+}
+
+describe('AI specials (no-ball and owner rules)', () => {
+  const TICKS = 400;
+
+  it('Zhang Liao casts fear as the owner when an opponent is within 80 px, and not when none is near and he is far from goal', () => {
+    const near = specialState(21);
+    place(near, 9, 900, FIELD_D / 2);
+    place(near, 0, 860, FIELD_D / 2);
+    carry(near, 9);
+    expect(driveOne(near, createAIState(21), 9, TICKS, true).pressedL).toBe(true);
+
+    const far = specialState(21);
+    place(far, 9, 900, FIELD_D / 2);
+    carry(far, 9);
+    expect(driveOne(far, createAIState(21), 9, TICKS, true).pressedL).toBe(false);
+  });
+
+  it('Zhang Liao casts fear off the ball when an opponent carries it, at any distance', () => {
+    const state = specialState(22);
+    place(state, 9, 900, FIELD_D / 2);
+    place(state, 2, 300, FIELD_D / 2);
+    carry(state, 2);
+    expect(driveOne(state, createAIState(22), 9, TICKS, true).pressedL).toBe(true);
+  });
+
+  it('Zhang Liao casts fear off the ball with three opponents near our goal, but not with two and no carrier', () => {
+    const goalX = ownGoalX(specialState(23), 1);
+    const inward = goalX === 0 ? 1 : -1;
+
+    const two = specialState(23);
+    place(two, 9, 900, FIELD_D / 2);
+    place(two, 0, goalX + inward * 100, FIELD_D / 2);
+    place(two, 1, goalX + inward * 100, FIELD_D / 2 + 40);
+    expect(driveOne(two, createAIState(23), 9, TICKS, true).pressedL).toBe(false);
+
+    const three = specialState(23);
+    place(three, 9, 900, FIELD_D / 2);
+    place(three, 0, goalX + inward * 100, FIELD_D / 2);
+    place(three, 1, goalX + inward * 100, FIELD_D / 2 + 40);
+    place(three, 2, goalX + inward * 100, FIELD_D / 2 - 40);
+    expect(driveOne(three, createAIState(23), 9, TICKS, true).pressedL).toBe(true);
+  });
+
+  it('Zhuge Liang casts the beam off the ball when an opponent carries it in our defensive half, and not in their half', () => {
+    const own = specialState(24);
+    place(own, 2, 500, FIELD_D / 2);
+    place(own, 7, 300, FIELD_D / 2);
+    carry(own, 7);
+    expect(driveOne(own, createAIState(24), 2, TICKS, true).pressedL).toBe(true);
+
+    const theirs = specialState(24);
+    place(theirs, 2, 500, FIELD_D / 2);
+    place(theirs, 7, 900, FIELD_D / 2);
+    carry(theirs, 7);
+    expect(driveOne(theirs, createAIState(24), 2, TICKS, true).pressedL).toBe(false);
+  });
+
+  it('Guan Yu casts the rampage off the ball when an opponent carrier is within 160 px, and not at 300 px', () => {
+    const close = specialState(25);
+    place(close, 1, 500, FIELD_D / 2);
+    place(close, 7, 600, FIELD_D / 2);
+    carry(close, 7);
+    expect(driveOne(close, createAIState(25), 1, TICKS, true).pressedL).toBe(true);
+
+    const far = specialState(25);
+    place(far, 1, 500, FIELD_D / 2);
+    place(far, 7, 800, FIELD_D / 2);
+    carry(far, 7);
+    expect(driveOne(far, createAIState(25), 1, TICKS, true).pressedL).toBe(false);
+  });
+
+  it('a rampaging Guan Yu without the ball steers at the ball and never presses J', () => {
+    const state = specialState(26);
+    place(state, 1, 300, FIELD_D / 2);
+    state.players[1].rampageTicks = RAMPAGE_TICKS;
+    const before = Math.abs(state.ball.x - state.players[1].x);
+
+    const seen = driveOne(state, createAIState(26), 1, 20, false);
+
+    expect(seen.pressedJ).toBe(false);
+    expect(Math.abs(state.ball.x - state.players[1].x)).toBeLessThan(before);
+  });
+
+  it('Zhao Yun lunges off the ball at a carrier in front of him, and not when facing away or beyond 190 px', () => {
+    const inFront = specialState(27);
+    place(inFront, 4, 500, FIELD_D / 2, 1);
+    place(inFront, 7, 600, FIELD_D / 2);
+    carry(inFront, 7);
+    expect(driveOne(inFront, createAIState(27), 4, TICKS, true).pressedL).toBe(true);
+
+    const behind = specialState(27);
+    place(behind, 4, 500, FIELD_D / 2, -1);
+    place(behind, 7, 600, FIELD_D / 2);
+    carry(behind, 7);
+    expect(driveOne(behind, createAIState(27), 4, TICKS, true).pressedL).toBe(false);
+
+    const beyond = specialState(27);
+    place(beyond, 4, 500, FIELD_D / 2, 1);
+    place(beyond, 7, 800, FIELD_D / 2);
+    carry(beyond, 7);
+    expect(driveOne(beyond, createAIState(27), 4, TICKS, true).pressedL).toBe(false);
+  });
+
+  it('Ma Chao summons off the ball when two opponents are within 200 px, and not with only one', () => {
+    const two = specialState(28);
+    place(two, 3, 500, FIELD_D / 2);
+    place(two, 7, 600, FIELD_D / 2);
+    place(two, 8, 550, FIELD_D / 2 + 30);
+    carry(two, 7);
+    expect(driveOne(two, createAIState(28), 3, TICKS, true).pressedL).toBe(true);
+
+    const one = specialState(28);
+    place(one, 3, 500, FIELD_D / 2);
+    place(one, 7, 600, FIELD_D / 2);
+    place(one, 8, 1000, FIELD_D / 2);
+    carry(one, 7);
+    expect(driveOne(one, createAIState(28), 3, TICKS, true).pressedL).toBe(false);
+  });
 });
 
 describe('AI behaviour', () => {

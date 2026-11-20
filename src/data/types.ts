@@ -20,8 +20,14 @@ export interface CharacterDef {
   role: Role;
   size: BodySize;
   stats: Stats;
-  /** 'rampage' (L with the ball: invincible run), 'roar' (L with or without the ball: shockwave), 'lunge' (L with the ball: invincible long dash), 'beam' (L with the ball in the attacking half: channel, then a flat energy ball at goal), or 'summon' (L with the ball: five cavalry riders for 3 s). */
-  special: { name: string; kind: SpecialKind; mode?: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' };
+  /** 'rampage' (invincible run), 'roar' (shockwave), 'lunge' (invincible long dash), 'beam' (channel, then strikes one random opponent), 'summon' (five cavalry riders for 3 s), or 'fear' (instant: opponents stand still for 3 s). `noBall`: the special can be cast without the ball. `bumpPct`: share of the victim's maxStamina a contact hit of this special removes (default 8 flat). */
+  special: {
+    name: string;
+    kind: SpecialKind;
+    mode?: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear';
+    noBall?: boolean;
+    bumpPct?: number;
+  };
 }
 
 export interface SizeParams {

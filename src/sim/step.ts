@@ -269,7 +269,6 @@ function advanceSpecial(state: GameState): boolean {
  * Opponents of the shooter that the special ball passes over are hit once each (idx order).
  * A defending goalkeeper in its own area first gets one save roll per special, when the ball is in its pickup reach.
  * Returns true if the special ended on a save (the keeper now owns the ball).
- * A beam has no save roll and ignores height: every standing, non-invincible opponent it passes is knocked down.
  */
 function resolveSpecialContacts(state: GameState, sp: SpecialShot): boolean {
   const b = state.ball;
@@ -278,15 +277,6 @@ function resolveSpecialContacts(state: GameState, sp: SpecialShot): boolean {
     const dx = b.x - p.x;
     const dy = b.y - p.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
-
-    if (sp.kind === 'beam') {
-      if (sp.hit.includes(p.idx) || isInvincible(p)) continue;
-      if (dist >= p.radius + BALL_RADIUS + SPECIAL_CONTACT_PAD) continue;
-      sp.hit.push(p.idx);
-      applySpecialHit(state, state.players[sp.shooterIdx], p, sp.kind, sp.dirX, sp.dirY);
-      state.events.push({ type: 'beamHit', playerIdx: p.idx, x: p.x, y: p.y });
-      continue;
-    }
 
     if (p.role === 'GK' && inOwnArea(state, p) && !sp.rolled.includes(p.idx)) {
       const reach = pickupReach(state, p);

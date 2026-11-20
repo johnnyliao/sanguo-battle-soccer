@@ -13,7 +13,8 @@ export type SpriteAnim = 'idle' | 'run' | 'attack' | 'charge' | 'special' | 'cas
  * Effects played over the character (see MatchScene): a spear thrust or fan slash, the lunge's dragon, an impact burst,
  * for Zhuge Liang's beam the channel circle, the energy ball and the impact, for Ma Chao's summon the call and the
  * smoke a rider leaves when it vanishes, for Guan Yu's rampage the aura and exhaust, his special ball's fire dragon,
- * and for Zhang Fei's roar the charge and the soundwave.
+ * and for Zhang Fei's roar the charge and the soundwave, for Zhang Liao's fear the ghost burst over him, the chains ring and
+ * the '!' icon over each feared player, and the chains' shatter when the fear ends.
  */
 export type FxAnim =
   | 'thrust'
@@ -28,7 +29,11 @@ export type FxAnim =
   | 'aura'
   | 'exhaust'
   | 'dragon'
-  | 'wave';
+  | 'wave'
+  | 'ghost'
+  | 'chains'
+  | 'alarm'
+  | 'shatter';
 
 export interface SpriteMeta {
   frameWidth: number;
@@ -94,6 +99,7 @@ const ZHAOYUN_META: SpriteMeta = { frameWidth: 211, frameHeight: 204, cols: 4, r
 const ZHUGELIANG_META: SpriteMeta = { frameWidth: 211, frameHeight: 197, cols: 4, rows: 5, anchorX: 98, anchorY: 188 };
 const MACHAO_META: SpriteMeta = { frameWidth: 211, frameHeight: 195, cols: 4, rows: 5, anchorX: 91, anchorY: 191 };
 const MACHAO_CAVALRY_META: SpriteMeta = { frameWidth: 280, frameHeight: 206, cols: 4, rows: 2, anchorX: 145, anchorY: 156 };
+const ZHANGLIAO_META: SpriteMeta = { frameWidth: 421, frameHeight: 272, cols: 4, rows: 5, anchorX: 272, anchorY: 265 };
 
 /** Frame index of a sheet cell (row-major) for a sheet with this meta. */
 const cellAt = (meta: SpriteMeta) => (row: number, col: number): number => row * meta.cols + col;
@@ -103,6 +109,7 @@ const yat = cellAt(ZHAOYUN_META);
 const gat = cellAt(ZHUGELIANG_META);
 const mat = cellAt(MACHAO_META);
 const cat = cellAt(MACHAO_CAVALRY_META);
+const lat = cellAt(ZHANGLIAO_META);
 /** The Zhao Yun and Zhuge Liang effect sheets are 4 columns of 181 px frames. */
 const fxat = (row: number, col: number): number => row * 4 + col;
 
@@ -293,6 +300,43 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
         summon: { frames: [fxat(1, 0), fxat(1, 1), fxat(1, 2), fxat(1, 3)], fps: 10, repeat: 0 },
         burst: { frames: [fxat(2, 0), fxat(2, 1), fxat(2, 2), fxat(2, 3)], fps: 12, repeat: 0 },
         smoke: { frames: [fxat(3, 0), fxat(3, 1), fxat(3, 2), fxat(3, 3)], fps: 12, repeat: 0 },
+      },
+    },
+  },
+  zhangliao: {
+    key: 'sprite-zhangliao',
+    url: 'sprites/zhangliao.png',
+    meta: ZHANGLIAO_META,
+    displayHeight: 60,
+    shadowScale: 1.1,
+    anims: {
+      idle: { frames: [lat(0, 0), lat(0, 1), lat(0, 2), lat(0, 3)], fps: 6, repeat: -1 },
+      run: { frames: [lat(1, 0), lat(1, 1), lat(1, 2), lat(1, 3)], fps: 10, repeat: -1 },
+      attack: { frames: [lat(2, 0), lat(2, 1), lat(2, 2), lat(2, 3)], fps: 14, repeat: 0 },
+      charge: { frames: [lat(2, 0)], fps: 1, repeat: -1 },
+      cast: { frames: [lat(3, 2)], fps: 1, repeat: -1 },
+      special: { frames: [lat(3, 0), lat(3, 1), lat(3, 2), lat(3, 3)], fps: 8, repeat: 0 },
+      rampage: { frames: [lat(3, 2), lat(3, 3)], fps: 8, repeat: -1 },
+      lunge: { frames: [lat(3, 2), lat(3, 3)], fps: 8, repeat: -1 },
+      shot: { frames: [lat(2, 3)], fps: 1, repeat: -1 },
+      dive: { frames: [lat(4, 1)], fps: 1, repeat: -1 },
+      hitstun: { frames: [lat(4, 0)], fps: 1, repeat: -1 },
+      down: { frames: [lat(4, 1), lat(4, 2)], fps: 6, repeat: 0 },
+      recover: { frames: [lat(4, 3)], fps: 1, repeat: -1 },
+    },
+    fx: {
+      key: 'fx-zhangliao',
+      url: 'sprites/zhangliao-fx.png',
+      frameWidth: 180,
+      frameHeight: 180,
+      punch: 'slash',
+      punchWidth: 90,
+      anims: {
+        slash: { frames: [fxat(0, 0), fxat(0, 1), fxat(0, 2), fxat(0, 3)], fps: 20, repeat: 0 },
+        ghost: { frames: [fxat(1, 0), fxat(1, 1), fxat(1, 2), fxat(1, 3)], fps: 12, repeat: 0 },
+        chains: { frames: [fxat(2, 0), fxat(2, 1), fxat(2, 2), fxat(2, 3)], fps: 10, repeat: -1 },
+        alarm: { frames: [fxat(3, 0), fxat(3, 1), fxat(3, 2), fxat(3, 3)], fps: 10, repeat: -1 },
+        shatter: { frames: [fxat(4, 0), fxat(4, 1), fxat(4, 2), fxat(4, 3)], fps: 14, repeat: 0 },
       },
     },
   },

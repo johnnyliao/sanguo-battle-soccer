@@ -1,5 +1,6 @@
 // Skill preview check: team select (phone touch) -> 預覽 on each character -> the special fires -> back to team select.
-// Covers 關羽 / 張飛 / 趙雲 / 諸葛亮 / 馬超 (shu roster) and 張遼 (wei roster). Screenshots go to the scratchpad preview dir.
+// Covers 關羽 / 張飛 / 趙雲 / 諸葛亮 / 馬超 (shu roster) and 張遼 (wei roster). Screenshots go to the scratchpad preview dir;
+// the fear shot (fear-zhangliao.png) is taken during Zhang Liao's fear, with the victims feared.
 // Usage: node e2e/preview.mjs <url>
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
@@ -13,7 +14,7 @@ if (!base) {
   console.error('usage: node e2e/preview.mjs <url>');
   process.exit(2);
 }
-const outDir = '/tmp/claude-1000/-home-safe3admin/481f0680-3ee3-4058-9195-12539132c87d/scratchpad/preview';
+const outDir = '/tmp/claude-1000/-home-safe3admin/0b7bc786-6b15-4a7f-930c-d14bce7049d1/scratchpad/preview';
 mkdirSync(outDir, { recursive: true });
 const shot = (name) => resolve(outDir, name);
 
@@ -21,10 +22,10 @@ const shot = (name) => resolve(outDir, name);
 const CASES = [
   { id: 'zhangfei', name: '張飛', slot: 0, effect: 'roar' },
   { id: 'guanyu', name: '關羽', slot: 1, effect: 'specialShot' },
-  { id: 'zhugeliang', name: '諸葛亮', slot: 2, effect: 'beamFire' },
+  { id: 'zhugeliang', name: '諸葛亮', slot: 2, effect: 'beamStrike' },
   { id: 'machao', name: '馬超', slot: 3, effect: 'riderSpawn' },
   { id: 'zhaoyun', name: '趙雲', slot: 4, effect: 'lungeStart' },
-  { id: 'zhangliao', name: '張遼', slot: 4, effect: 'specialShot', wei: true },
+  { id: 'zhangliao', name: '張遼', slot: 4, effect: 'fear', wei: true },
 ];
 
 const errors = [];
@@ -167,6 +168,14 @@ try {
     await page.screenshot({ path: shot(`preview-${c.id}.png`) });
     const events = await page.evaluate(() => window.__sg.preview().events);
     report(`${name} special fires (${c.effect})`, fired, `events ${[...new Set(events)].join(',')}`);
+
+    if (c.effect === 'fear') {
+      // Mid-fear (3 s): the victims are feared, and their chains and '!' follow them.
+      await page.waitForTimeout(1000);
+      const feared = await page.evaluate(() => window.__sg.state().players.filter((p) => p.action === 'fear').length);
+      await page.screenshot({ path: shot('fear-zhangliao.png') });
+      report(`${name} victims are feared during the fear`, feared > 0, `feared ${feared}`);
+    }
 
     // Back to team select on its own (about 4.5 s after the L press, or after a goal), on the same row.
     const back = await waitScene(page, 'TeamSelectScene', 12000);

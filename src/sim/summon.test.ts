@@ -335,3 +335,47 @@ function minRiderGap(state: GameState): number {
   }
   return best;
 }
+
+describe('Ma Chao summon without the ball (no-ball special)', () => {
+  it('a no-ball summoner calls the riders without the ball, and the ball stays loose', () => {
+    const state = summonerState();
+    state.players[MACHAO_IDX].specialNoBall = true;
+    state.ball.ownerIdx = -1;
+    state.ball.lastTouchIdx = -1;
+    state.ball.x = 900;
+    state.ball.y = FIELD_D / 2;
+
+    step(state, inputFor(MACHAO_IDX, { l: true }));
+
+    expect(state.riders).toHaveLength(SUMMON_RIDERS);
+    expect(state.ball.ownerIdx).toBe(-1);
+  });
+
+  it('a rider hit takes 10% of the victim max stamina when the summoner has specialBumpPct 0.1', () => {
+    const state = summonerState();
+    const p = state.players[MACHAO_IDX];
+    p.specialNoBall = true;
+    p.specialBumpPct = 0.1;
+    state.ball.ownerIdx = -1;
+    state.ball.lastTouchIdx = -1;
+    state.ball.x = 900;
+    state.ball.y = 30;
+    const victim = state.players[5];
+    victim.x = p.x + 150;
+    victim.y = p.y;
+
+    const events = [...run1(state)];
+    events.push(...runIdle(state, 180));
+
+    const hit = events.find((e) => e.type === 'hit' && e.victimIdx === 5);
+    if (hit?.type !== 'hit') throw new Error('no rider hit');
+    expect(hit.attackerIdx).toBe(MACHAO_IDX);
+    expect(hit.damage).toBeCloseTo(0.1 * victim.maxStamina, 9);
+  });
+});
+
+/** Presses L once for Ma Chao. Returns the events of that tick. */
+function run1(state: GameState): SimEvent[] {
+  step(state, inputFor(MACHAO_IDX, { l: true }));
+  return [...state.events];
+}

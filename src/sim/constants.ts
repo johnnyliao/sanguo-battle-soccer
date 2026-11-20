@@ -76,10 +76,16 @@ export const LUNGE_TICKS = 15;
 export const LUNGE_DISTANCE = 200;
 /** Constant lunge speed in px per second (distance per tick, times TICK_HZ). */
 export const LUNGE_SPEED = (LUNGE_DISTANCE / LUNGE_TICKS) * TICK_HZ;
-/** Zhuge Liang's beam (破魔光彈): channel time with the ball at his feet before the energy ball fires (0.5 s). */
+/** Zhuge Liang's beam (破魔光彈): channel time before the beam strikes one random opponent (0.5 s). */
 export const BEAM_CAST_TICKS = 30;
-/** Speed of the beam energy ball in px per second. The beam flies straight at the centre of the goal mouth. */
+/** Share of the beam victim's maxStamina that the beam takes. */
+export const BEAM_STRIKE_STAMINA_RATIO = 0.3;
+/** Speed of a special shot's ball of kind 'beam' in px per second (no shot of that kind is fired any more). */
 export const BEAM_SPEED = 560;
+/** Zhang Liao's fear (遼來了): how long a feared opponent stands still and ignores input (3 s). */
+export const FEAR_TICKS = 180;
+/** Share of each feared opponent's maxStamina that the fear takes. */
+export const FEAR_STAMINA_RATIO = 0.1;
 /** Ticks before any special can be used again (12 s). */
 export const SPECIAL_COOLDOWN_TICKS = 720;
 /** An L press made during a busy action stays buffered this long (0.3 s) and fires once the player can act. */

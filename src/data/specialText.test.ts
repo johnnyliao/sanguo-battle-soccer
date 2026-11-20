@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { specialDescription } from './specialText';
 import type { CharacterDef } from './types';
 
-function def(kind: CharacterDef['special']['kind'], mode?: CharacterDef['special']['mode']): CharacterDef {
+function def(
+  kind: CharacterDef['special']['kind'],
+  mode?: CharacterDef['special']['mode'],
+  noBall = false,
+): CharacterDef {
   return {
     id: 'x',
     name: 'X',
@@ -10,7 +14,7 @@ function def(kind: CharacterDef['special']['kind'], mode?: CharacterDef['special
     role: 'FW',
     size: 'M',
     stats: { power: 5, speed: 5, stamina: 5, technique: 5, defense: 5 },
-    special: { name: 'S', kind, mode },
+    special: { name: 'S', kind, mode, noBall },
   };
 }
 
@@ -34,10 +38,16 @@ describe('specialDescription', () => {
     expect(d.effect).toContain('突進');
   });
 
-  it('beam needs the ball in the attacking half', () => {
-    const d = specialDescription(def('beam', 'beam'));
-    expect(d.condition).toBe('前半場持球');
-    expect(d.effect).toContain('光彈');
+  it('beam works with or without the ball when the character is no-ball', () => {
+    const d = specialDescription(def('beam', 'beam', true));
+    expect(d.condition).toBe('持球或不持球');
+    expect(d.effect).toContain('擊倒');
+  });
+
+  it('fear works with or without the ball and stops the opponents', () => {
+    const d = specialDescription(def('straight', 'fear', true));
+    expect(d.condition).toBe('持球或不持球');
+    expect(d.effect).toContain('無法行動');
   });
 
   it('summon needs the ball and calls cavalry', () => {
@@ -47,7 +57,7 @@ describe('specialDescription', () => {
   });
 
   it('keeps effect texts short enough for one team-select line', () => {
-    const modes = ['rampage', 'roar', 'lunge', 'beam', 'summon'] as const;
+    const modes = ['rampage', 'roar', 'lunge', 'beam', 'summon', 'fear'] as const;
     for (const mode of modes) {
       for (const kind of ['straight', 'zigzag', 'lob', 'pierce', 'beam'] as const) {
         expect(specialDescription(def(kind, mode)).effect.length).toBeLessThanOrEqual(20);

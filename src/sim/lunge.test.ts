@@ -281,3 +281,38 @@ describe('lunge into the goal', () => {
     expect(state.ball.ownerIdx).toBe(0);
   });
 });
+
+describe('lunge without the ball (no-ball special)', () => {
+  it('a no-ball lunger lunges without the ball and the ball stays loose', () => {
+    const state = lungerState(300);
+    state.players[0].specialNoBall = true;
+    state.ball.ownerIdx = -1;
+    state.ball.lastTouchIdx = -1;
+    state.ball.x = 1000;
+    state.ball.y = 30;
+
+    const events = pressSpecial(state);
+
+    expect(events).toContainEqual(expect.objectContaining({ type: 'lungeStart', playerIdx: 0 }));
+    expect(state.players[0].action).toBe('lunge');
+    expect(state.ball.ownerIdx).toBe(-1);
+  });
+
+  it('a no-ball lunger with zhaoyun bump share (20%) knocks away an opponent in the path for 20% of his max stamina', () => {
+    const state = lungerState(300);
+    state.players[0].specialNoBall = true;
+    state.players[0].specialBumpPct = 0.2;
+    state.ball.ownerIdx = -1;
+    state.ball.lastTouchIdx = -1;
+    state.ball.x = 1000;
+    state.ball.y = 30;
+    placeOpponentAt(state, 18);
+    const victim = state.players[5];
+
+    const events = pressSpecial(state);
+
+    const hit = events.find((e) => e.type === 'hit' && e.victimIdx === 5);
+    if (hit?.type !== 'hit') throw new Error('no bump');
+    expect(hit.damage).toBeCloseTo(0.2 * victim.maxStamina, 9);
+  });
+});

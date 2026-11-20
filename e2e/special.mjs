@@ -1,7 +1,7 @@
 // Special check. Guan Yu (shu DF, human=1) presses L with the ball and rampages at once (aura + fire sprite).
 // Zhang Fei (shu GK, human=0) presses L without the ball next to two opponents: the roar fires at once (shockwave, stun, HUD cooldown).
 // Quick taps: touch 大招 / 攻擊 with CDP touchStart + touchEnd back to back (no wait), so press and release fall between
-// two samples. Without the ball 大招 shows the 需持球 hint.
+// two samples. Shu specials need no ball, so Guan Yu rampages without it; a wu special without the ball shows the 需持球 hint.
 // Test-only state edits (ball owner, positions, stamina) go through window.__sg. Usage: node e2e/special.mjs <url>
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
@@ -31,12 +31,12 @@ function report(name, ok, detail = '') {
   console.log(`${name}: ${ok ? 'PASS' : 'FAIL'}${detail ? ` (${detail})` : ''}`);
 }
 
-function matchUrl(human) {
+function matchUrl(human, away = 'wei') {
   const url = new URL(base);
   url.searchParams.set('quick', '1');
   url.searchParams.set('ai', '0');
   url.searchParams.set('home', 'shu');
-  url.searchParams.set('away', 'wei');
+  url.searchParams.set('away', away);
   url.searchParams.set('human', String(human));
   return url.toString();
 }
@@ -105,12 +105,12 @@ const giveBall = (page, x, y) =>
   );
 
 /** Phone-sized touch context on a match (Guan Yu, human=1). Returns the page and its CDP session. */
-async function openTouchMatch(browser, human) {
+async function openTouchMatch(browser, human, away = 'wei') {
   const context = await browser.newContext({ viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true });
   const page = await context.newPage();
   attachListeners(page);
   const cdp = await context.newCDPSession(page);
-  await page.goto(matchUrl(human), { waitUntil: 'load', timeout: 20000 });
+  await page.goto(matchUrl(human, away), { waitUntil: 'load', timeout: 20000 });
   await page.waitForFunction(() => Boolean(window.__sg), null, { timeout: 15000 });
   await page.waitForFunction(() => window.__sg.state().match.phase === 'play', null, { timeout: 20000 });
   return { context, page, cdp };
@@ -236,7 +236,7 @@ try {
   const qSpecial = await human(tp);
   report('quick tap on 大招 with the ball starts the rampage', qSpecial.rampageTicks > 0, `rampageTicks ${qSpecial.rampageTicks}`);
 
-  // b. 大招 quick tap without the ball shows the 需持球 hint; the dimmed button caption is shown too.
+  // b. 大招 quick tap without the ball: Guan Yu (shu, no ball needed) rampages at once, with no 需持球 hint.
   await resetRampage();
   await tp.evaluate(() => {
     const s = window.__sg.state();
@@ -255,21 +255,19 @@ try {
     s.ball.vz = 0;
   });
   await tp.waitForTimeout(200);
-  const dimCaption = await tp.evaluate(() => window.__sg.scene.touch.blockHint.visible);
   await quickTap(touch.cdp, await buttonPoint(tp, 128, 92));
-  await tp.waitForFunction(() => window.__sg.lastHint() === '需持球', null, { timeout: 2000 }).catch(() => {});
-  const hint = await tp.evaluate(() => ({
-    text: window.__sg.lastHint(),
-    visible: window.__sg.scene.hintText.visible,
+  await tp.waitForFunction(() => window.__sg.state().players[window.__sg.humanIdx].rampageTicks > 0, null, {
+    timeout: 3000,
+  }).catch(() => {});
+  const noBall = await tp.evaluate(() => ({
+    hint: window.__sg.lastHint(),
     rampageTicks: window.__sg.state().players[window.__sg.humanIdx].rampageTicks,
   }));
-  await tp.screenshot({ path: shot('hint.png') });
   report(
-    'quick tap on 大招 without the ball shows the 需持球 hint',
-    hint.text === '需持球' && hint.visible && hint.rampageTicks === 0,
-    `hint "${hint.text}", visible ${hint.visible}, rampageTicks ${hint.rampageTicks}`,
+    'quick tap on 大招 without the ball starts the shu rampage (no ball needed)',
+    noBall.rampageTicks > 0 && noBall.hint !== '需持球',
+    `rampageTicks ${noBall.rampageTicks}, hint "${noBall.hint}"`,
   );
-  report('dimmed 大招 shows the 需持球 caption without the ball', dimCaption, `caption visible ${dimCaption}`);
 
   // c. 攻擊 quick tap with the ball releases it (a shot or a clear, either way the ball leaves the human).
   await resetRampage();
@@ -283,6 +281,44 @@ try {
   });
   report('quick tap on 攻擊 with the ball releases it', released.owner !== released.human, `owner ${released.owner}, ball vx ${released.vx.toFixed(1)}`);
   await touch.context.close();
+
+  // d. Wu special (huanggai, GK, needs the ball) without the ball: 大招 quick tap shows the 需持球 hint; the dimmed caption too.
+  const wu = await openTouchMatch(browser, 5, 'wu');
+  const wp = wu.page;
+  await wp.evaluate(() => {
+    const s = window.__sg.state();
+    const h = s.players[window.__sg.humanIdx];
+    h.x = 300;
+    h.y = 130;
+    h.stamina = h.maxStamina;
+    h.specialCooldown = 0;
+    s.ball.ownerIdx = -1;
+    s.ball.lastTouchIdx = -1;
+    s.ball.special = null;
+    s.ball.x = 100;
+    s.ball.y = 70;
+    s.ball.z = 0;
+    s.ball.vx = 0;
+    s.ball.vy = 0;
+    s.ball.vz = 0;
+  });
+  await wp.waitForTimeout(200);
+  const wuDimCaption = await wp.evaluate(() => window.__sg.scene.touch.blockHint.visible);
+  await quickTap(wu.cdp, await buttonPoint(wp, 128, 92));
+  await wp.waitForFunction(() => window.__sg.lastHint() === '需持球', null, { timeout: 2000 }).catch(() => {});
+  const wuHint = await wp.evaluate(() => ({
+    text: window.__sg.lastHint(),
+    visible: window.__sg.scene.hintText.visible,
+    cooldown: window.__sg.state().players[window.__sg.humanIdx].specialCooldown,
+  }));
+  await wp.screenshot({ path: shot('hint.png') });
+  report(
+    'quick tap on 大招 without the ball (wu) shows the 需持球 hint',
+    wuHint.text === '需持球' && wuHint.visible && wuHint.cooldown === 0,
+    `hint "${wuHint.text}", visible ${wuHint.visible}, cooldown ${wuHint.cooldown}`,
+  );
+  report('dimmed 大招 shows the 需持球 caption without the ball (wu)', wuDimCaption, `caption visible ${wuDimCaption}`);
+  await wu.context.close();
 } catch (err) {
   console.log(`FAIL: ${err.message}`);
   failed = true;

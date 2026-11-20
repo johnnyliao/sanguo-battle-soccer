@@ -3,6 +3,7 @@ import {
   BALL_RADIUS,
   BEAM_CAST_TICKS,
   BEAM_SPEED,
+  BEAM_STRIKE_STAMINA_RATIO,
   CALL_PASS_TICKS,
   CHARGE_FULL,
   CHARGE_MOVE_MULT,
@@ -11,6 +12,8 @@ import {
   DOWN_TICKS_EXHAUSTED,
   DOWN_TICKS_KNOCKED,
   DT,
+  FEAR_STAMINA_RATIO,
+  FEAR_TICKS,
   FIELD_D,
   FIELD_W,
   GETUP_STAMINA_RATIO,
@@ -79,7 +82,7 @@ import {
   TACKLE_TICKS,
 } from './constants';
 import { attackDir, goalMouth, inOwnArea, opponentGoalX } from './field';
-import { rngNext } from './rng';
+import { rngInt, rngNext } from './rng';
 import {
   type AttackKind,
   type GameState,
@@ -130,7 +133,7 @@ export function updateAction(state: GameState, p: Player, input: InputFrame): vo
   applyGravity(p);
   tickRampage(state, p);
   tickSpecialCooldown(state, p);
-  if (input.l && !p.prevInput.l) p.specialBuffer = SPECIAL_BUFFER_TICKS;
+  if (input.l && !p.prevInput.l && p.action !== 'fear') p.specialBuffer = SPECIAL_BUFFER_TICKS;
   else if (p.specialBuffer > 0) p.specialBuffer--;
   switch (p.action) {
     case 'normal':
@@ -165,6 +168,9 @@ export function updateAction(state: GameState, p: Player, input: InputFrame): vo
       break;
     case 'cast':
       updateCast(state, p);
+      break;
+    case 'fear':
+      updateFear(p);
       break;
   }
 }
@@ -300,7 +306,8 @@ function updateNormal(state: GameState, p: Player, input: InputFrame): void {
     state.events.push({ type: 'callPass', playerIdx: p.idx });
   }
 
-  if (input.j && !p.prevInput.j && !ownsBall) {
+  // A rampage without the ball (a no-ball special) makes J do nothing: no punch, tackle or dive.
+  if (input.j && !p.prevInput.j && !ownsBall && !rampaging) {
     if (dashHeld) {
       startAttack(state, p, 'tackle', TACKLE_TICKS);
       p.vx = p.facingX * baseSpeed * TACKLE_SPEED_MULT;
@@ -431,8 +438,8 @@ function releaseCharge(state: GameState, p: Player, input: InputFrame): void {
 
 /**
  * Buffered L press: starts the special if a press is buffered, the match is in play, and it is ready (cooldown 0,
- * enough stamina). A rampage, lunge or beam needs the ball and starts at once (a beam also needs the attacking half); a
- * roar (Zhang Fei) works with or without it. A summon (Ma Chao) needs the ball too, and he keeps it.
+ * enough stamina). A roar (Zhang Fei) and a fear (Zhang Liao) are instant. Every other special needs the ball unless
+ * its character has specialNoBall; a rampage, lunge or beam starts at once, and a summon keeps the ball.
  * A special that cannot start yet keeps the buffer. Returns true if it started.
  */
 function trySpecial(state: GameState, p: Player, input: InputFrame): boolean {
@@ -443,8 +450,12 @@ function trySpecial(state: GameState, p: Player, input: InputFrame): boolean {
     castRoar(state, p);
     return true;
   }
-  if (state.ball.ownerIdx !== p.idx) return false;
-  if (p.specialMode === 'beam' && !inAttackingHalf(state, p)) return false;
+  if (p.specialMode === 'fear') {
+    p.specialBuffer = 0;
+    castFear(state, p);
+    return true;
+  }
+  if (!p.specialNoBall && state.ball.ownerIdx !== p.idx) return false;
   p.specialBuffer = 0;
   if (p.specialMode === 'lunge') startLunge(state, p, input);
   else if (p.specialMode === 'beam') startBeamCast(state, p);
@@ -453,12 +464,7 @@ function trySpecial(state: GameState, p: Player, input: InputFrame): boolean {
   return true;
 }
 
-/** True if the player is past the halfway line, on the side of the goal it attacks this half. */
-export function inAttackingHalf(state: GameState, p: Player): boolean {
-  return (p.x - FIELD_W / 2) * attackDir(state, p.team) > 0;
-}
-
-/** Special L with the ball: the player keeps the ball and rampages. The special ball flies on the next J press. */
+/** Special L: the player's rampage starts. With the ball he keeps it; the special ball flies on the next J press. */
 function startRampage(state: GameState, p: Player): void {
   p.stamina -= SPECIAL_STAMINA_COST;
   p.rampageTicks = RAMPAGE_TICKS;
@@ -550,8 +556,8 @@ function aimAtGoalCentre(state: GameState, team: 0 | 1, x: number, y: number): {
 }
 
 /**
- * Zhuge Liang's beam (破魔光彈): the player turns to the goal, stands still and channels for BEAM_CAST_TICKS with the ball
- * at his feet. The energy ball fires when the channel ends (see updateCast).
+ * Zhuge Liang's beam (破魔光彈): the player turns to the goal, stands still and channels for BEAM_CAST_TICKS. The beam
+ * strikes when the channel ends (see updateCast).
  */
 function startBeamCast(state: GameState, p: Player): void {
   const aim = aimAtGoalCentre(state, p.team, p.x, p.y);
@@ -569,8 +575,8 @@ function startBeamCast(state: GameState, p: Player): void {
 }
 
 /**
- * One beam channel tick: the player stands still, keeps the ball and ignores input. The channel ends in fireBeam when its
- * timer runs out. A hit interrupts it (see reportCastCancel), and it also ends back to normal if the phase leaves play.
+ * One beam channel tick: the player stands still and ignores input. The channel ends in beamStrike when its timer runs
+ * out. A hit interrupts it (see reportCastCancel), and it also ends back to normal if the phase leaves play.
  */
 function updateCast(state: GameState, p: Player): void {
   if (state.match.phase !== 'play') {
@@ -581,36 +587,48 @@ function updateCast(state: GameState, p: Player): void {
   p.vx = 0;
   p.vy = 0;
   p.actionTimer--;
-  if (p.actionTimer <= 0) fireBeam(state, p);
+  if (p.actionTimer <= 0) beamStrike(state, p);
 }
 
-/**
- * The channel is done: the ball leaves the player as a beam aimed at the centre of the goal mouth. Like other special shots
- * it flies unowned, and resolveSpecialContacts handles it.
- */
 /** A channel that is cut short (the caster is hit, or the phase leaves play) reports beamCancel. Call before the action changes. */
 function reportCastCancel(state: GameState, p: Player): void {
   if (p.action !== 'cast') return;
   state.events.push({ type: 'beamCancel', playerIdx: p.idx });
 }
 
-function fireBeam(state: GameState, p: Player): void {
-  const ball = state.ball;
-  const aim = aimAtGoalCentre(state, p.team, ball.x, ball.y);
-  releaseBall(state, p, aim.x * BEAM_SPEED, aim.y * BEAM_SPEED, 0);
-  ball.special = {
-    kind: 'beam',
-    shooterIdx: p.idx,
-    team: p.team,
-    ticks: 0,
-    dirX: aim.x,
-    dirY: aim.y,
-    speed: BEAM_SPEED,
-    hit: [],
-    rolled: [],
-  };
-  state.events.push({ type: 'specialShot', playerIdx: p.idx, kind: 'beam' });
-  state.events.push({ type: 'beamFire', playerIdx: p.idx, x: ball.x, y: ball.y, dirX: aim.x, dirY: aim.y });
+/**
+ * The channel is done: the beam strikes one random opponent that is standing (not down or recovering) and not invincible.
+ * With no such opponent nothing happens. The caster goes back to normal and keeps the ball.
+ */
+function beamStrike(state: GameState, p: Player): void {
+  toNormal(p);
+  const candidates = state.players.filter(
+    (v) => v.team !== p.team && v.action !== 'down' && v.action !== 'recover' && !isInvincible(v),
+  );
+  if (candidates.length === 0) return;
+  const victim = candidates[rngInt(state, candidates.length)];
+  state.events.push({ type: 'beamStrike', playerIdx: p.idx, victimIdx: victim.idx });
+  beamStrikeVictim(state, p, victim);
+}
+
+/** One beam victim: knocked away from the caster, down for DOWN_TICKS_KNOCKED, loses a share of stamina, drops the ball if holding it. */
+function beamStrikeVictim(state: GameState, p: Player, v: Player): void {
+  reportCastCancel(state, v);
+  const dist = distance(p.x, p.y, v.x, v.y);
+  const dirX = dist > 0 ? (v.x - p.x) / dist : p.facingX;
+  const dirY = dist > 0 ? (v.y - p.y) / dist : p.facingY;
+  const knock = (KNOCKBACK_SPEED * p.mass) / v.mass;
+  v.vx = dirX * knock;
+  v.vy = dirY * knock;
+  v.vz = HIT_VZ;
+  v.chargeTicks = 0;
+  const damage = BEAM_STRIKE_STAMINA_RATIO * v.maxStamina;
+  v.stamina = Math.max(0, v.stamina - damage);
+  setDown(v, DOWN_TICKS_KNOCKED);
+
+  state.events.push({ type: 'hit', attackerIdx: p.idx, victimIdx: v.idx, kind: 'special', damage });
+  state.events.push({ type: 'down', playerIdx: v.idx });
+  if (state.ball.ownerIdx === v.idx) knockLooseBall(state, p, v, dirX, dirY);
 }
 
 /**
@@ -799,6 +817,7 @@ function advanceRider(state: GameState, r: Rider): void {
 
 /**
  * A rider knocks an opponent down with the same special hit a pierce uses, knocked away along the rider's direction.
+ * The hit takes the summoner's bump share of the victim's maxStamina (SPECIAL_HIT_STAMINA when he has none).
  * A carrier loses the ball, credited to the summoner as the last touch.
  */
 function riderKnockDown(state: GameState, r: Rider, owner: Player, v: Player): void {
@@ -806,7 +825,8 @@ function riderKnockDown(state: GameState, r: Rider, owner: Player, v: Player): v
   const dirX = speed > 0 ? r.vx / speed : r.facingX;
   const dirY = speed > 0 ? r.vy / speed : 0;
   r.hit.push(v.idx);
-  applySpecialHit(state, owner, v, 'pierce', dirX, dirY);
+  const cost = owner.specialBumpPct !== null ? owner.specialBumpPct * v.maxStamina : SPECIAL_HIT_STAMINA;
+  applySpecialHit(state, owner, v, 'pierce', dirX, dirY, cost);
   if (state.ball.ownerIdx === v.idx) knockLooseBall(state, owner, v, dirX, dirY);
   state.events.push({ type: 'riderHit', riderId: r.id, victimIdx: v.idx, x: r.x, y: r.y });
 }
@@ -871,13 +891,70 @@ function roarKnock(state: GameState, p: Player, v: Player): void {
   if (state.ball.ownerIdx === v.idx) knockLooseBall(state, p, v, dirX, dirY);
 }
 
+/**
+ * Zhang Liao's fear (遼來了): an instant cast, with or without the ball. Every opponent that is not invincible is feared
+ * (see fearVictim). The caster keeps any ball it has.
+ */
+function castFear(state: GameState, p: Player): void {
+  p.stamina = Math.max(0, p.stamina - SPECIAL_STAMINA_COST);
+  p.specialCooldown = SPECIAL_COOLDOWN_TICKS;
+  toNormal(p);
+  state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
+  const victimIdxs: number[] = [];
+  for (const v of state.players) {
+    if (v.team === p.team || isInvincible(v)) continue;
+    fearVictim(state, p, v);
+    victimIdxs.push(v.idx);
+  }
+  state.events.push({ type: 'fear', playerIdx: p.idx, victimIdxs });
+}
+
+/**
+ * One fear victim: cancels a beam channel, loses a share of stamina, drops the ball if holding it. Going to zero stamina
+ * knocks him down (a down player keeps his timer). Otherwise he is feared for FEAR_TICKS, unless he is already down or recovering.
+ */
+function fearVictim(state: GameState, p: Player, v: Player): void {
+  reportCastCancel(state, v);
+  const dist = distance(p.x, p.y, v.x, v.y);
+  const dirX = dist > 0 ? (v.x - p.x) / dist : p.facingX;
+  const dirY = dist > 0 ? (v.y - p.y) / dist : p.facingY;
+  v.chargeTicks = 0;
+  v.stamina = Math.max(0, v.stamina - FEAR_STAMINA_RATIO * v.maxStamina);
+  if (state.ball.ownerIdx === v.idx) knockLooseBall(state, p, v, dirX, dirY);
+
+  if (v.stamina <= 0) {
+    if (v.action !== 'down') {
+      setDown(v, DOWN_TICKS_EXHAUSTED);
+      state.events.push({ type: 'down', playerIdx: v.idx });
+    }
+    return;
+  }
+  if (v.action === 'down' || v.action === 'recover') return;
+  v.vx = 0;
+  v.vy = 0;
+  v.vz = 0;
+  v.action = 'fear';
+  v.actionTimer = FEAR_TICKS;
+}
+
+/** Feared: standing still, ignoring input, until the fear timer ends and he returns to normal. */
+function updateFear(p: Player): void {
+  p.vx = 0;
+  p.vy = 0;
+  p.actionTimer--;
+  if (p.actionTimer <= 0) toNormal(p);
+}
+
 /** Clears a rampage and reports it. Callers only call this while the player is rampaging. */
 export function endRampage(state: GameState, p: Player): void {
   p.rampageTicks = 0;
   state.events.push({ type: 'rampageEnd', playerIdx: p.idx });
 }
 
-/** Counts down bump cooldowns and the rampage. A rampage also ends when its owner loses the ball or the phase leaves play. */
+/**
+ * Counts down bump cooldowns and the rampage. A rampage also ends when its owner loses the ball or the phase leaves play.
+ * A no-ball special's rampage (specialNoBall) does not end for lack of the ball: only its timer or the phase ends it.
+ */
 function tickRampage(state: GameState, p: Player): void {
   if (p.bumpCooldown > 0) p.bumpCooldown--;
   if (p.rampageTicks === 0) return;
@@ -889,7 +966,10 @@ function tickRampage(state: GameState, p: Player): void {
     ballIntoGoal(state, p, side, attackDir(state, p.team) * maxSpeedOf(p), 0);
     return;
   }
-  if (!holding || p.rampageTicks === 0) endRampage(state, p);
+  const ends = p.specialNoBall
+    ? state.match.phase !== 'play' || p.rampageTicks === 0
+    : !holding || p.rampageTicks === 0;
+  if (ends) endRampage(state, p);
 }
 
 /** True if the rampager stands on the goal line he attacks (the field clamp stops him there), inside the mouth. */
@@ -1064,7 +1144,10 @@ function passBall(state: GameState, p: Player): void {
   state.events.push({ type: 'kick', playerIdx: p.idx, kind: 'pass', targetIdx: idx });
 }
 
-/** Special-ball hit: flat stamina cost; pierce and beam knock down, other kinds hitstun. Knockback follows the ball's direction. */
+/**
+ * Special-ball hit: stamina cost `cost` (default SPECIAL_HIT_STAMINA); pierce knocks down, other kinds hitstun.
+ * Knockback follows the ball's direction.
+ */
 export function applySpecialHit(
   state: GameState,
   shooter: Player,
@@ -1072,10 +1155,11 @@ export function applySpecialHit(
   kind: SpecialKind,
   dirX: number,
   dirY: number,
+  cost: number = SPECIAL_HIT_STAMINA,
 ): void {
   if (isInvincible(victim)) return;
   reportCastCancel(state, victim);
-  victim.stamina = Math.max(0, victim.stamina - SPECIAL_HIT_STAMINA);
+  victim.stamina = Math.max(0, victim.stamina - cost);
   victim.chargeTicks = 0;
 
   const knock = (KNOCKBACK_SPEED * shooter.mass) / victim.mass;
@@ -1087,7 +1171,7 @@ export function applySpecialHit(
   if (victim.stamina <= 0) {
     setDown(victim, DOWN_TICKS_EXHAUSTED);
     down = true;
-  } else if (kind === 'pierce' || kind === 'beam') {
+  } else if (kind === 'pierce') {
     setDown(victim, DOWN_TICKS_KNOCKED);
     down = true;
   } else {
@@ -1100,7 +1184,7 @@ export function applySpecialHit(
     attackerIdx: shooter.idx,
     victimIdx: victim.idx,
     kind: 'special',
-    damage: SPECIAL_HIT_STAMINA,
+    damage: cost,
   });
   if (down) state.events.push({ type: 'down', playerIdx: victim.idx });
 }
@@ -1150,7 +1234,8 @@ function rampageBump(state: GameState, rampager: Player, victim: Player, dist: n
   victim.vy = dirY * RAMPAGE_BUMP_SPEED * massMult;
   victim.vz = RAMPAGE_BUMP_VZ;
   victim.bumpCooldown = RAMPAGE_BUMP_COOLDOWN;
-  victim.stamina = Math.max(0, victim.stamina - RAMPAGE_BUMP_STAMINA);
+  const cost = rampager.specialBumpPct !== null ? rampager.specialBumpPct * victim.maxStamina : RAMPAGE_BUMP_STAMINA;
+  victim.stamina = Math.max(0, victim.stamina - cost);
 
   // Sent flying: always knocked down (longer when it empties his stamina).
   setDown(victim, victim.stamina <= 0 ? DOWN_TICKS_EXHAUSTED : DOWN_TICKS_KNOCKED);
@@ -1160,7 +1245,7 @@ function rampageBump(state: GameState, rampager: Player, victim: Player, dist: n
     attackerIdx: rampager.idx,
     victimIdx: victim.idx,
     kind: 'special',
-    damage: RAMPAGE_BUMP_STAMINA,
+    damage: cost,
   });
   state.events.push({ type: 'down', playerIdx: victim.idx });
 }

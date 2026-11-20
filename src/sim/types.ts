@@ -29,7 +29,8 @@ export type PlayerAction =
   | 'charge'
   | 'dive'
   | 'lunge'
-  | 'cast';
+  | 'cast'
+  | 'fear';
 
 export type AttackKind = 'punch' | 'tackle' | 'special';
 
@@ -69,14 +70,18 @@ export interface Player {
   rampageTicks: number;
   /** Ticks during which this player cannot be bumped by a rampaging opponent again. */
   bumpCooldown: number;
-  /** What the special button (L) does: a rampage, a roar (shockwave) for Zhang Fei, a lunge (long dash) for Zhao Yun, a beam (channel, then energy ball) for Zhuge Liang, or a summon (cavalry riders) for Ma Chao. */
-  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon';
+  /** What the special button (L) does: a rampage, a roar (shockwave) for Zhang Fei, a lunge (long dash) for Zhao Yun, a beam (channel, then strikes one opponent) for Zhuge Liang, a summon (cavalry riders) for Ma Chao, or a fear (opponents stand still) for Zhang Liao. */
+  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear';
   /** Ticks until the special can be used again. Set when a rampage starts or a roar fires. */
   specialCooldown: number;
   /** Ticks left on a buffered L press. A press made while busy waits here and fires once the player can act. 0 = none. */
   specialBuffer: number;
   specialKind: SpecialKind;
   specialName: string;
+  /** The special can be cast without the ball. */
+  specialNoBall: boolean;
+  /** Share of the victim's maxStamina a contact hit of this special removes, or null for the flat default. */
+  specialBumpPct: number | null;
   prevInput: InputFrame;
 }
 
@@ -166,14 +171,14 @@ export type SimEvent =
   | { type: 'lungeStart'; playerIdx: number; x: number; y: number; dirX: number; dirY: number }
   /** A lunge ends (timer, field edge, or phase change). */
   | { type: 'lungeEnd'; playerIdx: number; x: number; y: number }
-  /** A beam channel starts (the player stands still and holds the ball). */
+  /** A beam channel starts (the player stands still). */
   | { type: 'beamCharge'; playerIdx: number }
-  /** The channel is cut short without firing (the caster was hit, or the phase left play). */
+  /** The channel is cut short without striking (the caster was hit, or the phase left play). */
   | { type: 'beamCancel'; playerIdx: number }
-  /** The beam ball is fired: the release point and unit direction. */
-  | { type: 'beamFire'; playerIdx: number; x: number; y: number; dirX: number; dirY: number }
-  /** The beam knocks down an opponent in its path (x, y is the victim's position). */
-  | { type: 'beamHit'; playerIdx: number; x: number; y: number }
+  /** The beam completes and strikes one random opponent. */
+  | { type: 'beamStrike'; playerIdx: number; victimIdx: number }
+  /** Zhang Liao's fear: the caster and the opponents it reached (the fear's victims). */
+  | { type: 'fear'; playerIdx: number; victimIdxs: number[] }
   | { type: 'specialEnd' }
   | { type: 'whistle'; reason: 'kickoff' | 'half' | 'full' }
   | { type: 'goal'; team: 0 | 1; scorerIdx: number }

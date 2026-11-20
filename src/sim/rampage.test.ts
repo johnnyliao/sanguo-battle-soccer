@@ -410,3 +410,121 @@ describe('rampage into the goal', () => {
     expect(state.players[0].x).toBe(0);
   });
 });
+
+/** Team 0 player 0 is a no-ball rampager (a shu special) at x facing `facingX`. The ball lies loose and far away. */
+function noBallState(x: number, facingX = 1, bumpPct: number | null = null, seed = 1): GameState {
+  const state = ownerState(x, facingX, seed);
+  const p = state.players[0];
+  p.specialNoBall = true;
+  p.specialBumpPct = bumpPct;
+  state.ball.ownerIdx = -1;
+  state.ball.lastTouchIdx = -1;
+  state.ball.x = 300;
+  state.ball.y = 30;
+  return state;
+}
+
+describe('no-ball rampage (shu specials)', () => {
+  it('a no-ball rampager starts the rampage without the ball and it lasts the full RAMPAGE_TICKS', () => {
+    const state = noBallState(600);
+
+    const events = pressSpecial(state);
+
+    expect(events).toContainEqual({ type: 'rampageStart', playerIdx: 0 });
+    expect(state.players[0].rampageTicks).toBe(RAMPAGE_TICKS);
+    expect(state.ball.ownerIdx).toBe(-1);
+
+    const endedAt: number[] = [];
+    for (let t = 1; t <= RAMPAGE_TICKS + 5; t++) {
+      step(state, []);
+      if (state.events.some((e) => e.type === 'rampageEnd')) endedAt.push(t);
+    }
+    expect(endedAt).toEqual([RAMPAGE_TICKS]);
+  });
+
+  it('a wei rampager without the ball still cannot start a rampage', () => {
+    const state = ownerState(600);
+    state.ball.ownerIdx = -1;
+    state.ball.lastTouchIdx = -1;
+    state.ball.x = 300;
+    state.ball.y = 30;
+
+    const events = pressSpecial(state);
+
+    expect(events.some((e) => e.type === 'special' || e.type === 'rampageStart')).toBe(false);
+    expect(state.players[0].rampageTicks).toBe(0);
+  });
+
+  it('J without the ball during a no-ball rampage does nothing: no shot, no punch, the rampage goes on', () => {
+    const state = noBallState(600);
+    pressSpecial(state);
+
+    const events = run(state, 1, inputFor(0, { j: true }));
+
+    expect(events.some((e) => e.type === 'specialShot' || e.type === 'attack' || e.type === 'rampageEnd')).toBe(false);
+    expect(state.ball.special).toBeNull();
+    expect(state.players[0].rampageTicks).toBeGreaterThan(0);
+  });
+
+  it('a no-ball rampager that picks the ball up keeps the rampage, and J then fires the special ball', () => {
+    const state = noBallState(600);
+    pressSpecial(state);
+    state.ball.ownerIdx = 0;
+    state.ball.lastTouchIdx = 0;
+
+    const events = run(state, 1, inputFor(0, { j: true }));
+
+    expect(events).toContainEqual({ type: 'specialShot', playerIdx: 0, kind: 'straight' });
+    expect(state.ball.special).not.toBeNull();
+    expect(state.players[0].rampageTicks).toBe(0);
+  });
+
+  it('without the ball a no-ball rampager cannot score on the goal line, and keeps the rampage', () => {
+    const state = noBallState(FIELD_W - 120);
+
+    const events = rampageDrive(state, 1, 60);
+
+    expect(events.some((e) => e.type === 'goal')).toBe(false);
+    expect(state.match.score).toEqual([0, 0]);
+    expect(state.players[0].rampageTicks).toBeGreaterThan(0);
+  });
+
+  it('a no-ball rampage still ends when the phase leaves play', () => {
+    const state = noBallState(600);
+    pressSpecial(state);
+    state.match.phase = 'goal';
+    state.match.phaseTimer = 100;
+
+    const events = run(state, 1);
+
+    expect(events).toContainEqual({ type: 'rampageEnd', playerIdx: 0 });
+    expect(state.players[0].rampageTicks).toBe(0);
+  });
+});
+
+describe('bump damage share (specialBumpPct)', () => {
+  function bumpOnce(bumpPct: number): { damage: number; victimMax: number; stamina0: number; stamina: number } {
+    const state = noBallState(300, 1, bumpPct);
+    parkAway(state, [0, 5]);
+    pressSpecial(state);
+    placeOpponentAt(state, 18);
+    const victim = state.players[5];
+    const stamina0 = victim.stamina;
+    const events = run(state, 1);
+    const hit = events.find((e) => e.type === 'hit' && e.victimIdx === 5);
+    if (hit?.type !== 'hit') throw new Error('no bump');
+    return { damage: hit.damage, victimMax: victim.maxStamina, stamina0, stamina: victim.stamina };
+  }
+
+  it('guanyu (15%) bump removes 15% of the victim max stamina', () => {
+    const r = bumpOnce(0.15);
+    expect(r.damage).toBeCloseTo(0.15 * r.victimMax, 9);
+    expect(r.stamina).toBeCloseTo(r.stamina0 - 0.15 * r.victimMax, 9);
+  });
+
+  it('zhaoyun (20%) bump removes 20% of the victim max stamina', () => {
+    const r = bumpOnce(0.2);
+    expect(r.damage).toBeCloseTo(0.2 * r.victimMax, 9);
+    expect(r.stamina).toBeCloseTo(r.stamina0 - 0.2 * r.victimMax, 9);
+  });
+});

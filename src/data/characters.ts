@@ -11,7 +11,8 @@ function ch(
   stats: [number, number, number, number, number],
   specialName: string,
   specialKind: SpecialKind,
-  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' = 'rampage',
+  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' = 'rampage',
+  opts: { noBall?: boolean; bumpPct?: number } = {},
 ): CharacterDef {
   const [power, speed, stamina, technique, defense] = stats;
   return {
@@ -21,21 +22,21 @@ function ch(
     role,
     size,
     stats: { power, speed, stamina, technique, defense },
-    special: { name: specialName, kind: specialKind, mode: specialMode },
+    special: { name: specialName, kind: specialKind, mode: specialMode, ...opts },
   };
 }
 
 export const RAW_CHARACTERS: CharacterDef[] = [
-  ch('zhangfei', '張飛', 'shu', 'GK', 'L', [9, 3, 10, 2, 9], '當陽怒吼', 'pierce', 'roar'),
-  ch('guanyu', '關羽', 'shu', 'DF', 'L', [9, 5, 8, 4, 8], '騎士衝擊', 'lob'),
-  ch('zhugeliang', '諸葛亮', 'shu', 'MF', 'S', [3, 5, 4, 10, 4], '破魔光彈', 'beam', 'beam'),
-  ch('machao', '馬超', 'shu', 'MF', 'M', [7, 9, 6, 6, 4], '西涼鐵騎', 'straight', 'summon'),
-  ch('zhaoyun', '趙雲', 'shu', 'FW', 'M', [7, 9, 6, 8, 2], '遊龍穿刺', 'pierce', 'lunge'),
+  ch('zhangfei', '張飛', 'shu', 'GK', 'L', [9, 3, 10, 2, 9], '當陽怒吼', 'pierce', 'roar', { noBall: true }),
+  ch('guanyu', '關羽', 'shu', 'DF', 'L', [9, 5, 8, 4, 8], '騎士衝擊', 'lob', 'rampage', { noBall: true, bumpPct: 0.15 }),
+  ch('zhugeliang', '諸葛亮', 'shu', 'MF', 'S', [3, 5, 4, 10, 4], '破魔光彈', 'beam', 'beam', { noBall: true }),
+  ch('machao', '馬超', 'shu', 'MF', 'M', [7, 9, 6, 6, 4], '西涼鐵騎', 'straight', 'summon', { noBall: true, bumpPct: 0.1 }),
+  ch('zhaoyun', '趙雲', 'shu', 'FW', 'M', [7, 9, 6, 8, 2], '遊龍穿刺', 'pierce', 'lunge', { noBall: true, bumpPct: 0.2 }),
   ch('xuchu', '許褚', 'wei', 'GK', 'L', [9, 3, 10, 2, 9], '虎痴裸衣', 'pierce'),
   ch('dianwei', '典韋', 'wei', 'DF', 'L', [10, 4, 9, 2, 8], '雙戟旋風', 'lob'),
   ch('caocao', '曹操', 'wei', 'MF', 'M', [6, 6, 6, 8, 5], '挾天子令', 'zigzag'),
   ch('simayi', '司馬懿', 'wei', 'MF', 'S', [4, 5, 7, 9, 6], '鷹視狼顧', 'zigzag'),
-  ch('zhangliao', '張遼', 'wei', 'FW', 'M', [7, 10, 6, 7, 2], '威震逍遙津', 'straight'),
+  ch('zhangliao', '張遼', 'wei', 'FW', 'M', [7, 10, 6, 7, 2], '遼來了', 'straight', 'fear', { noBall: true }),
   ch('huanggai', '黃蓋', 'wu', 'GK', 'L', [8, 3, 10, 3, 9], '苦肉火船', 'pierce'),
   ch('taishici', '太史慈', 'wu', 'DF', 'M', [8, 6, 8, 5, 7], '神射一箭', 'straight'),
   ch('zhouyu', '周瑜', 'wu', 'MF', 'M', [5, 6, 5, 10, 4], '赤壁東風', 'zigzag'),

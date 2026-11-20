@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest';
 import type { BodySize, CharacterDef, Role, SizeParams } from '../data/types';
 import {
   BEAM_CAST_TICKS,
+  BEAM_STRIKE_STAMINA_RATIO,
+  DOWN_TICKS_KNOCKED,
   DRIBBLE_OFFSET,
   EMPTY_INPUT,
   FIELD_D,
-  FIELD_W,
   PUNCH_TICKS,
   SPECIAL_COOLDOWN_TICKS,
   SPECIAL_STAMINA_COST,
@@ -58,8 +59,8 @@ function parkAway(state: GameState, keep: number[] = []): void {
 }
 
 /**
- * Player `idx` (0 = team 0, 5 = team 1) is Zhuge Liang: the beam special, owning the ball at x, facing the goal it attacks
- * in the first half (team 0 faces +x, team 1 faces -x).
+ * Player `idx` (0 = team 0, 5 = team 1) is Zhuge Liang: the beam special, no-ball, owning the ball at x, facing the goal it
+ * attacks in the first half (team 0 faces +x, team 1 faces -x).
  */
 function beamerState(x: number, idx = 0, seed = 1): GameState {
   const state = createInitialState(makeSetup(seed), SIZE_PARAMS);
@@ -73,6 +74,7 @@ function beamerState(x: number, idx = 0, seed = 1): GameState {
   p.specialMode = 'beam';
   p.specialKind = 'beam';
   p.specialName = '破魔光彈';
+  p.specialNoBall = true;
   state.ball.x = p.x + facingX * (p.radius + DRIBBLE_OFFSET);
   state.ball.y = p.y;
   state.ball.ownerIdx = idx;
@@ -95,13 +97,13 @@ function run(state: GameState, ticks: number, frame: InputFrame[] = []): SimEven
   return seen;
 }
 
-/** Ticks until a goal is scored or `maxTicks` pass. Returns every event seen. */
-function runUntilGoal(state: GameState, maxTicks: number): SimEvent[] {
+/** Ticks with no input until the beam strikes. Returns every event seen, the strike tick included. */
+function runUntilStrike(state: GameState): SimEvent[] {
   const seen: SimEvent[] = [];
-  for (let t = 0; t < maxTicks; t++) {
+  for (let t = 0; t < BEAM_CAST_TICKS + 5; t++) {
     step(state, []);
     seen.push(...state.events);
-    if (state.events.some((e) => e.type === 'goal')) break;
+    if (state.events.some((e) => e.type === 'beamStrike')) break;
   }
   return seen;
 }
@@ -117,9 +119,33 @@ function looseBallAway(state: GameState): void {
   state.ball.vz = 0;
 }
 
+/** Team 1 players other than `keep` are made unable to be struck: down, recovering or invincible in turn. */
+function blockOpponents(state: GameState, keep: number): void {
+  const blockers: Array<(p: GameState['players'][number]) => void> = [
+    (p) => {
+      p.action = 'down';
+      p.actionTimer = 10000;
+    },
+    (p) => {
+      p.action = 'recover';
+      p.actionTimer = 10000;
+    },
+    (p) => {
+      p.action = 'lunge';
+      p.actionTimer = 10000;
+    },
+  ];
+  let n = 0;
+  for (let i = 5; i < 10; i++) {
+    if (i === keep) continue;
+    blockers[n % blockers.length](state.players[i]);
+    n++;
+  }
+}
+
 describe('beam cast start', () => {
-  it('L with the ball in the attacking half starts the cast: stands still, costs stamina, sets the cooldown, emits events', () => {
-    const state = beamerState(800);
+  it('L with the ball in his own half starts the cast: stands still, costs stamina, sets the cooldown, keeps the ball', () => {
+    const state = beamerState(400);
     const p = state.players[0];
     const stamina0 = p.stamina;
 
@@ -134,7 +160,6 @@ describe('beam cast start', () => {
     expect(p.stamina).toBeCloseTo(stamina0 - SPECIAL_STAMINA_COST, 6);
     expect(p.specialCooldown).toBe(SPECIAL_COOLDOWN_TICKS);
     expect(state.ball.ownerIdx).toBe(0);
-    expect(state.ball.special).toBeNull();
   });
 
   it('team 1 casts in its own attacking half (the left side in the first half)', () => {
@@ -161,20 +186,21 @@ describe('beam cast start', () => {
     expect(state.ball.ownerIdx).toBe(0);
   });
 
-  it('in his own half a beamer with the ball does not cast', () => {
-    const state = beamerState(400);
+  it('without the ball L still starts the cast (no-ball special) and the ball stays loose', () => {
+    const state = beamerState(800);
+    looseBallAway(state);
     const p = state.players[0];
 
     const events = pressL(state);
 
-    expect(events.some((e) => e.type === 'beamCharge' || e.type === 'special')).toBe(false);
-    expect(p.action).toBe('normal');
-    expect(p.specialCooldown).toBe(0);
-    expect(state.ball.ownerIdx).toBe(0);
+    expect(events).toContainEqual({ type: 'beamCharge', playerIdx: 0 });
+    expect(p.action).toBe('cast');
+    expect(state.ball.ownerIdx).toBe(-1);
   });
 
-  it('without the ball L does nothing', () => {
+  it('a beamer without specialNoBall still needs the ball to cast', () => {
     const state = beamerState(800);
+    state.players[0].specialNoBall = false;
     looseBallAway(state);
     const p = state.players[0];
 
@@ -186,67 +212,143 @@ describe('beam cast start', () => {
   });
 });
 
-describe('beam flight', () => {
-  it('the beam flies at the goal, knocks down the goalkeeper standing on the line, cannot be saved and scores', () => {
+describe('beam strike', () => {
+  it('after the channel one standing opponent is struck: stamina -30% of its max, knocked down, beamStrike and hit and down', () => {
     const state = beamerState(800);
-    const gk = state.players[5];
-    gk.x = FIELD_W - 100;
-    gk.y = FIELD_D / 2;
+    const events = [...pressL(state), ...runUntilStrike(state)];
 
-    const events = [...pressL(state), ...runUntilGoal(state, 300)];
+    const strike = events.find((e) => e.type === 'beamStrike');
+    expect(strike).toBeDefined();
+    if (strike?.type !== 'beamStrike') throw new Error('unreachable');
+    expect(strike.playerIdx).toBe(0);
+    expect(strike.victimIdx).toBeGreaterThanOrEqual(5);
 
-    const fire = events.find((e) => e.type === 'beamFire');
-    expect(fire).toBeDefined();
-    if (fire?.type !== 'beamFire') throw new Error('unreachable');
-    expect(fire.playerIdx).toBe(0);
-    expect(fire.dirX).toBeCloseTo(1, 9);
-    expect(fire.dirY).toBeCloseTo(0, 9);
-    expect(events).toContainEqual({ type: 'specialShot', playerIdx: 0, kind: 'beam' });
-
-    expect(events).toContainEqual(expect.objectContaining({ type: 'beamHit', playerIdx: 5 }));
-    expect(events).toContainEqual(expect.objectContaining({ type: 'hit', attackerIdx: 0, victimIdx: 5, kind: 'special' }));
-    expect(events).toContainEqual({ type: 'down', playerIdx: 5 });
-    expect(events.some((e) => e.type === 'save')).toBe(false);
-
-    expect(events).toContainEqual({ type: 'goal', team: 0, scorerIdx: 0 });
-    expect(state.match.score).toEqual([1, 0]);
-    expect(state.match.phase).toBe('goal');
+    const victim = state.players[strike.victimIdx];
+    const struck = state.players.filter((p) => p.team === 1 && p.action === 'down');
+    expect(struck).toHaveLength(1);
+    expect(struck[0]).toBe(victim);
+    expect(victim.stamina).toBeCloseTo(victim.maxStamina * (1 - BEAM_STRIKE_STAMINA_RATIO), 6);
+    expect(events).toContainEqual({
+      type: 'hit',
+      attackerIdx: 0,
+      victimIdx: strike.victimIdx,
+      kind: 'special',
+      damage: BEAM_STRIKE_STAMINA_RATIO * victim.maxStamina,
+    });
+    expect(events).toContainEqual({ type: 'down', playerIdx: strike.victimIdx });
+    expect(events.some((e) => e.type === 'specialShot')).toBe(false);
   });
 
-  it('an opponent on the line is knocked down and the ball is not stopped', () => {
+  it('the struck player is down for DOWN_TICKS_KNOCKED ticks (counting the strike tick) and then gets up', () => {
     const state = beamerState(800);
-    const victim = state.players[6];
-    victim.x = FIELD_W - 200;
-    victim.y = FIELD_D / 2;
+    const events = [...pressL(state), ...runUntilStrike(state)];
+    const strike = events.find((e) => e.type === 'beamStrike');
+    if (strike?.type !== 'beamStrike') throw new Error('unreachable');
+    const victim = state.players[strike.victimIdx];
 
-    const events = [...pressL(state), ...runUntilGoal(state, 300)];
+    let steps = 1;
+    while (victim.action === 'down') {
+      step(state, []);
+      steps++;
+    }
 
-    expect(events).toContainEqual(expect.objectContaining({ type: 'hit', attackerIdx: 0, victimIdx: 6, kind: 'special' }));
-    expect(events).toContainEqual({ type: 'down', playerIdx: 6 });
-    expect(victim.action).toBe('down');
-    expect(events.some((e) => e.type === 'looseBall' || e.type === 'pickup')).toBe(false);
-    expect(events).toContainEqual({ type: 'goal', team: 0, scorerIdx: 0 });
+    expect(steps).toBe(DOWN_TICKS_KNOCKED);
+    expect(victim.action).toBe('normal');
   });
 
-  it('an invincible opponent on the line is passed over without stopping the ball', () => {
+  it('the struck player drops the ball as a loose ball when he holds it', () => {
     const state = beamerState(800);
-    const victim = state.players[6];
-    victim.x = FIELD_W - 200;
-    victim.y = FIELD_D / 2;
-    // A lunge is invincible for as long as the timer runs (a rampage would end at once without the ball).
-    victim.action = 'lunge';
-    victim.actionTimer = 10000;
+    blockOpponents(state, 6);
+    state.ball.ownerIdx = 6;
+    state.ball.lastTouchIdx = 6;
 
-    const events = [...pressL(state), ...runUntilGoal(state, 300)];
+    const events = [...pressL(state), ...runUntilStrike(state)];
 
-    expect(events.some((e) => e.type === 'hit' && e.victimIdx === 6)).toBe(false);
-    expect(events.some((e) => e.type === 'beamHit' && e.playerIdx === 6)).toBe(false);
-    expect(events).toContainEqual({ type: 'goal', team: 0, scorerIdx: 0 });
+    expect(events).toContainEqual({ type: 'beamStrike', playerIdx: 0, victimIdx: 6 });
+    expect(events).toContainEqual({ type: 'looseBall', playerIdx: 6 });
+    expect(state.ball.ownerIdx).toBe(-1);
+    expect(state.players[6].noTouchTicks).toBeGreaterThan(0);
+  });
+
+  it('the caster keeps the ball he had', () => {
+    const state = beamerState(800);
+    blockOpponents(state, 6);
+
+    pressL(state);
+    runUntilStrike(state);
+
+    expect(state.players[6].action).toBe('down');
+    expect(state.ball.ownerIdx).toBe(0);
+  });
+
+  it('down, recovering and invincible opponents are never struck', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const state = beamerState(800, 0, seed);
+      blockOpponents(state, 8);
+      const before = state.players.map((p) => p.stamina);
+
+      const events = [...pressL(state), ...runUntilStrike(state)];
+
+      expect(events).toContainEqual({ type: 'beamStrike', playerIdx: 0, victimIdx: 8 });
+      expect(state.players[8].stamina).toBeCloseTo(before[8] - BEAM_STRIKE_STAMINA_RATIO * state.players[8].maxStamina, 6);
+    }
+  });
+
+  it('a struck victim that is channelling cancels its own cast', () => {
+    const state = beamerState(800);
+    blockOpponents(state, 7);
+    state.players[7].action = 'cast';
+    state.players[7].actionTimer = 10000;
+
+    const events = [...pressL(state), ...runUntilStrike(state)];
+
+    expect(events).toContainEqual({ type: 'beamCancel', playerIdx: 7 });
+    expect(events).toContainEqual({ type: 'beamStrike', playerIdx: 0, victimIdx: 7 });
+    expect(state.players[7].action).toBe('down');
+  });
+
+  it('with no valid target nothing is struck, but the cost and the cooldown are spent', () => {
+    const state = beamerState(800);
+    for (let i = 5; i < 10; i++) {
+      state.players[i].action = 'down';
+      state.players[i].actionTimer = 10000;
+    }
+    const stamina0 = state.players[0].stamina;
+
+    const events = [...pressL(state), ...run(state, BEAM_CAST_TICKS)];
+
+    expect(events.some((e) => e.type === 'beamStrike' || e.type === 'hit' || e.type === 'down')).toBe(false);
+    expect(state.players[0].action).toBe('normal');
+    expect(state.players[0].stamina).toBeCloseTo(stamina0 - SPECIAL_STAMINA_COST, 6);
+    expect(state.players[0].specialCooldown).toBeGreaterThan(0);
+  });
+
+  it('the same seed picks the same victim', () => {
+    const pick = (): number => {
+      const state = beamerState(800, 0, 42);
+      const events = [...pressL(state), ...runUntilStrike(state)];
+      const strike = events.find((e) => e.type === 'beamStrike');
+      if (strike?.type !== 'beamStrike') throw new Error('unreachable');
+      return strike.victimIdx;
+    };
+
+    expect(pick()).toBe(pick());
+  });
+
+  it('team 1 beamer strikes a team 0 player', () => {
+    const state = beamerState(400, 5);
+
+    const events = [...pressL(state, 5), ...runUntilStrike(state)];
+
+    const strike = events.find((e) => e.type === 'beamStrike');
+    if (strike?.type !== 'beamStrike') throw new Error('unreachable');
+    expect(strike.playerIdx).toBe(5);
+    expect(strike.victimIdx).toBeLessThan(5);
   });
 });
 
 describe('beam cast protection and end', () => {
-  it('an opponent punch during the cast interrupts it: the caster is stunned, loses the ball, and no beam fires', () => {
+  it('an opponent punch during the cast interrupts it: the caster is stunned, loses the ball, and no beam strikes', () => {
     const state = beamerState(800);
     const victim = state.players[6];
     pressL(state);
@@ -271,7 +373,7 @@ describe('beam cast protection and end', () => {
 
     const rest = run(state, BEAM_CAST_TICKS + PUNCH_TICKS);
     const all = [...seen, ...rest];
-    expect(all.some((e) => e.type === 'beamFire' || (e.type === 'specialShot' && e.playerIdx === 0))).toBe(false);
+    expect(all.some((e) => e.type === 'beamStrike')).toBe(false);
     expect(owner.specialCooldown).toBeGreaterThan(0);
   });
 

@@ -8,7 +8,6 @@ import {
   ROAR_RADIUS,
   SPECIAL_STAMINA_COST,
   attackDir,
-  inAttackingHalf,
   opponentGoalX,
   ownGoalX,
   type GameState,
@@ -58,6 +57,17 @@ const RAMPAGE_FIRE_LEFT = 15;
 /** Ma Chao's summon is called when at least SUMMON_AI_MIN_OPPONENTS standing opponents are within this range. */
 const SUMMON_AI_RANGE = 200;
 const SUMMON_AI_MIN_OPPONENTS = 2;
+/** Fear (Zhang Liao), owner: cast when an opponent is this close, or the owner is within CHARGE_SHOT_RANGE of goal. */
+const FEAR_OWNER_RANGE = 80;
+/** Fear, off the ball: cast when at least FEAR_GOAL_MIN standing opponents are within FEAR_GOAL_RANGE of our goal. */
+const FEAR_GOAL_RANGE = 250;
+const FEAR_GOAL_MIN = 3;
+/** Rampage (Guan Yu), off the ball: cast when an opponent carrier is within this range. */
+const RAMPAGE_BALL_RANGE = 160;
+/** Lunge (Zhao Yun), off the ball: cast when an opponent carrier is this far away, roughly in front of the lunger. */
+const LUNGE_BALL_MIN = 60;
+const LUNGE_BALL_MAX = 190;
+const LUNGE_BALL_LATERAL = 50;
 
 const PRESSURE_RANGE = 40;
 const PRESSURE_PASS_CHANCE = 0.04;
@@ -122,6 +132,9 @@ function decide(state: GameState, ai: AIState, p: Player): InputFrame {
     if (p.rampageTicks > 0) return rampageFrame(state, p, s);
     return p.role === 'GK' ? gkOwnerFrame(state, ai, p, s) : ownerFrame(state, ai, p, s);
   }
+  if (p.rampageTicks > 0) return rampageChaseFrame(state, p, s);
+  const special = offBallSpecialFrame(state, ai, p, s);
+  if (special !== null) return special;
   return freeFrame(state, ai, p, s);
 }
 
@@ -164,10 +177,9 @@ function ownerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPla
 
   if (hasCaller(state, p)) return passFrame(p, null);
 
-  // Zhuge Liang's beam: channelled from the attacking half on the same per-tick chance as the other specials.
+  // Zhuge Liang's beam: channelled on the same per-tick chance as the other specials.
   if (
     p.specialMode === 'beam' &&
-    inAttackingHalf(state, p) &&
     !p.prevInput.l &&
     p.specialCooldown === 0 &&
     p.stamina >= SHOT_MIN_STAMINA &&
@@ -187,6 +199,19 @@ function ownerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPla
     nextRandom(ai) < SHOT_FULL_CHANCE
   ) {
     s.intent = 'summon';
+    return frame(NO_MOVE, { l: true });
+  }
+
+  // Zhang Liao's fear: freezes every opponent and makes this carrier drop the ball, so cast it when they are close.
+  if (
+    p.specialMode === 'fear' &&
+    !p.prevInput.l &&
+    p.specialCooldown === 0 &&
+    p.stamina >= SHOT_MIN_STAMINA &&
+    (opponentsWithin(state, p, FEAR_OWNER_RANGE) > 0 || Math.abs(goalX - p.x) < CHARGE_SHOT_RANGE) &&
+    nextRandom(ai) < SHOT_FULL_CHANCE
+  ) {
+    s.intent = 'fear';
     return frame(NO_MOVE, { l: true });
   }
 
@@ -229,6 +254,64 @@ function ownerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPla
     p.stamina > DRIBBLE_DASH_STAMINA_FRAC * p.maxStamina &&
     !opponentAhead(state, p, DRIBBLE_DASH_RANGE, DRIBBLE_DASH_LATERAL);
   return frame(steerTo(p, goalX, ty), { dash });
+}
+
+/**
+ * Special cast without the ball (only for specialNoBall players), on the per-tick chance once the situation for its
+ * kind holds. Returns null when no special is cast this tick.
+ */
+function offBallSpecialFrame(
+  state: GameState,
+  ai: AIState,
+  p: Player,
+  s: AIState['perPlayer'][number],
+): InputFrame | null {
+  if (!p.specialNoBall || p.prevInput.l || p.specialCooldown > 0 || p.stamina < SHOT_MIN_STAMINA) return null;
+  const carrier = state.ball.ownerIdx === -1 ? null : state.players[state.ball.ownerIdx];
+  const enemyCarrier = carrier !== null && carrier.team !== p.team ? carrier : null;
+  let wanted = false;
+  let steer: Move = NO_MOVE;
+  switch (p.specialMode) {
+    case 'fear':
+      wanted =
+        enemyCarrier !== null ||
+        opponentsNear(state, p.team, ownGoalX(state, p.team), CENTER_Y, FEAR_GOAL_RANGE) >= FEAR_GOAL_MIN;
+      break;
+    case 'beam':
+      wanted = enemyCarrier !== null && Math.abs(enemyCarrier.x - ownGoalX(state, p.team)) < FIELD_W / 2;
+      break;
+    case 'rampage':
+      wanted = enemyCarrier !== null && dist(p.x, p.y, enemyCarrier.x, enemyCarrier.y) <= RAMPAGE_BALL_RANGE;
+      steer = steerTo(p, state.ball.x, state.ball.y);
+      break;
+    case 'lunge':
+      if (enemyCarrier !== null) {
+        const dx = enemyCarrier.x - p.x;
+        const dy = enemyCarrier.y - p.y;
+        const d = dist(p.x, p.y, enemyCarrier.x, enemyCarrier.y);
+        wanted =
+          d >= LUNGE_BALL_MIN &&
+          d <= LUNGE_BALL_MAX &&
+          Math.abs(dy) < LUNGE_BALL_LATERAL &&
+          sign(p.facingX) === sign(dx);
+        steer = steerTo(p, enemyCarrier.x, enemyCarrier.y);
+      }
+      break;
+    case 'summon':
+      wanted = opponentsWithin(state, p, SUMMON_AI_RANGE) >= SUMMON_AI_MIN_OPPONENTS;
+      break;
+    default:
+      return null;
+  }
+  if (!wanted || nextRandom(ai) >= SHOT_FULL_CHANCE) return null;
+  s.intent = 'offBall';
+  return frame(steer, { l: true });
+}
+
+/** Rampaging without the ball: steer at the ball (carrier or loose) and never press J. */
+function rampageChaseFrame(state: GameState, p: Player, s: AIState['perPlayer'][number]): InputFrame {
+  s.intent = 'rampageChase';
+  return frame(steerTo(p, state.ball.x, state.ball.y));
 }
 
 /** Rampaging owner: dribble straight at the goal centre, and fire the special once close enough or when the rampage is nearly over. */
@@ -451,6 +534,16 @@ function opponentsWithin(state: GameState, p: Player, range: number): number {
   for (const t of state.players) {
     if (t.team === p.team || t.action === 'down') continue;
     if (dist(t.x, t.y, p.x, p.y) < range) count++;
+  }
+  return count;
+}
+
+/** Number of standing opponents of `team` within range of the point (x, y). */
+function opponentsNear(state: GameState, team: 0 | 1, x: number, y: number, range: number): number {
+  let count = 0;
+  for (const t of state.players) {
+    if (t.team === team || t.action === 'down') continue;
+    if (dist(t.x, t.y, x, y) < range) count++;
   }
   return count;
 }

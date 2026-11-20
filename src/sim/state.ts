@@ -91,6 +91,8 @@ export function createInitialState(
         specialBuffer: 0,
         specialKind: def.special.kind,
         specialName: def.special.name,
+        specialNoBall: def.special.noBall ?? false,
+        specialBumpPct: def.special.bumpPct ?? null,
         prevInput: { ...EMPTY_INPUT },
       };
       state.players.push(player);
