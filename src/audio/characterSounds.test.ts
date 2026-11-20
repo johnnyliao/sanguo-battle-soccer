@@ -212,7 +212,7 @@ describe('Wei character sound mapping', () => {
     expect(mapped).toBeGreaterThan(0);
   });
 
-  it('gives every Wei character its shouts, with the bark as the default except Xu Chu', () => {
+  it('gives every Wei character its shouts, with the bark (C) as the default for all five', () => {
     for (const charId of WEI) {
       for (const alt of ['shoutA', 'shoutB', 'shoutC']) {
         expect(SYNTH_RECIPES[`${charId}.${alt}`], `${charId}.${alt}`).toBeTypeOf('function');
@@ -224,7 +224,7 @@ describe('Wei character sound mapping', () => {
     expect(SYNTH_RECIPES['zhenji.shout']).toBe(SYNTH_RECIPES['zhenji.shoutC']);
     expect(SYNTH_RECIPES['simayi.shout']).toBe(SYNTH_RECIPES['simayi.shoutC']);
     expect(SYNTH_RECIPES['zhangliao.shout']).toBe(SYNTH_RECIPES['zhangliao.shoutC']);
-    expect(SYNTH_RECIPES['xuchu.shout']).not.toBe(SYNTH_RECIPES['xuchu.shoutC']);
+    expect(SYNTH_RECIPES['xuchu.shout']).toBe(SYNTH_RECIPES['xuchu.shoutC']);
   });
 
   it('routes the slash and ice cues to the normal bus', () => {

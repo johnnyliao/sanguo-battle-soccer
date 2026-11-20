@@ -666,8 +666,8 @@ export const SYNTH_RECIPES: Record<string, Recipe> = Object.fromEntries(
 );
 // The user picked the short bark (C) as the in-game cry for these three (2026-11-20).
 for (const c of ['guanyu', 'machao', 'zhaoyun'] as const) SYNTH_RECIPES[`${c}.shout`] = SYNTH_RECIPES[`${c}.shoutC`];
-// Wei: the short bark (C) is the in-game cry for all but Xu Chu, who keeps his long roar.
-for (const c of ['caocao', 'zhenji', 'simayi', 'zhangliao'] as const) SYNTH_RECIPES[`${c}.shout`] = SYNTH_RECIPES[`${c}.shoutC`];
+// Wei: the user picked the short bark (C) as the in-game cry for all five (2026-11-20).
+for (const c of ['xuchu', 'caocao', 'zhenji', 'simayi', 'zhangliao'] as const) SYNTH_RECIPES[`${c}.shout`] = SYNTH_RECIPES[`${c}.shoutC`];
 
 /**
  * Which stages each character plays for an event key (sim event type, or 'hit' for a special hit,
