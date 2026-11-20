@@ -39,7 +39,8 @@ import {
   BALL_SHEET,
   createSpriteAnims,
   fxAnimKey,
-  preloadSprites,
+  matchSheets,
+  queueSheets,
   RIDER_SHEET,
   riderAnimKey,
   SPRITE_CONFIGS,
@@ -49,6 +50,7 @@ import {
   type SpriteAnim,
   type SpriteConfig,
 } from './sprites';
+import { SHEET_LOAD_SCENE, type SheetLoadScene } from './SheetLoadScene';
 import { Stadium } from './stadium';
 import type { TeamSelectState } from './TeamSelectScene';
 import { applyView, BASE_H, textResolution, type View } from './view';
@@ -528,6 +530,8 @@ function matchFromUrl(search: string): MatchInit {
 }
 
 export class MatchScene extends Phaser.Scene {
+  /** True while create() waits for the background loader's sheets; update() does nothing until then. */
+  private awaitingSheets = false;
   private homeCountry: Country = 'shu';
   private awayCountry: Country = 'wei';
   private humanIdx = 4;
@@ -652,17 +656,19 @@ export class MatchScene extends Phaser.Scene {
   }
 
   preload(): void {
-    preloadSprites(this.load);
+    // Sheets the background loader is still downloading are not queued twice; create() waits for them.
+    const bg = this.scene.get(SHEET_LOAD_SCENE) as SheetLoadScene;
+    queueSheets(this.load, matchSheets(this.homeCountry, this.awayCountry).filter((f) => !bg.isPending(f.key)));
     this.load.image(STAMINA_TEX.frame, 'sprites/stamina-frame.png');
     this.load.image(STAMINA_TEX.track, 'sprites/stamina-track.png');
     this.load.image(STAMINA_TEX.green, 'sprites/stamina-fill-green.png');
     this.load.image(STAMINA_TEX.yellow, 'sprites/stamina-fill-yellow.png');
     this.load.image(STAMINA_TEX.red, 'sprites/stamina-fill-red.png');
-    this.showLoadingBar();
+    this.showLoadingBar(this.load);
   }
 
   /** Progress bar and percentage while the sprite sheets download. The match stays black until they are in. */
-  private showLoadingBar(): void {
+  private showLoadingBar(loader: Phaser.Loader.LoaderPlugin): void {
     const k = this.scale.width / window.innerWidth; // game px per CSS px
     const cx = this.scale.width / 2;
     const cy = this.scale.height / 2;
@@ -674,18 +680,32 @@ export class MatchScene extends Phaser.Scene {
     const label = this.add
       .text(cx, cy - 22 * k, '載入中 0%', { fontFamily: FONT, fontSize: `${Math.round(18 * k)}px`, color: '#ffffff' })
       .setOrigin(0.5);
-    this.load.on('progress', (p: number) => {
+    loader.on('progress', (p: number) => {
       fill.clear().fillStyle(0xffffff).fillRect(x, cy, barW * p, barH);
       label.setText(`載入中 ${Math.round(p * 100)}%`);
     });
-    this.load.once('complete', () => {
+    loader.once('complete', () => {
       frame.destroy();
       fill.destroy();
       label.destroy();
     });
   }
 
+  /** Sheets this match needs are still downloading in the background: shows the loading bar until they are in, then starts over. */
+  private waitForBackgroundSheets(): boolean {
+    const bg = this.scene.get(SHEET_LOAD_SCENE) as SheetLoadScene;
+    if (!bg.hasPending(matchSheets(this.homeCountry, this.awayCountry))) return false;
+    this.awaitingSheets = true;
+    this.showLoadingBar(bg.load);
+    bg.load.once('complete', () => {
+      this.awaitingSheets = false;
+      this.create();
+    });
+    return true;
+  }
+
   create(): void {
+    if (this.waitForBackgroundSheets()) return;
     this.baseH = this.sys.game.device.input.touch ? MATCH_BASE_H_TOUCH : BASE_H;
     this.view = applyView(this, (v) => this.layoutHud(v), this.baseH);
     this.state = createInitialState(
@@ -764,6 +784,7 @@ export class MatchScene extends Phaser.Scene {
   }
 
   update(time: number, delta: number): void {
+    if (this.awaitingSheets) return;
     this.updatePkOrder();
     this.accumulator += Math.min(delta, MAX_FRAME_MS);
     let steps = 0;

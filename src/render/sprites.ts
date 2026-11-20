@@ -1,4 +1,5 @@
 import type Phaser from 'phaser';
+import { getTeam, type Country } from '../data';
 
 /**
  * Animated character sprites. A character with an entry in SPRITE_CONFIGS is drawn from its sheet instead of the
@@ -116,17 +117,17 @@ export interface RiderSheet {
   anims: Record<RiderAnim, SpriteAnimDef>;
 }
 
-const GUANYU_META: SpriteMeta = { frameWidth: 335, frameHeight: 281, cols: 4, rows: 6, anchorX: 184, anchorY: 239 };
-const ZHANGFEI_META: SpriteMeta = { frameWidth: 284, frameHeight: 206, cols: 4, rows: 5, anchorX: 142, anchorY: 199 };
-const ZHAOYUN_META: SpriteMeta = { frameWidth: 211, frameHeight: 204, cols: 4, rows: 5, anchorX: 94, anchorY: 191 };
-const ZHUGELIANG_META: SpriteMeta = { frameWidth: 211, frameHeight: 197, cols: 4, rows: 5, anchorX: 98, anchorY: 188 };
-const MACHAO_META: SpriteMeta = { frameWidth: 211, frameHeight: 195, cols: 4, rows: 5, anchorX: 91, anchorY: 191 };
+const GUANYU_META: SpriteMeta = { frameWidth: 202, frameHeight: 169, cols: 4, rows: 6, anchorX: 111, anchorY: 144 };
+const ZHANGFEI_META: SpriteMeta = { frameWidth: 176, frameHeight: 128, cols: 4, rows: 5, anchorX: 88, anchorY: 123 };
+const ZHAOYUN_META: SpriteMeta = { frameWidth: 132, frameHeight: 128, cols: 4, rows: 5, anchorX: 59, anchorY: 119 };
+const ZHUGELIANG_META: SpriteMeta = { frameWidth: 132, frameHeight: 123, cols: 4, rows: 5, anchorX: 61, anchorY: 118 };
+const MACHAO_META: SpriteMeta = { frameWidth: 138, frameHeight: 128, cols: 4, rows: 5, anchorX: 59, anchorY: 125 };
 const MACHAO_CAVALRY_META: SpriteMeta = { frameWidth: 280, frameHeight: 206, cols: 4, rows: 2, anchorX: 145, anchorY: 156 };
-const ZHANGLIAO_META: SpriteMeta = { frameWidth: 421, frameHeight: 272, cols: 4, rows: 5, anchorX: 272, anchorY: 265 };
-const SIMAYI_META: SpriteMeta = { frameWidth: 263, frameHeight: 244, cols: 4, rows: 6, anchorX: 132, anchorY: 240 };
-const XUCHU_META: SpriteMeta = { frameWidth: 282, frameHeight: 290, cols: 4, rows: 6, anchorX: 116, anchorY: 214 };
-const CAOCAO_META: SpriteMeta = { frameWidth: 320, frameHeight: 273, cols: 4, rows: 6, anchorX: 150, anchorY: 249 };
-const ZHENJI_META: SpriteMeta = { frameWidth: 355, frameHeight: 273, cols: 4, rows: 5, anchorX: 192, anchorY: 268 };
+const ZHANGLIAO_META: SpriteMeta = { frameWidth: 204, frameHeight: 132, cols: 4, rows: 5, anchorX: 132, anchorY: 129 };
+const SIMAYI_META: SpriteMeta = { frameWidth: 133, frameHeight: 123, cols: 4, rows: 6, anchorX: 67, anchorY: 121 };
+const XUCHU_META: SpriteMeta = { frameWidth: 180, frameHeight: 185, cols: 4, rows: 6, anchorX: 74, anchorY: 136 };
+const CAOCAO_META: SpriteMeta = { frameWidth: 149, frameHeight: 127, cols: 4, rows: 6, anchorX: 70, anchorY: 116 };
+const ZHENJI_META: SpriteMeta = { frameWidth: 160, frameHeight: 123, cols: 4, rows: 5, anchorX: 87, anchorY: 121 };
 
 /** Frame index of a sheet cell (row-major) for a sheet with this meta. */
 const cellAt = (meta: SpriteMeta) => (row: number, col: number): number => row * meta.cols + col;
@@ -180,8 +181,8 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
     fx: {
       key: 'fx-guanyu',
       url: 'sprites/guanyu-fx.png',
-      frameWidth: 180,
-      frameHeight: 180,
+      frameWidth: 120,
+      frameHeight: 120,
       punch: 'slash',
       punchWidth: 90,
       anims: {
@@ -359,8 +360,8 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
     fx: {
       key: 'fx-zhangliao',
       url: 'sprites/zhangliao-fx.png',
-      frameWidth: 180,
-      frameHeight: 180,
+      frameWidth: 120,
+      frameHeight: 120,
       punch: 'slash',
       punchWidth: 90,
       anims: {
@@ -396,8 +397,8 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
     fx: {
       key: 'fx-simayi',
       url: 'sprites/simayi-fx.png',
-      frameWidth: 180,
-      frameHeight: 180,
+      frameWidth: 120,
+      frameHeight: 120,
       punch: 'slash',
       punchWidth: 90,
       anims: {
@@ -433,8 +434,8 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
     fx: {
       key: 'fx-xuchu',
       url: 'sprites/xuchu-fx.png',
-      frameWidth: 180,
-      frameHeight: 180,
+      frameWidth: 120,
+      frameHeight: 120,
       punch: 'smash',
       punchWidth: 90,
       anims: {
@@ -471,8 +472,8 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
     fx: {
       key: 'fx-caocao',
       url: 'sprites/caocao-fx.png',
-      frameWidth: 180,
-      frameHeight: 180,
+      frameWidth: 120,
+      frameHeight: 120,
       punch: 'slash',
       punchWidth: 90,
       anims: {
@@ -508,8 +509,8 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
     fx: {
       key: 'fx-zhenji',
       url: 'sprites/zhenji-fx.png',
-      frameWidth: 180,
-      frameHeight: 180,
+      frameWidth: 120,
+      frameHeight: 120,
       punch: 'whip',
       punchWidth: 90,
       anims: {
@@ -556,20 +557,46 @@ export function riderAnimKey(anim: RiderAnim): string {
   return `rider-${anim}`;
 }
 
-/** Queues every configured sheet and effect sheet. A failed load leaves the texture missing, and the match falls back to block figures. */
-export function preloadSprites(load: Phaser.Loader.LoaderPlugin): void {
-  for (const cfg of Object.values(SPRITE_CONFIGS)) {
+/** One file of a match's sheets: a spritesheet when `frame` is given, otherwise a plain image. */
+export interface SheetFile {
+  key: string;
+  url: string;
+  frame?: { width: number; height: number };
+}
+
+/**
+ * The sheets a match between two countries draws: the sprite and effect sheets of its ten characters (block figures for any
+ * without one), Ma Chao's cavalry only when Ma Chao plays, then the stadium, soldiers and ball.
+ */
+export function matchSheets(home: Country, away: Country): SheetFile[] {
+  const files: SheetFile[] = [];
+  const ids = [...getTeam(home), ...getTeam(away)].map((d) => d.id);
+  for (const id of ids) {
+    const cfg = SPRITE_CONFIGS[id];
     if (!cfg) continue;
-    load.spritesheet(cfg.key, cfg.url, { frameWidth: cfg.meta.frameWidth, frameHeight: cfg.meta.frameHeight });
-    if (cfg.fx) load.spritesheet(cfg.fx.key, cfg.fx.url, { frameWidth: cfg.fx.frameWidth, frameHeight: cfg.fx.frameHeight });
+    files.push({ key: cfg.key, url: cfg.url, frame: { width: cfg.meta.frameWidth, height: cfg.meta.frameHeight } });
+    if (cfg.fx) files.push({ key: cfg.fx.key, url: cfg.fx.url, frame: { width: cfg.fx.frameWidth, height: cfg.fx.frameHeight } });
   }
-  load.spritesheet(RIDER_SHEET.key, RIDER_SHEET.url, { frameWidth: RIDER_SHEET.meta.frameWidth, frameHeight: RIDER_SHEET.meta.frameHeight });
-  load.image(STADIUM_KEYS.bg, 'sprites/stadium-bg.png');
-  load.image(STADIUM_KEYS.grass, 'sprites/stadium-grass.png');
-  load.image(STADIUM_KEYS.fg, 'sprites/stadium-fg.png');
-  load.image(STADIUM_KEYS.goalPost, 'sprites/goal-post.png');
-  load.spritesheet(SOLDIER_SHEET.key, SOLDIER_SHEET.url, { frameWidth: SOLDIER_SHEET.meta.frameWidth, frameHeight: SOLDIER_SHEET.meta.frameHeight });
-  load.spritesheet(BALL_SHEET.key, BALL_SHEET.url, { frameWidth: BALL_SHEET.frameWidth, frameHeight: BALL_SHEET.frameHeight });
+  if (ids.includes('machao')) {
+    files.push({ key: RIDER_SHEET.key, url: RIDER_SHEET.url, frame: { width: RIDER_SHEET.meta.frameWidth, height: RIDER_SHEET.meta.frameHeight } });
+  }
+  files.push(
+    { key: STADIUM_KEYS.bg, url: 'sprites/stadium-bg.png' },
+    { key: STADIUM_KEYS.grass, url: 'sprites/stadium-grass.png' },
+    { key: STADIUM_KEYS.fg, url: 'sprites/stadium-fg.png' },
+    { key: STADIUM_KEYS.goalPost, url: 'sprites/goal-post.png' },
+    { key: SOLDIER_SHEET.key, url: SOLDIER_SHEET.url, frame: { width: SOLDIER_SHEET.meta.frameWidth, height: SOLDIER_SHEET.meta.frameHeight } },
+    { key: BALL_SHEET.key, url: BALL_SHEET.url, frame: { width: BALL_SHEET.frameWidth, height: BALL_SHEET.frameHeight } },
+  );
+  return files;
+}
+
+/** Queues these files on a loader. Phaser itself skips a key that is already in the texture manager. */
+export function queueSheets(load: Phaser.Loader.LoaderPlugin, files: SheetFile[]): void {
+  for (const f of files) {
+    if (f.frame) load.spritesheet(f.key, f.url, { frameWidth: f.frame.width, frameHeight: f.frame.height });
+    else load.image(f.key, f.url);
+  }
 }
 
 /** Registers the animations of every loaded sheet. Animations are global to the game, so existing keys are kept. */

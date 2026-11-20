@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { SHEET_LOAD_SCENE } from './SheetLoadScene';
 import { applyView, textResolution, type View } from './view';
 
 const FONT = '"Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif';
@@ -30,6 +31,7 @@ export class TitleScene extends Phaser.Scene {
 
   create(): void {
     (window as unknown as { __sgScene: string }).__sgScene = 'TitleScene';
+    if (!this.scene.isActive(SHEET_LOAD_SCENE)) this.scene.launch(SHEET_LOAD_SCENE);
     this.started = false;
     this.view = applyView(this, (v) => {
       this.view = v;

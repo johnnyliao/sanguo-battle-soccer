@@ -3,14 +3,15 @@ import { MatchScene } from './render/MatchScene';
 import { ResultScene } from './render/ResultScene';
 import { TeamSelectScene } from './render/TeamSelectScene';
 import { TitleScene } from './render/TitleScene';
+import { SheetLoadScene } from './render/SheetLoadScene';
 import { mountAudition } from './audio/audition';
 
 // `?quick` skips the menus and starts a default match directly (used by e2e/smoke.mjs).
 // Phaser auto-starts the first scene in the list, so MatchScene is moved to the front in that case.
 const quick = new URLSearchParams(window.location.search).has('quick');
 const scenes = quick
-  ? [MatchScene, TitleScene, TeamSelectScene, ResultScene]
-  : [TitleScene, TeamSelectScene, MatchScene, ResultScene];
+  ? [MatchScene, TitleScene, TeamSelectScene, ResultScene, SheetLoadScene]
+  : [TitleScene, TeamSelectScene, MatchScene, ResultScene, SheetLoadScene];
 
 // Phones: no context menu on long press.
 document.addEventListener('contextmenu', (e) => e.preventDefault());

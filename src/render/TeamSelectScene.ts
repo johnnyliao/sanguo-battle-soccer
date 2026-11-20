@@ -10,6 +10,7 @@ import {
   type Stats,
 } from '../data';
 import { SPECIAL_COOLDOWN_TICKS, TICK_HZ } from '../sim';
+import { SHEET_LOAD_SCENE, type SheetLoadScene } from './SheetLoadScene';
 import { applyView, textResolution, type View } from './view';
 
 const FONT = '"Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif';
@@ -153,6 +154,7 @@ export class TeamSelectScene extends Phaser.Scene {
       this.stage = r.stage;
       this.cursor = r.cursor;
       this.generalCursor = r.generalCursor;
+      if (r.stage === 'general') this.preloadMatch();
       this.refreshStage();
     } else {
       this.enterStage('own');
@@ -286,8 +288,14 @@ export class TeamSelectScene extends Phaser.Scene {
     } else {
       this.roster = getTeam(this.ownCountry);
       this.generalCursor = FW_SLOT;
+      this.preloadMatch();
     }
     this.refreshStage();
+  }
+
+  /** Both countries are chosen: the background loader starts this match's sheets. */
+  private preloadMatch(): void {
+    (this.scene.get(SHEET_LOAD_SCENE) as SheetLoadScene).queueMatch(this.ownCountry, this.oppCountry);
   }
 
   /** Header, hints, panels or list for the current stage. Does not change the cursors. */

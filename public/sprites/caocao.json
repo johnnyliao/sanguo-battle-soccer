@@ -1,8 +1,8 @@
 {
-  "frameWidth": 320,
-  "frameHeight": 273,
+  "frameWidth": 149,
+  "frameHeight": 127,
   "cols": 4,
   "rows": 6,
-  "anchorX": 150,
-  "anchorY": 249
+  "anchorX": 70,
+  "anchorY": 116
 }

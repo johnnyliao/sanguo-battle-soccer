@@ -29,7 +29,7 @@
 - 畫面 16:9 橫向，邏輯解析度 640×360，等比放大。
 - 音效：通用音 ZzFX 程式產生（踢球、攻擊、倒地、進球、哨音），原型不做 BGM。角色音效（2026-11-20 起，蜀、魏 10 人；吳國仍為通用音效）：src/audio/synth.ts（Web Audio 合成：噪音、濾波、FM、formant 吶喊）＋ characterSounds.ts（蜀、魏每人普攻、大招分段；2026-11-20 使用者要求移除所有吶喊），不用音檔；網址 ?sfx=1 為試聽頁。
 - 場地（2026-11-19）：src/render/stadium.ts — 草地 TileSprite、遠景營帳（視差）、遠端兩排正面士兵、近端背面士兵＋拒馬前景、金龍門柱球門（橫樑與繩網程式畫）、8 格轉動的球。素材由 tools/make-stadium-assets.mjs 產生。?nosoldiers=1 關掉士兵。
-- 美術：原型用色塊／簡單人形，頭上顯示名字；已有角色圖（張飛 11-19 重製版、關羽 11-20 第三版步行＋大招騎車，舊圖在 art-src/old）：關羽、張飛、趙雲、諸葛亮、馬超（含鐵騎）、張遼、司馬懿、許褚、曹操、甄姬（public/sprites，原圖在 art-src，用 tools/make-sprite.mjs 切（預設依連通區塊分格，--grid-cut 為舊固定格線）；白色衣甲加 --keep-white（封閉純白口袋另加 --clear-pockets、地面線穿過褲子造成透明縫加 --fill-line-gaps，許褚用了兩者），非 5 排加 --rows N）。特效圖黑底，用 ADD 混合疊加。
+- 美術：原型用色塊／簡單人形，頭上顯示名字；已有角色圖（張飛 11-19 重製版、關羽 11-20 第三版步行＋大招騎車，舊圖在 art-src/old）：關羽、張飛、趙雲、諸葛亮、馬超（含鐵騎）、張遼、司馬懿、許褚、曹操、甄姬（public/sprites，原圖在 art-src，用 tools/make-sprite.mjs 切（預設依連通區塊分格，--grid-cut 為舊固定格線）；白色衣甲加 --keep-white（封閉純白口袋另加 --clear-pockets、地面線穿過褲子造成透明縫加 --fill-line-gaps，許褚用了兩者），非 5 排加 --rows N）。特效圖黑底，用 ADD 混合疊加。載入（2026-11-20）：角色圖切成 frame 高約 2.2× displayHeight（make-sprite --scale），fx 120px 格；比賽只載上場兩國角色，選完國家後由 SheetLoadScene 在背景預載，MatchScene 有載入進度條。
 
 ### 規則
 - 亂鬥：可直接攻擊、擒抱、飛踢；有體力，歸零倒地 1.5 秒（2026-11-20 由 2.5 秒改短），起身回 50%；無犯規／越位／裁判。
