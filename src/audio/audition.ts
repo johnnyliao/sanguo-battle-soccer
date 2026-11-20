@@ -1,7 +1,7 @@
-// Hidden sound audition page (`?sfx=1`): one button per attack, shout and special stage of the Shu and Wei
+// Hidden sound audition page (`?sfx=1`): one button per attack and special stage of the Shu and Wei
 // characters, plus the generic ZzFX sounds. Plain DOM overlay; not linked from the game. Taps resume the
 // AudioContext (user gesture).
-import { cueBus, SHU_CHARS, SYNTH_RECIPES, WEI_CHARS, type SoundCharId } from './characterSounds';
+import { SHU_CHARS, SYNTH_RECIPES, WEI_CHARS, type SoundCharId } from './characterSounds';
 import { defaultZzfxPlay } from './AudioPlayer';
 import { SOUNDS } from './sounds';
 import { playRecipe } from './synth';
@@ -29,7 +29,7 @@ interface Stage {
 
 const STAGES: Record<SoundCharId, Stage[]> = {
   zhangfei: [
-    { label: '怒吼', cues: ['zhangfei.shout', 'zhangfei.roar'] },
+    { label: '怒吼', cues: ['zhangfei.roar'] },
     { label: '震球', cues: ['zhangfei.roarBall'] },
   ],
   guanyu: [
@@ -38,12 +38,12 @@ const STAGES: Record<SoundCharId, Stage[]> = {
     { label: '熄火', cues: ['guanyu.rideEnd'] },
   ],
   zhugeliang: [
-    { label: '集氣', cues: ['zhugeliang.shout', 'zhugeliang.beamCharge'] },
+    { label: '集氣', cues: ['zhugeliang.beamCharge'] },
     { label: '光彈', cues: ['zhugeliang.beamStrike'] },
     { label: '中斷', cues: ['zhugeliang.beamCancel'] },
   ],
   machao: [
-    { label: '出陣', cues: ['machao.shout', 'machao.cast'] },
+    { label: '出陣', cues: ['machao.cast'] },
     { label: '撞擊', cues: ['machao.riderHit'] },
   ],
   zhaoyun: [
@@ -52,28 +52,28 @@ const STAGES: Record<SoundCharId, Stage[]> = {
     { label: '回氣', cues: ['zhaoyun.lungeHeal'] },
   ],
   xuchu: [
-    { label: '虎守', cues: ['xuchu.shout', 'xuchu.tigerStart'] },
+    { label: '虎守', cues: ['xuchu.tigerStart'] },
     { label: '吞球', cues: ['xuchu.tigerSwallow'] },
     { label: '吐球', cues: ['xuchu.tigerSpit'] },
     { label: '震退', cues: ['xuchu.tigerRoar'] },
   ],
   caocao: [
-    { label: '七星', cues: ['caocao.shout', 'caocao.slashStart'] },
+    { label: '七星', cues: ['caocao.slashStart'] },
     { label: '揮刀×25', cues: [], run: playSlashSequence },
     { label: '回氣', cues: ['caocao.slashHeal'] },
   ],
   zhenji: [
-    { label: '冰雨(4 秒)', cues: ['zhenji.shout', 'zhenji.iceStart'] },
+    { label: '冰雨(4 秒)', cues: ['zhenji.iceStart'] },
     { label: '冰裂', cues: ['zhenji.icePulse'] },
     { label: '碎冰', cues: ['zhenji.iceEnd'] },
   ],
   simayi: [
-    { label: '後跳', cues: ['simayi.shout', 'simayi.leapStart'] },
+    { label: '後跳', cues: ['simayi.leapStart'] },
     { label: '飛行', cues: ['simayi.leapFly'] },
     { label: '落地', cues: ['simayi.leapLand', 'simayi.hush'] },
   ],
   zhangliao: [
-    { label: '遼來了', cues: ['zhangliao.shout', 'zhangliao.fear'] },
+    { label: '遼來了', cues: ['zhangliao.fear'] },
   ],
 };
 
@@ -91,14 +91,6 @@ function playSlashSequence(): void {
     }, i * SWING_GAP_MS);
   }
 }
-
-/** Alternative cries for the characters whose current shout is being compared (recipes `<id>.shoutA/B/C`). */
-const ALT_SHOUT_IDS: readonly SoundCharId[] = ['guanyu', 'machao', 'zhaoyun', ...WEI_CHARS];
-const ALT_SHOUTS: readonly { label: string; stage: string }[] = [
-  { label: 'A 低沉吼', stage: 'shoutA' },
-  { label: 'B 氣音喊', stage: 'shoutB' },
-  { label: 'C 短促爆喝', stage: 'shoutC' },
-];
 
 /** Same default as AudioPlayer.volume. */
 const VOLUME = 0.5;
@@ -134,7 +126,7 @@ function groupTitle(title: string): HTMLHeadingElement {
 function playCues(names: string[]): void {
   for (const name of names) {
     const recipe = SYNTH_RECIPES[name];
-    if (recipe) playRecipe(recipe, VOLUME, cueBus(name));
+    if (recipe) playRecipe(recipe, VOLUME);
   }
 }
 
@@ -150,9 +142,9 @@ export function mountAudition(parent: HTMLElement = document.body): HTMLElement 
   title.style.cssText = 'margin:0 0 8px;font-size:22px;';
   root.appendChild(title);
 
-  const groups: { title: string; ids: readonly SoundCharId[]; wei: boolean }[] = [
-    { title: '蜀國', ids: SHU_CHARS, wei: false },
-    { title: '魏國', ids: WEI_CHARS, wei: true },
+  const groups: { title: string; ids: readonly SoundCharId[] }[] = [
+    { title: '蜀國', ids: SHU_CHARS },
+    { title: '魏國', ids: WEI_CHARS },
   ];
   for (const group of groups) {
     root.appendChild(groupTitle(group.title));
@@ -160,14 +152,6 @@ export function mountAudition(parent: HTMLElement = document.body): HTMLElement 
       const sec = section(NAMES[id]);
       const row = document.createElement('div');
       row.appendChild(button('普攻', () => playCues([`${id}.attack`])));
-      const alts = group.wei || ALT_SHOUT_IDS.includes(id);
-      row.appendChild(button(group.wei ? '呼喊(預設)' : alts ? '呼喊(現行=C)' : '呼喊', () => playCues([`${id}.shout`])));
-      if (alts) {
-        for (const alt of ALT_SHOUTS) {
-          row.appendChild(button(alt.label, () => playCues([`${id}.${alt.stage}`])));
-        }
-      }
-      if (!group.wei) row.appendChild(button('舊呼喊', () => playCues([`${id}.shoutOld`])));
       for (const stage of STAGES[id]) {
         row.appendChild(button(stage.label, () => (stage.run ? stage.run() : playCues(stage.cues))));
       }

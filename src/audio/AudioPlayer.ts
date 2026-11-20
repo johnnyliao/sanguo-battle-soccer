@@ -1,5 +1,5 @@
 import { SOUNDS, soundsForEvent, type SimEvent, type SoundCue } from './sounds';
-import { cueBus, SYNTH_RECIPES } from './characterSounds';
+import { SYNTH_RECIPES } from './characterSounds';
 import { playRecipe, stopAllVoices } from './synth';
 
 export type PlayFn = (params: number[]) => void;
@@ -10,14 +10,11 @@ export type CharIdOf = (playerIdx: number) => string | undefined;
 /** Owner player index of a summon rider, or undefined when the rider is gone. */
 export type RiderOwnerOf = (riderId: number) => number | undefined;
 
-/** Minimum gap between two shouts of the same character. */
-export const SHOUT_GAP_MS = 1500;
 /** Minimum gap between two heal shimmers: Cao Cao's blade waves can heal several times a second. */
 export const HEAL_GAP_MS = 250;
 
 /** Minimum gap between two plays of the same cue (0 = no limit). */
 function minGapMs(name: string): number {
-  if (name.endsWith('.shout')) return SHOUT_GAP_MS;
   if (name === 'caocao.slashHeal') return HEAL_GAP_MS;
   return 0;
 }
@@ -36,7 +33,7 @@ export function defaultZzfxPlay(params: number[]): void {
 
 export function defaultSynthPlay(name: string, volume: number): void {
   const recipe = SYNTH_RECIPES[name];
-  if (recipe) playRecipe(recipe, volume, cueBus(name));
+  if (recipe) playRecipe(recipe, volume);
 }
 
 /**

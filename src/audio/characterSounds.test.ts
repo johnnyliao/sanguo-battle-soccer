@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AudioPlayer, HEAL_GAP_MS, SHOUT_GAP_MS } from './AudioPlayer';
-import { cueBus, SYNTH_RECIPES } from './characterSounds';
+import { AudioPlayer, HEAL_GAP_MS } from './AudioPlayer';
+import { SHU_CHARS, SYNTH_RECIPES, WEI_CHARS } from './characterSounds';
 import { SOUNDS, soundsForEvent } from './sounds';
 
 const CHARS = ['zhangfei', 'guanyu', 'zhugeliang', 'machao', 'zhaoyun', 'xuchu', 'zhenji'];
@@ -27,18 +27,15 @@ describe('character sound mapping', () => {
     expect(soundsForEvent({ type: 'attack', playerIdx: 0, kind: 'punch' })).toEqual([{ name: 'whoosh', volume: 1 }]);
   });
 
-  it('plays the shout for a Shu special, not the generic special', () => {
-    expect(soundsForEvent({ type: 'special', playerIdx: 1, kind: 'lob', name: 'x' }, 'guanyu')).toEqual([
-      { name: 'guanyu.shout', volume: 1 },
-    ]);
+  it('keeps a Shu special silent, not the generic special', () => {
+    expect(soundsForEvent({ type: 'special', playerIdx: 1, kind: 'lob', name: 'x' }, 'guanyu')).toEqual([]);
     expect(soundsForEvent({ type: 'special', playerIdx: 0, kind: 'pierce', name: 'x' }, 'sunce')).toEqual([
       { name: 'special', volume: 1 },
     ]);
   });
 
-  it('plays the horn cast with the shout for Ma Chao', () => {
+  it('plays the horn cast for Ma Chao', () => {
     expect(soundsForEvent({ type: 'special', playerIdx: 3, kind: 'straight', name: 'x' }, 'machao')).toEqual([
-      { name: 'machao.shout', volume: 1 },
       { name: 'machao.cast', volume: 1 },
     ]);
   });
@@ -107,13 +104,20 @@ describe('Wei character sound mapping', () => {
     }
   });
 
-  it('plays the shout for every Wei special activation', () => {
+  it('plays no sound for a Wei special (its start event carries the sound)', () => {
     for (const charId of WEI) {
-      expect(names(charId, { type: 'special', playerIdx: 0, kind: 'pierce', name: 'x' }), charId).toEqual([
-        `${charId}.shout`,
-      ]);
+      expect(names(charId, { type: 'special', playerIdx: 0, kind: 'pierce', name: 'x' }), charId).toEqual([]);
     }
   });
+
+  it('plays no shout for a special of any Shu or Wei character, and no shout recipe exists', () => {
+    for (const charId of [...SHU_CHARS, ...WEI_CHARS]) {
+      const cues = names(charId, { type: 'special', playerIdx: 0, kind: 'pierce', name: 'x' });
+      expect(cues.filter((n) => /shout/i.test(n)), charId).toEqual([]);
+    }
+    expect(Object.keys(SYNTH_RECIPES).filter((k) => /shout/i.test(k))).toEqual([]);
+  });
+
 
   it('maps each Xu Chu tiger event to its stage', () => {
     const playerIdx = 0;
@@ -161,10 +165,7 @@ describe('Wei character sound mapping', () => {
     ]);
   });
 
-  it('maps Zhang Liao fear to its drone (the shout comes from the special event)', () => {
-    expect(names('zhangliao', { type: 'special', playerIdx: 0, kind: 'straight', name: 'x' })).toEqual([
-      'zhangliao.shout',
-    ]);
+  it('maps Zhang Liao fear to its drone', () => {
     expect(names('zhangliao', { type: 'fear', playerIdx: 0, victimIdxs: [] })).toEqual(['zhangliao.fear']);
   });
 
@@ -211,49 +212,6 @@ describe('Wei character sound mapping', () => {
     }
     expect(mapped).toBeGreaterThan(0);
   });
-
-  it('gives every Wei character its shouts, with the bark (C) as the default for all five', () => {
-    for (const charId of WEI) {
-      for (const alt of ['shoutA', 'shoutB', 'shoutC']) {
-        expect(SYNTH_RECIPES[`${charId}.${alt}`], `${charId}.${alt}`).toBeTypeOf('function');
-        expect(cueBus(`${charId}.${alt}`)).toBe('shout');
-      }
-      expect(SYNTH_RECIPES[`${charId}.shout`], charId).toBeTypeOf('function');
-    }
-    expect(SYNTH_RECIPES['caocao.shout']).toBe(SYNTH_RECIPES['caocao.shoutC']);
-    expect(SYNTH_RECIPES['zhenji.shout']).toBe(SYNTH_RECIPES['zhenji.shoutC']);
-    expect(SYNTH_RECIPES['simayi.shout']).toBe(SYNTH_RECIPES['simayi.shoutC']);
-    expect(SYNTH_RECIPES['zhangliao.shout']).toBe(SYNTH_RECIPES['zhangliao.shoutC']);
-    expect(SYNTH_RECIPES['xuchu.shout']).toBe(SYNTH_RECIPES['xuchu.shoutC']);
-  });
-
-  it('routes the slash and ice cues to the normal bus', () => {
-    expect(cueBus('caocao.slashSwing')).toBe('sfx');
-    expect(cueBus('zhenji.iceStart')).toBe('sfx');
-  });
-});
-
-describe('battle cry recipes', () => {
-  it('keeps the old shout as shoutOld for every Shu character', () => {
-    for (const charId of CHARS.slice(0, 5)) {
-      expect(SYNTH_RECIPES[`${charId}.shoutOld`], charId).toBeTypeOf('function');
-    }
-  });
-
-  it('routes only the new shouts to the shout bus', () => {
-    expect(cueBus('zhangfei.shout')).toBe('shout');
-    expect(cueBus('zhangfei.shoutOld')).toBe('sfx');
-    expect(cueBus('zhangfei.roar')).toBe('sfx');
-  });
-
-  it('gives guanyu, machao and zhaoyun three alternative shouts on the shout bus', () => {
-    for (const charId of ['guanyu', 'machao', 'zhaoyun']) {
-      for (const alt of ['shoutA', 'shoutB', 'shoutC']) {
-        expect(SYNTH_RECIPES[`${charId}.${alt}`], `${charId}.${alt}`).toBeTypeOf('function');
-        expect(cueBus(`${charId}.${alt}`)).toBe('shout');
-      }
-    }
-  });
 });
 
 describe('AudioPlayer character cues', () => {
@@ -269,25 +227,6 @@ describe('AudioPlayer character cues', () => {
     player.handleEvents([{ type: 'attack', playerIdx: 0, kind: 'punch' }]);
     expect(synth).not.toHaveBeenCalled();
     expect(play.mock.calls[0][0].slice(1)).toEqual(SOUNDS.whoosh.slice(1));
-  });
-
-  it('throttles a character shout to once per gap', () => {
-    const { synth, player, clock } = setup();
-    const special = { type: 'special', playerIdx: 1, kind: 'lob', name: 'x' };
-    player.handleEvents([special], charOf);
-    clock.t = SHOUT_GAP_MS - 1;
-    player.handleEvents([special], charOf);
-    expect(synth.mock.calls.filter((c) => c[0] === 'guanyu.shout')).toHaveLength(1);
-    clock.t = SHOUT_GAP_MS;
-    player.handleEvents([special], charOf);
-    expect(synth.mock.calls.filter((c) => c[0] === 'guanyu.shout')).toHaveLength(2);
-  });
-
-  it('keeps the throttle per character', () => {
-    const { synth, player } = setup();
-    player.handleEvents([{ type: 'special', playerIdx: 1, kind: 'lob', name: 'x' }], charOf);
-    player.handleEvents([{ type: 'special', playerIdx: 2, kind: 'beam', name: 'x' }], charOf);
-    expect(synth.mock.calls.map((c) => c[0])).toEqual(['guanyu.shout', 'zhugeliang.shout']);
   });
 
   it('throttles Cao Cao heal shimmers to one per 250 ms', () => {

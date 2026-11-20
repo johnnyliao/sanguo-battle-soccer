@@ -37,46 +37,27 @@ function sharedContext(): AudioContext | null {
   return shared;
 }
 
-/** `shout` is the battle-cry bus: hard limiter and +6 dB makeup. `sfx` is the normal master. */
-export type Bus = 'sfx' | 'shout';
-
 /** Per-call master: a gain at `volume` into a limiter-like compressor, then the output. */
-export function masterChain(
-  ac: AudioContext | OfflineAudioContext,
-  volume: number,
-  bus: Bus = 'sfx',
-): { input: GainNode; comp: DynamicsCompressorNode } {
+export function masterChain(ac: AudioContext | OfflineAudioContext, volume: number): { input: GainNode; comp: DynamicsCompressorNode } {
   const comp = ac.createDynamicsCompressor();
-  if (bus === 'shout') {
-    comp.threshold.value = -6;
-    comp.knee.value = 0;
-    comp.ratio.value = 20;
-    comp.attack.value = 0.003;
-    comp.release.value = 0.06;
-  } else {
-    comp.threshold.value = -6;
-    comp.knee.value = 3;
-    comp.ratio.value = 12;
-    comp.attack.value = 0.002;
-    comp.release.value = 0.1;
-  }
-  // The compressor's automatic makeup puts loud peaks near 0 dBFS, so the shout bus is trimmed to a -2.5 dBFS ceiling.
-  const trim = ac.createGain();
-  trim.gain.value = bus === 'shout' ? 0.75 : 1;
-  comp.connect(trim).connect(ac.destination);
+  comp.threshold.value = -6;
+  comp.knee.value = 3;
+  comp.ratio.value = 12;
+  comp.attack.value = 0.002;
+  comp.release.value = 0.1;
+  comp.connect(ac.destination);
   const input = ac.createGain();
-  // The shout bus is made hot so its compressor works hard and sets the level.
-  input.gain.value = bus === 'shout' ? volume * 2 : volume;
+  input.gain.value = volume;
   input.connect(comp);
   return { input, comp };
 }
 
 /** Plays a recipe on the shared context at `volume` (0..1). Returns null when Web Audio is unavailable. */
-export function playRecipe(recipe: Recipe, volume: number, bus: Bus = 'sfx'): Voice | null {
+export function playRecipe(recipe: Recipe, volume: number): Voice | null {
   const ac = sharedContext();
   if (!ac) return null;
   if (ac.state === 'suspended') void ac.resume();
-  const { input, comp } = masterChain(ac, volume, bus);
+  const { input, comp } = masterChain(ac, volume);
   recipe(ac, input, ac.currentTime + 0.01);
   const voice: Voice = {
     stop: () => {
@@ -175,11 +156,6 @@ export function noiseBurst(ac: BaseAudioContext, out: AudioNode, o: NoiseOpts): 
   src.stop(o.t0 + o.dur + 0.02);
 }
 
-/** A soft breath (the 'h' of a shout). */
-export function breath(ac: BaseAudioContext, out: AudioNode, t0: number, dur: number, peak: number): void {
-  noiseBurst(ac, out, { t0, dur, peak, env: PLUCK, filter: 'bandpass', f: 1400, q: 0.8 });
-}
-
 /** A slow sine wobble added into `target` (a gain or frequency param). `depth` is the swing in the param's units. */
 export function wobble(ac: BaseAudioContext, target: AudioParam, rateHz: number, depth: number, t0: number, dur: number): void {
   const osc = ac.createOscillator();
@@ -269,7 +245,7 @@ export interface WarCryOpts {
   vowels: readonly [WarVowel, WarVowel];
   switchAt?: number;
   onset: WarOnset;
-  /** Level into the saturator. The shout bus limiter sets the final level. */
+  /** Level into the saturator. The master compressor sets the final level. */
   peak: number;
   /** Saturation drive, 0..1. */
   grit: number;
