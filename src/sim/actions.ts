@@ -64,6 +64,13 @@ import {
   RAMPAGE_SPEED_MULT,
   RAMPAGE_TICKS,
   RECOVER_TICKS,
+  RIDE_CONTACT_PAD,
+  RIDE_HITSTUN_TICKS,
+  RIDE_LANE_HALF,
+  RIDE_PUSH_FORWARD,
+  RIDE_PUSH_SIDE,
+  RIDE_SPEED,
+  RIDE_TICKS,
   ROAR_FORWARD,
   ROAR_KNOCK_SPEED,
   ROAR_RADIUS,
@@ -201,6 +208,9 @@ export function updateAction(state: GameState, p: Player, input: InputFrame): vo
       break;
     case 'leap':
       updateLeap(state, p);
+      break;
+    case 'ride':
+      updateRide(state, p);
       break;
   }
 }
@@ -471,7 +481,7 @@ function releaseCharge(state: GameState, p: Player, input: InputFrame): void {
 /**
  * Buffered L press: starts the special if a press is buffered, the match is in play, and it is ready (cooldown 0,
  * enough stamina). A roar (Zhang Fei) and a fear (Zhang Liao) are instant. Every other special needs the ball unless
- * its character has specialNoBall; a rampage, lunge, beam or leap starts at once, and a summon keeps the ball.
+ * its character has specialNoBall; a rampage, lunge, beam, leap or ride starts at once, and a summon keeps the ball.
  * A special that cannot start yet keeps the buffer. Returns true if it started.
  */
 function trySpecial(state: GameState, p: Player, input: InputFrame): boolean {
@@ -495,6 +505,7 @@ function trySpecial(state: GameState, p: Player, input: InputFrame): boolean {
   else if (p.specialMode === 'leap') startLeap(state, p);
   else if (p.specialMode === 'tiger') startTiger(state, p);
   else if (p.specialMode === 'slash') startSlash(state, p);
+  else if (p.specialMode === 'ride') startRide(state, p);
   else startRampage(state, p);
   return true;
 }
@@ -686,6 +697,127 @@ function leapVictim(state: GameState, p: Player, v: Player): void {
   }
 
   state.events.push({ type: 'hit', attackerIdx: p.idx, victimIdx: v.idx, kind: 'special', damage: cost });
+  if (down) state.events.push({ type: 'down', playerIdx: v.idx });
+}
+
+/**
+ * Guan Yu's ride (騎士衝擊): a constant-speed motorcycle dash of RIDE_DISTANCE along his facing (the attack direction when
+ * he has none), with or without the ball. He is invincible for the whole dash and any ball stays at his feet.
+ */
+function startRide(state: GameState, p: Player): void {
+  const len = Math.sqrt(p.facingX * p.facingX + p.facingY * p.facingY);
+  if (len > 0) {
+    p.facingX /= len;
+    p.facingY /= len;
+  } else {
+    p.facingX = attackDir(state, p.team);
+    p.facingY = 0;
+  }
+  p.stamina -= SPECIAL_STAMINA_COST;
+  p.specialCooldown = SPECIAL_COOLDOWN_TICKS;
+  p.chargeTicks = 0;
+  p.rideHits = [];
+  p.action = 'ride';
+  p.actionTimer = RIDE_TICKS;
+  p.vx = p.facingX * RIDE_SPEED;
+  p.vy = p.facingY * RIDE_SPEED;
+  state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
+  state.events.push({ type: 'rideStart', playerIdx: p.idx, dirX: p.facingX, dirY: p.facingY });
+}
+
+/**
+ * One ride tick: the velocity stays fixed and input is ignored. After moving, the bike hits its lane (see rideHitLane).
+ * A goal inside the mouth with the ball scores as a lunge does. The ride ends when its timer runs out, at the field edge,
+ * or after a goal. When the phase leaves play it also ends (rideEnd is still reported, like a lunge).
+ */
+function updateRide(state: GameState, p: Player): void {
+  if (state.match.phase !== 'play') {
+    toNormal(p);
+    state.events.push({ type: 'rideEnd', playerIdx: p.idx });
+    return;
+  }
+  const nextX = p.x + p.vx * DT;
+  const nextY = p.y + p.vy * DT;
+  const atEdge = nextX < 0 || nextX > FIELD_W || nextY < 0 || nextY > FIELD_D;
+  const side: 0 | 1 = attackDir(state, p.team) === 1 ? 1 : 0;
+  const mouth = goalMouth(side);
+  const onGoalLine = side === 1 ? nextX >= FIELD_W : nextX <= 0;
+  const inMouth = nextY >= mouth.yMin + BALL_RADIUS && nextY <= mouth.yMax - BALL_RADIUS;
+  integrate(p);
+  p.actionTimer--;
+  rideHitLane(state, p);
+  if (onGoalLine && inMouth && state.ball.ownerIdx === p.idx) {
+    ballIntoGoal(state, p, side, p.vx, p.vy);
+    endRide(state, p);
+  } else if (atEdge || p.actionTimer <= 0) {
+    endRide(state, p);
+  }
+}
+
+/** Back to normal play, with the ride speed scaled down to the player's normal top speed, keeping its direction. */
+function endRide(state: GameState, p: Player): void {
+  const maxSpeed = maxSpeedOf(p);
+  const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+  if (speed > maxSpeed) {
+    p.vx = (p.vx / speed) * maxSpeed;
+    p.vy = (p.vy / speed) * maxSpeed;
+  }
+  toNormal(p);
+  state.events.push({ type: 'rideEnd', playerIdx: p.idx });
+}
+
+/**
+ * Bike hits: every opponent that is not down, recovering or invincible, and not hit yet this dash, is hit once when its
+ * centre is within RIDE_LANE_HALF of the ride line and within the rider's radius + RIDE_CONTACT_PAD of him along the ride.
+ */
+function rideHitLane(state: GameState, p: Player): void {
+  for (const v of state.players) {
+    if (v.team === p.team || v.action === 'down' || v.action === 'recover' || isInvincible(v)) continue;
+    if (p.rideHits.includes(v.idx)) continue;
+    const dx = v.x - p.x;
+    const dy = v.y - p.y;
+    // Signed distance from the ride line, positive on the left of the ride direction (-facingY, facingX).
+    const lateral = dy * p.facingX - dx * p.facingY;
+    const along = dx * p.facingX + dy * p.facingY;
+    if (Math.abs(lateral) > RIDE_LANE_HALF) continue;
+    if (Math.abs(along) > p.radius + RIDE_CONTACT_PAD) continue;
+    p.rideHits.push(v.idx);
+    rideBump(state, p, v, lateral);
+  }
+}
+
+/**
+ * One ride victim: pushed away from the ride line and forward along the ride (a victim exactly on the line goes to the side
+ * by idx parity), stunned or knocked down when his stamina empties, and loses the ride's stamina share. He drops the ball
+ * if holding it, and a beam channel is cancelled.
+ */
+function rideBump(state: GameState, p: Player, v: Player, lateral: number): void {
+  reportCastCancel(state, v);
+  v.chargeTicks = 0;
+  const side = lateral > 0 ? 1 : lateral < 0 ? -1 : v.idx % 2 === 0 ? 1 : -1;
+  const massMult = Math.min(1.5, Math.max(0.7, p.mass / v.mass));
+  const vx = (-p.facingY * side * RIDE_PUSH_SIDE + p.facingX * RIDE_PUSH_FORWARD) * massMult;
+  const vy = (p.facingX * side * RIDE_PUSH_SIDE + p.facingY * RIDE_PUSH_FORWARD) * massMult;
+  v.vx = vx;
+  v.vy = vy;
+
+  const cost = p.specialBumpPct !== null ? p.specialBumpPct * v.maxStamina : RAMPAGE_BUMP_STAMINA;
+  v.stamina = Math.max(0, v.stamina - cost);
+  let down = false;
+  if (v.stamina <= 0) {
+    setDown(v, DOWN_TICKS_EXHAUSTED);
+    down = true;
+  } else {
+    v.action = 'hitstun';
+    v.actionTimer = RIDE_HITSTUN_TICKS;
+  }
+
+  state.events.push({ type: 'hit', attackerIdx: p.idx, victimIdx: v.idx, kind: 'special', damage: cost });
+  if (state.ball.ownerIdx === v.idx) {
+    const len = Math.sqrt(vx * vx + vy * vy);
+    knockLooseBall(state, p, v, vx / len, vy / len);
+  }
+  state.events.push({ type: 'rideHit', playerIdx: p.idx, victimIdx: v.idx, x: p.x, y: p.y });
   if (down) state.events.push({ type: 'down', playerIdx: v.idx });
 }
 
@@ -1600,9 +1732,9 @@ function findVictim(
   return undefined;
 }
 
-/** Invincible players (rampaging, lunging or leaping) cannot be hit, tackled, stolen from, roared at, or pierced by a special. */
+/** Invincible players (rampaging, lunging, leaping or riding) cannot be hit, tackled, stolen from, roared at, or pierced by a special. */
 export function isInvincible(p: Player): boolean {
-  return p.rampageTicks > 0 || p.action === 'lunge' || p.action === 'leap';
+  return p.rampageTicks > 0 || p.action === 'lunge' || p.action === 'leap' || p.action === 'ride';
 }
 
 /**
@@ -1611,8 +1743,8 @@ export function isInvincible(p: Player): boolean {
  */
 export function applyRampageBumps(state: GameState): void {
   for (const r of state.players) {
-    // A leap hits only on landing (see landLeap), so a leaper bumps nobody in the air.
-    if (!isInvincible(r) || r.action === 'leap') continue;
+    // A leap hits only on landing (see landLeap), and a ride hits only its lane (see rideHitLane), so neither bumps here.
+    if (!isInvincible(r) || r.action === 'leap' || r.action === 'ride') continue;
     for (const o of state.players) {
       if (o.team === r.team || o.action === 'down' || o.bumpCooldown > 0 || isInvincible(o)) continue;
       const dx = o.x - r.x;

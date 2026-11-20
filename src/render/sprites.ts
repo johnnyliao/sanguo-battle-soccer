@@ -6,13 +6,14 @@ import type Phaser from 'phaser';
  * copies that JSON, so re-run the tool and update the numbers here if the sheet changes.
  */
 
-/** `rampage` loops while invincible with the ball; `shot` is the special ball's launch pose; `lunge` is the dash pose; `cast` is the beam channel; `land` is a leap's landing crouch (Simayi only); `slashLoop` is Cao Cao's blade loop while his slash buff runs. */
-export type SpriteAnim = 'idle' | 'run' | 'attack' | 'charge' | 'special' | 'cast' | 'rampage' | 'shot' | 'hitstun' | 'down' | 'dive' | 'recover' | 'lunge' | 'land' | 'slashLoop';
+/** `rampage` loops while invincible with the ball; `shot` is the special ball's launch pose; `lunge` is the dash pose (Guan Yu's ride loop); `dismount` is Guan Yu's pose as his ride ends; `cast` is the beam channel; `land` is a leap's landing crouch (Simayi only); `slashLoop` is Cao Cao's blade loop while his slash buff runs. */
+export type SpriteAnim = 'idle' | 'run' | 'attack' | 'charge' | 'special' | 'cast' | 'rampage' | 'shot' | 'hitstun' | 'down' | 'dive' | 'recover' | 'lunge' | 'dismount' | 'land' | 'slashLoop';
 
 /**
  * Effects played over the character (see MatchScene): a spear thrust or fan slash, the lunge's dragon, an impact burst,
  * for Zhuge Liang's beam the channel circle, the energy ball and the impact, for Ma Chao's summon the call and the
- * smoke a rider leaves when it vanishes, for Guan Yu's rampage the aura and exhaust, his special ball's fire dragon,
+ * smoke a rider leaves when it vanishes, for Guan Yu's ride the exhaust behind the bike, the fire dragon around him, the flame ring at his start,
+ * the fire trail behind him and the impact on each victim,
  * and for Zhang Fei's roar the charge and the soundwave, for Zhang Liao's fear the ghost burst over him, the chains ring and
  * the '!' icon over each feared player, and the chains' shatter when the fear ends. For Simayi's leap: the feather fan slash
  * (punch), the smoke at his start, the crow flock trailing him in the air, the green ring where he lands, and the green burst on each victim.
@@ -31,7 +32,6 @@ export type FxAnim =
   | 'impact'
   | 'summon'
   | 'smoke'
-  | 'aura'
   | 'exhaust'
   | 'dragon'
   | 'wave'
@@ -110,7 +110,7 @@ export interface RiderSheet {
   anims: Record<RiderAnim, SpriteAnimDef>;
 }
 
-const GUANYU_META: SpriteMeta = { frameWidth: 263, frameHeight: 284, cols: 4, rows: 5, anchorX: 172, anchorY: 217 };
+const GUANYU_META: SpriteMeta = { frameWidth: 335, frameHeight: 281, cols: 4, rows: 6, anchorX: 184, anchorY: 239 };
 const ZHANGFEI_META: SpriteMeta = { frameWidth: 284, frameHeight: 206, cols: 4, rows: 5, anchorX: 142, anchorY: 199 };
 const ZHAOYUN_META: SpriteMeta = { frameWidth: 211, frameHeight: 204, cols: 4, rows: 5, anchorX: 94, anchorY: 191 };
 const ZHUGELIANG_META: SpriteMeta = { frameWidth: 211, frameHeight: 197, cols: 4, rows: 5, anchorX: 98, anchorY: 188 };
@@ -152,22 +152,22 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
     key: 'sprite-guanyu',
     url: 'sprites/guanyu.png',
     meta: GUANYU_META,
-    displayHeight: 89,
+    displayHeight: 77,
     shadowScale: 1.6,
     anims: {
       idle: { frames: [at(0, 0), at(0, 1), at(0, 2), at(0, 3)], fps: 6, repeat: -1 },
       run: { frames: [at(1, 0), at(1, 1), at(1, 2), at(1, 3)], fps: 10, repeat: -1 },
       attack: { frames: [at(2, 0), at(2, 1), at(2, 2), at(2, 3)], fps: 14, repeat: 0 },
-      charge: { frames: [at(3, 0)], fps: 1, repeat: -1 },
+      charge: { frames: [at(2, 0)], fps: 1, repeat: -1 },
       cast: { frames: [at(3, 0)], fps: 1, repeat: -1 },
-      special: { frames: [at(3, 0), at(3, 1)], fps: 8, repeat: 0 },
-      rampage: { frames: [at(3, 2)], fps: 8, repeat: -1 },
-      lunge: { frames: [at(3, 2)], fps: 8, repeat: -1 },
-      shot: { frames: [at(3, 3)], fps: 1, repeat: -1 },
-      dive: { frames: [at(4, 0)], fps: 1, repeat: -1 },
-      hitstun: { frames: [at(4, 0)], fps: 1, repeat: -1 },
-      down: { frames: [at(4, 1), at(4, 2)], fps: 6, repeat: 0 },
-      recover: { frames: [at(4, 3)], fps: 1, repeat: -1 },
+      special: { frames: [at(3, 0), at(3, 1), at(3, 2)], fps: 12, repeat: 0 },
+      lunge: { frames: [at(4, 0), at(4, 1), at(4, 2)], fps: 10, repeat: -1 },
+      dismount: { frames: [at(4, 3)], fps: 1, repeat: -1 },
+      shot: { frames: [at(2, 3)], fps: 1, repeat: -1 },
+      dive: { frames: [at(5, 1)], fps: 1, repeat: -1 },
+      hitstun: { frames: [at(5, 0)], fps: 1, repeat: -1 },
+      down: { frames: [at(5, 1), at(5, 2)], fps: 6, repeat: 0 },
+      recover: { frames: [at(5, 3)], fps: 1, repeat: -1 },
     },
     fx: {
       key: 'fx-guanyu',
@@ -178,10 +178,11 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
       punchWidth: 90,
       anims: {
         slash: { frames: [fxat(0, 0), fxat(0, 1), fxat(0, 2), fxat(0, 3)], fps: 20, repeat: 0 },
-        exhaust: { frames: [fxat(1, 0), fxat(1, 1), fxat(1, 2), fxat(1, 3)], fps: 12, repeat: -1 },
-        aura: { frames: [fxat(2, 0), fxat(2, 1), fxat(2, 2), fxat(2, 3)], fps: 10, repeat: -1 },
+        ring: { frames: [fxat(1, 0), fxat(1, 1), fxat(1, 2), fxat(1, 3)], fps: 10, repeat: 0 },
+        exhaust: { frames: [fxat(2, 0), fxat(2, 1), fxat(2, 2), fxat(2, 3)], fps: 12, repeat: -1 },
         dragon: { frames: [fxat(3, 0), fxat(3, 1), fxat(3, 2), fxat(3, 3)], fps: 12, repeat: -1 },
-        impact: { frames: [fxat(4, 0), fxat(4, 1), fxat(4, 2), fxat(4, 3)], fps: 14, repeat: 0 },
+        trail: { frames: [fxat(4, 0), fxat(4, 1), fxat(4, 2), fxat(4, 3)], fps: 14, repeat: 0 },
+        impact: { frames: [fxat(5, 0), fxat(5, 1), fxat(5, 2), fxat(5, 3)], fps: 14, repeat: 0 },
       },
     },
   },

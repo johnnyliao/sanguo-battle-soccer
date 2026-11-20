@@ -11,7 +11,7 @@ function ch(
   stats: [number, number, number, number, number],
   specialName: string,
   specialKind: SpecialKind,
-  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger' | 'slash' = 'rampage',
+  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger' | 'slash' | 'ride' = 'rampage',
   opts: { noBall?: boolean; bumpPct?: number } = {},
 ): CharacterDef {
   const [power, speed, stamina, technique, defense] = stats;
@@ -28,7 +28,7 @@ function ch(
 
 export const RAW_CHARACTERS: CharacterDef[] = [
   ch('zhangfei', '張飛', 'shu', 'GK', 'L', [9, 3, 10, 2, 9], '當陽怒吼', 'pierce', 'roar', { noBall: true }),
-  ch('guanyu', '關羽', 'shu', 'DF', 'L', [9, 5, 8, 4, 8], '騎士衝擊', 'lob', 'rampage', { noBall: true, bumpPct: 0.15 }),
+  ch('guanyu', '關羽', 'shu', 'DF', 'L', [9, 5, 8, 4, 8], '騎士衝擊', 'lob', 'ride', { noBall: true, bumpPct: 0.2 }),
   ch('zhugeliang', '諸葛亮', 'shu', 'MF', 'S', [3, 5, 4, 10, 4], '破魔光彈', 'beam', 'beam', { noBall: true }),
   ch('machao', '馬超', 'shu', 'MF', 'M', [7, 9, 6, 6, 4], '西涼鐵騎', 'straight', 'summon', { noBall: true, bumpPct: 0.1 }),
   ch('zhaoyun', '趙雲', 'shu', 'FW', 'M', [7, 9, 6, 8, 2], '遊龍穿刺', 'pierce', 'lunge', { noBall: true, bumpPct: 0.2 }),

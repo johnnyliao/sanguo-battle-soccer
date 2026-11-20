@@ -77,6 +77,21 @@ export const LUNGE_TICKS = 15;
 export const LUNGE_DISTANCE = 200;
 /** Constant lunge speed in px per second (distance per tick, times TICK_HZ). */
 export const LUNGE_SPEED = (LUNGE_DISTANCE / LUNGE_TICKS) * TICK_HZ;
+/** Guan Yu's ride (騎士衝擊): duration in ticks (0.5 s) and total distance in px along his facing. */
+export const RIDE_TICKS = 30;
+export const RIDE_DISTANCE = 260;
+/** Constant ride speed in px per second (distance per tick, times TICK_HZ). */
+export const RIDE_SPEED = (RIDE_DISTANCE / RIDE_TICKS) * TICK_HZ;
+/** An opponent whose centre is within this many px of the ride line is in the lane and gets hit. */
+export const RIDE_LANE_HALF = 45;
+/** The bike touches an opponent this many px beyond the rider's body radius, measured along the ride direction. */
+export const RIDE_CONTACT_PAD = 20;
+/** Sideways push speed in px per second, away from the ride line. */
+export const RIDE_PUSH_SIDE = 300;
+/** Forward push speed in px per second, along the ride direction. */
+export const RIDE_PUSH_FORWARD = 150;
+/** Stun for a ride victim who is not knocked down (0.3 s). */
+export const RIDE_HITSTUN_TICKS = 18;
 /** Zhuge Liang's beam (破魔光彈): channel time before the beam strikes one random opponent (0.5 s). */
 export const BEAM_CAST_TICKS = 30;
 /** Share of the beam victim's maxStamina that the beam takes. */

@@ -86,7 +86,23 @@
 - [x] 1. sim：mode 'slash' + 測試 — worker — verify: vitest
 - [x] 2. AI：放招時機 — worker（與 3 平行）
 - [x] 3. 切圖、sprites.ts、MatchScene 特效、e2e — worker（me 看截圖）
-- [ ] 4. CLAUDE.md、驗證 → commit、push、部署、正式網址 e2e — me＋worker
+- [x] 4. CLAUDE.md、驗證 → commit、push、部署、正式網址 e2e — me＋worker
 
 # Steps 5b（使用者 11-20：張遼太強）
 - [x] 5. 張遼「遼來了」改成以自身為中心半徑 FEAR_RADIUS=200px（不再全體）；AI 改成範圍內有敵方持球者或 ≥2 人才放；preview e2e 的「5 人被定身」改成範圍內人數；特效爆圈大小對應範圍 — worker（已派；e2e 檢查由曹操畫面 worker 放寬為 ≥1）
+
+---
+# Goal 6（2026-11-20 晚）重做關羽
+平常步行（新圖），大招才騎車：騎車往前衝一小段，上下有範圍，碰到的敵人被往外推擠、扣 20%；新特效。完成後 commit、push、部署、正式網址 e2e。
+
+# Constraints / decisions（未指定處由 me 先定，已告知使用者）
+- 新 mode 'ride'（取代關羽的 rampage；其他國家 rampage 不變）：不需持球；衝刺 260px／30 tick，全程無敵；持球則球跟著，門框內過球門線直接得分（同 lunge）。
+- 碰撞帶：路徑上下 ±45px；碰到的敵人往遠離關羽路徑的方向推開（側向為主＋往前），扣 20%（bumpPct 0.2），硬直 18 tick，不倒地；每人一次。
+- 舊 3 秒 rampage、J 必殺球拿掉。舊圖移到 art-src/old/*-v2.png。切圖：--rows 6 --keep-white --clear-pockets。
+- 圖：art-src/guanyu-sheet.png（1024×1536，6×4：待機、走、攻擊、第 4 排（吼、上車、跳上、騎）、第 5 排（翹孤輪、騎刀前指、騎、下車）、受擊/倒地/起身）；art-src/guanyu-fx.png（1024×1536，6×4，256px 格：綠色刀弧、綠焰圈、排氣火焰、綠龍環、地面火痕、命中爆）。
+
+# Steps 6
+- [x] 1. sim：mode 'ride' + 測試 — worker — verify: vitest
+- [x] 2. AI — worker（與 3 平行）
+- [x] 3. 切圖、fx、sprites.ts、MatchScene、e2e — worker（me 看截圖）
+- [ ] 4. CLAUDE.md、驗證 → commit、push、部署、正式網址 e2e — me＋worker

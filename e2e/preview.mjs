@@ -24,7 +24,7 @@ const shot = (name) => resolve(outDir, name);
 // Expected sim event per preview: the special fires (special), then its effect.
 const CASES = [
   { id: 'zhangfei', name: '張飛', slot: 0, effect: 'roar' },
-  { id: 'guanyu', name: '關羽', slot: 1, effect: 'specialShot' },
+  { id: 'guanyu', name: '關羽', slot: 1, effect: 'rideStart' },
   { id: 'zhugeliang', name: '諸葛亮', slot: 2, effect: 'beamStrike' },
   { id: 'machao', name: '馬超', slot: 3, effect: 'riderSpawn' },
   { id: 'zhaoyun', name: '趙雲', slot: 4, effect: 'lungeStart' },
@@ -105,6 +105,18 @@ const stageTigerShot = () => {
   b.vy = 0;
   b.vz = 0;
   return { shooter: shooter.idx, tigerX: tiger.x };
+};
+
+// Test-only: an opponent 170 px ahead of Guan Yu along his facing, in his lane (the bike hits him).
+const stageRideVictim = () => {
+  const s = window.__sg.state();
+  const rider = s.players[window.__sg.humanIdx];
+  const v = s.players.find((p) => p.team !== rider.team);
+  v.x = rider.x + rider.facingX * 170;
+  v.y = rider.y + rider.facingY * 170;
+  v.vx = 0;
+  v.vy = 0;
+  return { victim: v.idx };
 };
 
 const browser = await chromium.launch({
@@ -218,6 +230,39 @@ try {
         .then(() => true, () => false);
       await page.screenshot({ path: shot('tiger-xuchu-spit.png'), scale: 'css' });
       report(`${name} spits the ball (lob in flight)`, spat);
+    }
+
+    if (c.effect === 'rideStart') {
+      // Ride (0.5 s): an opponent is staged 170 px ahead in the lane before the L press. The bike reaches him about 0.25 s in, as the
+      // ride loop starts: shot mid-ride (bike, dragon, exhaust), then shot at the hit (rideHit, the impact burst on him).
+      // A per-frame record of the ride's sprite loop and dragon is checked after.
+      const staged = await page.evaluate(stageRideVictim);
+      await page.evaluate(() => {
+        const seen = new Set();
+        window.__rideSeen = seen;
+        const scene = window.__sg.scene;
+        const tick = () => {
+          if (window.__sg.scene !== scene) return;
+          const p = window.__sg.state().players[window.__sg.humanIdx];
+          if (p.action === 'ride') {
+            seen.add(scene.playerViews[window.__sg.humanIdx].sprite?.anims.currentAnim?.key ?? '');
+            if (scene.children.list.some((o) => o.name === 'fx:dragon' && o.active)) seen.add('fx:dragon');
+          }
+          requestAnimationFrame(tick);
+        };
+        tick();
+      });
+      await page.waitForFunction(() => window.__sg.state().players[window.__sg.humanIdx].action === 'ride', null, { timeout: 6000 });
+      await page.waitForFunction(() => window.__sg.scene.playerViews[window.__sg.humanIdx].sprite?.anims.currentAnim?.key === 'sprite-guanyu:lunge', null, { timeout: 3000, polling: 'raf' }).catch(() => {});
+      await page.screenshot({ path: shot('ride-guanyu.png') });
+      const hit = await page
+        .waitForFunction(() => window.__sg.preview().events.includes('rideHit'), null, { timeout: 4000, polling: 'raf' })
+        .then(() => true, () => false);
+      await page.screenshot({ path: shot('ride-guanyu-hit.png') });
+      report(`${name} bike hits the staged opponent (rideHit)`, hit, `victim ${staged.victim}`);
+      await page.waitForTimeout(600);
+      const seen = await page.evaluate(() => [...window.__rideSeen]);
+      report(`${name} ride loop sprite and dragon shown during the ride`, seen.includes('sprite-guanyu:lunge') && seen.includes('fx:dragon'), `seen ${seen.join(',')}`);
     }
 
     // Wait for the special and its effect event.

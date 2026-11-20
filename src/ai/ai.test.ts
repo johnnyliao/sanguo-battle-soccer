@@ -5,6 +5,9 @@ import {
   EMPTY_INPUT,
   FIELD_D,
   FIELD_W,
+  GOAL_HALF_W,
+  RIDE_DISTANCE,
+  RIDE_LANE_HALF,
   createInitialState,
   RAMPAGE_TICKS,
   SILENCE_TICKS,
@@ -30,6 +33,7 @@ interface MatchReport {
   shots: [number, number];
   specials: [number, number];
   rampages: number;
+  rides: number;
   hits: number;
   goals: number;
   pickups: number;
@@ -63,6 +67,7 @@ function runMatch(
     shots: [0, 0],
     specials: [0, 0],
     rampages: 0,
+    rides: 0,
     hits: 0,
     goals: 0,
     pickups: 0,
@@ -80,6 +85,7 @@ function runMatch(
       if (e.type === 'kick' && e.kind === 'shot') report.shots[state.players[e.playerIdx].team]++;
       else if (e.type === 'specialShot') report.specials[state.players[e.playerIdx].team]++;
       else if (e.type === 'rampageStart') report.rampages++;
+      else if (e.type === 'rideStart') report.rides++;
       else if (e.type === 'hit') report.hits++;
       else if (e.type === 'goal') report.goals++;
       else if (e.type === 'pickup') report.pickups++;
@@ -105,14 +111,15 @@ describe('AI full match', () => {
       console.log(
         `[AI match seed 1] ticks=${report.ticks} phase=${report.finalPhase} score=${report.score[0]}-${report.score[1]} ` +
           `shots(shu/wei)=${report.shots[0]}/${report.shots[1]} specials(shu/wei)=${report.specials[0]}/${report.specials[1]} ` +
-          `rampages=${report.rampages} hits=${report.hits} goals=${report.goals} pickups=${report.pickups} ownerChanges=${report.ownerChanges}`,
+          `rampages=${report.rampages} rides=${report.rides} hits=${report.hits} goals=${report.goals} pickups=${report.pickups} ownerChanges=${report.ownerChanges}`,
       );
 
       expect(['fulltime', 'pk']).toContain(report.finalPhase);
       expect(report.nanTicks).toBe(0);
       expect(report.shots[0] + report.shots[1] + report.specials[0] + report.specials[1]).toBeGreaterThanOrEqual(5);
       expect(report.pickups).toBeGreaterThanOrEqual(30);
-      expect(report.rampages).toBeGreaterThanOrEqual(1);
+      // Charge specials: rampages (owner rampagers) and Guan Yu's rides.
+      expect(report.rampages + report.rides).toBeGreaterThanOrEqual(1);
       expect(report.ownerChanges).toBeGreaterThanOrEqual(10);
     },
     FULL_MATCH_TIMEOUT_MS,
@@ -266,30 +273,80 @@ describe('AI specials (no-ball and owner rules)', () => {
     expect(driveOne(theirs, createAIState(24), 2, TICKS, true).pressedL).toBe(false);
   });
 
-  it('Guan Yu casts the rampage off the ball when an opponent carrier is within 160 px, and not at 300 px', () => {
-    const close = specialState(25);
-    place(close, 1, 500, FIELD_D / 2);
-    place(close, 7, 600, FIELD_D / 2);
-    carry(close, 7);
-    expect(driveOne(close, createAIState(25), 1, TICKS, true).pressedL).toBe(true);
+  it('Guan Yu rides off the ball when an opponent carrier is in his lane, and not when the carrier is beside, behind or beyond it', () => {
+    const inLane = specialState(25);
+    place(inLane, 1, 400, FIELD_D / 2, 1);
+    place(inLane, 7, 600, FIELD_D / 2);
+    carry(inLane, 7);
+    expect(driveOne(inLane, createAIState(25), 1, TICKS, true).pressedL).toBe(true);
 
-    const far = specialState(25);
-    place(far, 1, 500, FIELD_D / 2);
-    place(far, 7, 800, FIELD_D / 2);
-    carry(far, 7);
-    expect(driveOne(far, createAIState(25), 1, TICKS, true).pressedL).toBe(false);
+    const outside: [string, number, number][] = [
+      ['beside the lane', 600, FIELD_D / 2 + RIDE_LANE_HALF + 15],
+      ['behind him', 300, FIELD_D / 2],
+      ['beyond the ride', 400 + RIDE_DISTANCE + 20, FIELD_D / 2],
+    ];
+    for (const [name, x, y] of outside) {
+      const state = specialState(25);
+      place(state, 1, 400, FIELD_D / 2, 1);
+      place(state, 7, x, y);
+      carry(state, 7);
+      expect(driveOne(state, createAIState(25), 1, TICKS, true).pressedL, name).toBe(false);
+    }
   });
 
-  it('a rampaging Guan Yu without the ball steers at the ball and never presses J', () => {
-    const state = specialState(26);
-    place(state, 1, 300, FIELD_D / 2);
-    state.players[1].rampageTicks = RAMPAGE_TICKS;
-    const before = Math.abs(state.ball.x - state.players[1].x);
+  it('Guan Yu rides off the ball when two standing opponents are in his lane with no carrier there, and not with only one', () => {
+    const two = specialState(25);
+    place(two, 1, 400, FIELD_D / 2, 1);
+    place(two, 5, 600, FIELD_D / 2);
+    place(two, 6, 650, FIELD_D / 2 + 20);
+    two.ball.x = 1100;
+    two.ball.y = 30;
+    expect(driveOne(two, createAIState(25), 1, TICKS, true).pressedL).toBe(true);
 
-    const seen = driveOne(state, createAIState(26), 1, 20, false);
+    const one = specialState(25);
+    place(one, 1, 400, FIELD_D / 2, 1);
+    place(one, 5, 600, FIELD_D / 2);
+    one.ball.x = 1100;
+    one.ball.y = 30;
+    expect(driveOne(one, createAIState(25), 1, TICKS, true).pressedL).toBe(false);
+  });
 
-    expect(seen.pressedJ).toBe(false);
-    expect(Math.abs(state.ball.x - state.players[1].x)).toBeLessThan(before);
+  it('Guan Yu rides as the owner to escape when an opponent is within 90 px facing goal, and not when that opponent is 120 px away or he faces away', () => {
+    const escape = specialState(25);
+    place(escape, 1, 400, FIELD_D / 2, 1);
+    place(escape, 5, 480, FIELD_D / 2);
+    carry(escape, 1);
+    expect(driveOne(escape, createAIState(25), 1, TICKS, true).pressedL).toBe(true);
+
+    const far = specialState(25);
+    place(far, 1, 400, FIELD_D / 2, 1);
+    place(far, 5, 520, FIELD_D / 2);
+    carry(far, 1);
+    expect(driveOne(far, createAIState(25), 1, TICKS, true).pressedL).toBe(false);
+
+    const away = specialState(25);
+    place(away, 1, 400, FIELD_D / 2, -1);
+    place(away, 5, 480, FIELD_D / 2);
+    carry(away, 1);
+    expect(driveOne(away, createAIState(25), 1, TICKS, true).pressedL).toBe(false);
+  });
+
+  it('Guan Yu rides as the owner to drive it in when the goal line is within 260 px inside the mouth, and not from 300 px or outside the mouth', () => {
+    // Guan Yu is a DF: inside 250 px the plain tap shot takes the ball first, so the drive-in window is 250..260 px.
+    const near = specialState(25);
+    place(near, 1, FIELD_W - 255, FIELD_D / 2, 1);
+    carry(near, 1);
+    expect(driveOne(near, createAIState(25), 1, TICKS, true).pressedL).toBe(true);
+
+    const far = specialState(25);
+    place(far, 1, FIELD_W - 300, FIELD_D / 2, 1);
+    carry(far, 1);
+    expect(driveOne(far, createAIState(25), 1, TICKS, true).pressedL).toBe(false);
+
+    const wide = specialState(25);
+    place(wide, 1, FIELD_W - 200, FIELD_D / 2 + GOAL_HALF_W + 10, 1);
+    carry(wide, 1);
+    expect(driveOne(wide, createAIState(25), 1, TICKS, true).pressedL).toBe(false);
   });
 
   it('Zhao Yun lunges off the ball at a carrier in front of him, and not when facing away or beyond 190 px', () => {

@@ -35,5 +35,7 @@ export function specialDescription(def: CharacterDef): { condition: string; effe
       return { condition: '持球或不持球', effect: '5秒吞射門，吐球砸人扣80%，沒吞則震退' };
     case 'slash':
       return { condition: '持球或不持球', effect: '5秒連斬刀氣，命中扣體力並回補自己' };
+    case 'ride':
+      return { condition: '持球或不持球', effect: '騎車衝刺，撞開路上敵人扣 20%' };
   }
 }

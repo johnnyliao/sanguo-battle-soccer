@@ -33,7 +33,8 @@ export type PlayerAction =
   | 'fear'
   | 'leap'
   | 'tiger'
-  | 'slash';
+  | 'slash'
+  | 'ride';
 
 export type AttackKind = 'punch' | 'tackle' | 'special';
 
@@ -74,7 +75,7 @@ export interface Player {
   /** Ticks during which this player cannot be bumped by a rampaging opponent again. */
   bumpCooldown: number;
   /** What the special button (L) does: a rampage, a roar (shockwave) for Zhang Fei, a lunge (long dash) for Zhao Yun, a beam (channel, then strikes one opponent) for Zhuge Liang, a summon (cavalry riders) for Ma Chao, a fear (opponents stand still) for Zhang Liao, or a tiger guard (swallows a shot, spits it at opponents) for Xu Chu. */
-  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger' | 'slash';
+  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger' | 'slash' | 'ride';
   /** Ticks until the special can be used again. Set when a rampage starts or a roar fires. */
   specialCooldown: number;
   /** Ticks left silenced (a leap landing): only movement works, no J, K or L. 0 = not silenced. */
@@ -83,6 +84,8 @@ export interface Player {
   tigerTicks: number;
   /** Ticks left in a slash buff (Cao Cao, 霸刀連斬). 0 = no buff. Blade waves fire while it runs. */
   slashTicks: number;
+  /** Idxs of the opponents this ride dash has already hit (each victim at most once per dash). */
+  rideHits: number[];
   /** Ticks left on a buffered L press. A press made while busy waits here and fires once the player can act. 0 = none. */
   specialBuffer: number;
   specialKind: SpecialKind;
@@ -214,6 +217,12 @@ export type SimEvent =
   | { type: 'lungeStart'; playerIdx: number; x: number; y: number; dirX: number; dirY: number }
   /** A lunge ends (timer, field edge, or phase change). */
   | { type: 'lungeEnd'; playerIdx: number; x: number; y: number }
+  /** A ride starts: the unit direction of the dash. */
+  | { type: 'rideStart'; playerIdx: number; dirX: number; dirY: number }
+  /** A ride ends (timer, field edge, a goal, or the phase leaving play). */
+  | { type: 'rideEnd'; playerIdx: number }
+  /** The bike hits an opponent in its lane; x, y is the rider's position at the hit. */
+  | { type: 'rideHit'; playerIdx: number; victimIdx: number; x: number; y: number }
   /** A leap starts (the back-hop begins). */
   | { type: 'leapStart'; playerIdx: number }
   /** A leap's back-hop ends and the flight begins. */

@@ -62,8 +62,14 @@ describe('specialDescription', () => {
     expect(d.effect).toContain('5 名鐵騎');
   });
 
+  it('ride (騎士衝擊) works with or without the ball and names the knockdown share', () => {
+    const d = specialDescription(def('lob', 'ride', true));
+    expect(d.condition).toBe('持球或不持球');
+    expect(d.effect).toContain('扣 20%');
+  });
+
   it('keeps effect texts short enough for one team-select line', () => {
-    const modes = ['rampage', 'roar', 'lunge', 'beam', 'summon', 'fear', 'leap', 'tiger'] as const;
+    const modes = ['rampage', 'roar', 'lunge', 'beam', 'summon', 'fear', 'leap', 'tiger', 'ride'] as const;
     for (const mode of modes) {
       for (const kind of ['straight', 'zigzag', 'lob', 'pierce', 'beam'] as const) {
         expect(specialDescription(def(kind, mode)).effect.length).toBeLessThanOrEqual(20);

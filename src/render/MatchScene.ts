@@ -67,7 +67,7 @@ interface PlayerView {
   container: Phaser.GameObjects.Container;
   gfx: Phaser.GameObjects.Graphics;
   label: Phaser.GameObjects.Text;
-  /** Invincibility timer above the name (human only, during a rampage or lunge). */
+  /** Invincibility timer above the name (human only, during a rampage, lunge or ride). */
   tag: Phaser.GameObjects.Text;
   /** '沉默' above the name while a leap has silenced him. */
   silence: Phaser.GameObjects.Text;
@@ -100,8 +100,8 @@ interface FxInstance {
   offY: number;
   /** Player idx whose beam channel this effect is, so a cancelled channel can stop it. */
   castOf: number | null;
-  /** Player idx whose rampage this effect is, so the rampage's end fades it. */
-  rampageOf: number | null;
+  /** Player idx whose ride this effect is, so the ride's end fades it. */
+  rideOf: number | null;
   /** Feared player idx whose fear this effect is (chains, icon), so the fear's end fades it. */
   fearOf: number | null;
   /** Leaping player idx whose flight this effect is (the crow trail), so the landing fades it. */
@@ -131,7 +131,7 @@ interface FxSpawn {
   offX?: number;
   offY?: number;
   castOf?: number;
-  rampageOf?: number;
+  rideOf?: number;
   fearOf?: number;
   leapOf?: number;
   lifted?: boolean;
@@ -284,16 +284,23 @@ const ROAR_CHARGE_MS = 250;
 /** The soundwave: width, and how far its left edge sits in front of his feet. */
 const ROAR_WAVE_FX_W = 170;
 const ROAR_WAVE_AHEAD = 10;
-/** Guan Yu's rampage: the aura over him (its size and alpha), the exhaust behind his rear wheel (its size and offset). */
-const RAMPAGE_AURA_FX_SIZE = 110;
-const RAMPAGE_AURA_ALPHA = 0.85;
-const RAMPAGE_EXHAUST_FX_SIZE = 70;
-const RAMPAGE_EXHAUST_BACK = 30;
-const RAMPAGE_EXHAUST_LIFT = 6;
-/** Fade time after a rampage ends or a roar charge plays. */
+/** Fade time after a ride ends or a roar charge plays. */
 const FX_FADE_MS = 150;
-/** Guan Yu's fire dragon around him during the rampage (its width), and the impact burst (rampage bumps). */
-const DRAGON_FX_LEN = 150;
+/** Guan Yu's ride: the mount pose (the seated frames, once) before the ride loop, and the dismount pose after it. */
+const RIDE_MOUNT_MS = 250;
+const DISMOUNT_POSE_MS = 200;
+/** Guan Yu's ride effects: the flame ring at his start (its size), the fire dragon around him (its width), the exhaust behind the bike (its size and offset), the fire trail puffs behind him (width, count, gap in ms, offset behind him), and the impact burst on each victim. */
+const RIDE_RING_FX_SIZE = 120;
+const RIDE_DRAGON_FX_LEN = 140;
+const RIDE_EXHAUST_FX_SIZE = 90;
+const RIDE_EXHAUST_BACK = 30;
+const RIDE_EXHAUST_LIFT = 6;
+const RIDE_TRAIL_FX_W = 120;
+const RIDE_TRAIL_COUNT = 4;
+const RIDE_TRAIL_GAP_MS = 100;
+const RIDE_TRAIL_BACK = 40;
+const RIDE_IMPACT_FX_SIZE = 90;
+/** The tiger guard's impact burst over a victim (its size). */
 const IMPACT_FX_SIZE = 80;
 /** Roar spark on each victim, and the height of a hit's burst over the victim's feet. */
 const SPARK_FX_SIZE = 60;
@@ -781,16 +788,18 @@ export class MatchScene extends Phaser.Scene {
         if (this.preview) this.time.delayedCall(PREVIEW_GOAL_END_MS, () => this.endPreview());
       } else if (e.type === 'special') {
         this.showSpecial(`${e.name}！`, SPECIAL_COLORS[e.kind]);
-        // A lunge shows its dash pose for the whole dash, and a beam its channel pose (spriteAnimFor), not the activation pose.
-        if (players[e.playerIdx].specialMode !== 'lunge' && players[e.playerIdx].specialMode !== 'beam' && players[e.playerIdx].specialMode !== 'leap') {
+        // A lunge shows its dash pose for the whole dash, a beam its channel pose (spriteAnimFor), and a ride its mount pose (rideStart), not the activation pose.
+        if (players[e.playerIdx].specialMode !== 'lunge' && players[e.playerIdx].specialMode !== 'beam' && players[e.playerIdx].specialMode !== 'leap' && players[e.playerIdx].specialMode !== 'ride') {
           this.playPose(e.playerIdx, 'special', SPECIAL_POSE_MS);
         }
       } else if (e.type === 'specialShot') {
         this.playPose(e.playerIdx, 'shot', SHOT_POSE_MS);
-      } else if (e.type === 'rampageStart') {
-        this.rampageStartFx(e.playerIdx);
-      } else if (e.type === 'rampageEnd') {
-        this.rampageEndFx(e.playerIdx);
+      } else if (e.type === 'rideStart') {
+        this.rideStartFx(e);
+      } else if (e.type === 'rideHit') {
+        this.rideHitFx(e);
+      } else if (e.type === 'rideEnd') {
+        this.rideEndFx(e.playerIdx);
       } else if (e.type === 'hit') {
         this.specialHitFx(e);
       } else if (e.type === 'beamCharge') {
@@ -993,7 +1002,7 @@ export class MatchScene extends Phaser.Scene {
       offX: s.offX ?? 0,
       offY: s.offY ?? 0,
       castOf: s.castOf ?? null,
-      rampageOf: s.rampageOf ?? null,
+      rideOf: s.rideOf ?? null,
       fearOf: s.fearOf ?? null,
       leapOf: s.leapOf ?? null,
       lifted: s.lifted ?? false,
@@ -1193,8 +1202,10 @@ export class MatchScene extends Phaser.Scene {
     this.playFx(owner.fx, 'burst', { x: pt.sx, y: pt.sy, w: BURST_FX_SIZE, h: BURST_FX_SIZE, depth: y + 0.5 });
   }
 
-  /** Guan Yu's rampage: the aura and fire dragon over him and the exhaust behind his rear wheel, following him until the rampage ends. */
-  private rampageStartFx(idx: number): void {
+  /** Guan Yu's ride starts: the flame ring at his start point, then the fire dragon around him and the exhaust behind the bike, following him until the ride ends, and the mount pose. The fire trail puffs follow as he goes. */
+  private rideStartFx(e: Extract<SimEvent, { type: 'rideStart' }>): void {
+    const idx = e.playerIdx;
+    this.playPose(idx, 'special', RIDE_MOUNT_MS);
     const owner = this.fxOwner(idx);
     if (!owner) return;
     const p = this.state.players[idx];
@@ -1202,27 +1213,12 @@ export class MatchScene extends Phaser.Scene {
     const dir = p.facingX < 0 ? -1 : 1;
     const forever = Number.POSITIVE_INFINITY;
     const lift = owner.cfg.displayHeight / 2;
-    this.playFx(owner.fx, 'aura', {
-      x: feet.sx,
-      y: feet.sy - lift,
-      w: RAMPAGE_AURA_FX_SIZE,
-      h: (RAMPAGE_AURA_FX_SIZE * owner.fx.frameHeight) / owner.fx.frameWidth,
-      depth: p.y,
-      follow: idx,
-      offX: 0,
-      offY: -lift,
-      mirror: true,
-      depthOff: -0.5,
-      alpha: RAMPAGE_AURA_ALPHA,
-      holdMs: forever,
-      endMs: forever,
-      rampageOf: idx,
-    });
+    this.groundFx(idx, 'ring', p.x, p.y, RIDE_RING_FX_SIZE);
     this.playFx(owner.fx, 'dragon', {
       x: feet.sx,
       y: feet.sy - lift,
-      w: DRAGON_FX_LEN,
-      h: (DRAGON_FX_LEN * owner.fx.frameHeight) / owner.fx.frameWidth,
+      w: RIDE_DRAGON_FX_LEN,
+      h: (RIDE_DRAGON_FX_LEN * owner.fx.frameHeight) / owner.fx.frameWidth,
       depth: p.y + 0.6,
       follow: idx,
       offX: 0,
@@ -1231,33 +1227,63 @@ export class MatchScene extends Phaser.Scene {
       depthOff: 0.6,
       holdMs: forever,
       endMs: forever,
-      rampageOf: idx,
+      rideOf: idx,
     });
     this.playFx(owner.fx, 'exhaust', {
-      x: feet.sx - dir * RAMPAGE_EXHAUST_BACK,
-      y: feet.sy - RAMPAGE_EXHAUST_LIFT,
-      w: RAMPAGE_EXHAUST_FX_SIZE,
-      h: (RAMPAGE_EXHAUST_FX_SIZE * owner.fx.frameHeight) / owner.fx.frameWidth,
+      x: feet.sx - dir * RIDE_EXHAUST_BACK,
+      y: feet.sy - RIDE_EXHAUST_LIFT,
+      w: RIDE_EXHAUST_FX_SIZE,
+      h: (RIDE_EXHAUST_FX_SIZE * owner.fx.frameHeight) / owner.fx.frameWidth,
       depth: p.y,
       follow: idx,
-      offX: -RAMPAGE_EXHAUST_BACK,
-      offY: -RAMPAGE_EXHAUST_LIFT,
+      offX: -RIDE_EXHAUST_BACK,
+      offY: -RIDE_EXHAUST_LIFT,
       mirror: true,
       depthOff: -0.5,
       holdMs: forever,
       endMs: forever,
-      rampageOf: idx,
+      rideOf: idx,
+    });
+    for (let k = 1; k <= RIDE_TRAIL_COUNT; k++) {
+      this.time.delayedCall(k * RIDE_TRAIL_GAP_MS, () => this.rideTrailFx(idx, e.dirX, e.dirY));
+    }
+  }
+
+  /** One puff of the fire trail behind the bike, lying along the dash direction. Skipped once the ride has ended. */
+  private rideTrailFx(idx: number, dirX: number, dirY: number): void {
+    const owner = this.fxOwner(idx);
+    const p = this.state.players[idx];
+    if (!owner || p.action !== 'ride') return;
+    const from = worldToScreen(p.x, p.y, 0);
+    const to = worldToScreen(p.x + dirX * 10, p.y + dirY * 10, 0);
+    const dx = to.sx - from.sx;
+    const dy = to.sy - from.sy;
+    const len = Math.hypot(dx, dy) || 1;
+    this.playFx(owner.fx, 'trail', {
+      x: from.sx - (dx / len) * RIDE_TRAIL_BACK,
+      y: from.sy - (dy / len) * RIDE_TRAIL_BACK,
+      w: RIDE_TRAIL_FX_W,
+      h: (RIDE_TRAIL_FX_W * owner.fx.frameHeight) / owner.fx.frameWidth,
+      depth: p.y - 0.5,
+      angle: Math.atan2(dy, dx),
     });
   }
 
-  /** The rampage ends: its aura and exhaust fade out from now. */
-  private rampageEndFx(idx: number): void {
+  /** The bike knocks a victim aside: an impact burst over him. */
+  private rideHitFx(e: Extract<SimEvent, { type: 'rideHit' }>): void {
+    const victim = this.state.players[e.victimIdx];
+    this.ownerImpact(e.playerIdx, victim.x, victim.y, HIT_FX_LIFT, RIDE_IMPACT_FX_SIZE);
+  }
+
+  /** The ride ends: the dragon and exhaust fade out from now, and the dismount pose plays. */
+  private rideEndFx(idx: number): void {
     const now = this.time.now;
     for (const f of this.fx) {
-      if (f.rampageOf !== idx) continue;
+      if (f.rideOf !== idx) continue;
       f.holdMs = now - f.startMs;
       f.endMs = f.holdMs + FX_FADE_MS;
     }
+    this.playPose(idx, 'dismount', DISMOUNT_POSE_MS);
   }
 
   /** Simayi's crow flock in the air: trailing him behind his facing, lifted with his height, until the landing fades it. */
@@ -1390,11 +1416,6 @@ export class MatchScene extends Phaser.Scene {
     if (caster === undefined) return;
     const p = this.state.players[idx];
     this.groundFx(caster, 'shatter', p.x, p.y, FEAR_CHAIN_FX_SIZE);
-  }
-
-  /** True while a rampage's own aura effect plays for this player (it replaces the drawn ring). */
-  private rampageFxOn(p: Player): boolean {
-    return p.rampageTicks > 0 && this.fxOwner(p.idx)?.fx.anims.aura !== undefined;
   }
 
   /** Zhang Fei's roar: the charge at his feet, then the soundwave in front of him once the charge has played. */
@@ -1651,14 +1672,14 @@ export class MatchScene extends Phaser.Scene {
     });
   }
 
-  /** A special's hit: Zhang Fei's roar gives a spark on the victim, Guan Yu's rampage bump an impact burst. */
+  /** A special's hit: Zhang Fei's roar gives a spark on the victim, Xu Chu's tiger an impact burst. */
   private specialHitFx(e: Extract<SimEvent, { type: 'hit' }>): void {
     if (e.kind !== 'special') return;
     const attacker = this.state.players[e.attackerIdx];
     const victim = this.state.players[e.victimIdx];
     if (attacker.specialMode === 'roar') {
       this.ownerImpact(attacker.idx, victim.x, victim.y, HIT_FX_LIFT, SPARK_FX_SIZE);
-    } else if (attacker.rampageTicks > 0 || attacker.specialMode === 'tiger') {
+    } else if (attacker.specialMode === 'tiger') {
       this.ownerImpact(attacker.idx, victim.x, victim.y, HIT_FX_LIFT, IMPACT_FX_SIZE);
     }
   }
@@ -1868,6 +1889,8 @@ export class MatchScene extends Phaser.Scene {
       case 'lunge':
       case 'cast':
         return p.action;
+      case 'ride':
+        return 'lunge';
       case 'leap':
         // The back-hop shows the crouch, then the flight shows the dash pose.
         return p.actionTimer > LEAP_FLY_TICKS ? 'special' : 'lunge';
@@ -1883,7 +1906,7 @@ export class MatchScene extends Phaser.Scene {
   }
 
   /** Plays a special pose on this player's sprite and holds it for `ms`. */
-  private playPose(idx: number, anim: 'special' | 'shot' | 'land' | 'cast', ms: number): void {
+  private playPose(idx: number, anim: 'special' | 'shot' | 'land' | 'cast' | 'dismount', ms: number): void {
     this.poseUntil[idx] = this.time.now + ms;
     this.poseAnim[idx] = anim;
     const view = this.playerViews[idx];
@@ -1947,8 +1970,8 @@ export class MatchScene extends Phaser.Scene {
       g.strokeEllipse(0, 0, R * 2, R * 2 * DEPTH_SCALE);
     }
 
-    // Invincible aura (rampage or lunge): a pulsing gold ring over an orange glow, under the sprite. A rampage that has its own aura effect skips it.
-    if (isInvincible(p) && !this.rampageFxOn(p)) {
+    // Invincible aura (rampage, lunge or ride): a pulsing gold ring over an orange glow, under the sprite.
+    if (isInvincible(p)) {
       const pulse = 0.5 + 0.5 * Math.sin(time / 90);
       const R = r * 2.7 + r * 0.45 * pulse;
       g.fillStyle(0xff8c1a, 0.22 + 0.14 * pulse);
@@ -2019,7 +2042,7 @@ export class MatchScene extends Phaser.Scene {
     const invincible = p.idx === this.humanIdx && isInvincible(p);
     view.tag.setVisible(invincible);
     if (invincible) {
-      const ticks = p.action === 'lunge' || p.action === 'leap' ? p.actionTimer : p.rampageTicks;
+      const ticks = p.action === 'lunge' || p.action === 'leap' || p.action === 'ride' ? p.actionTimer : p.rampageTicks;
       view.tag.setPosition(0, labelY - 20).setText(`無敵 ${(ticks / TICK_HZ).toFixed(1)}`);
     }
     const silenced = p.silenceTicks > 0;

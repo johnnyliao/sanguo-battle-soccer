@@ -1,7 +1,7 @@
-// Special check. Guan Yu (shu DF, human=1) presses L with the ball and rampages at once (aura + fire sprite).
+// Special check. Guan Yu (shu DF, human=1) presses L with the ball and rides at once (mount, bike, fire dragon).
 // Zhang Fei (shu GK, human=0) presses L without the ball next to two opponents: the roar fires at once (shockwave, stun, HUD cooldown).
 // Quick taps: touch 大招 / 攻擊 with CDP touchStart + touchEnd back to back (no wait), so press and release fall between
-// two samples. Shu specials need no ball, so Guan Yu rampages without it; a wu special without the ball shows the 需持球 hint.
+// two samples. Shu specials need no ball, so Guan Yu rides without it; a wu special without the ball shows the 需持球 hint.
 // Test-only state edits (ball owner, positions, stamina) go through window.__sg. Usage: node e2e/special.mjs <url>
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
@@ -134,33 +134,33 @@ const browser = await chromium.launch({
   args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 });
 try {
-  // Rampage: Guan Yu holds the ball and taps L (no charge).
+  // Ride: Guan Yu holds the ball and taps L (no charge). The mount pose (250 ms), then the ride loop; the ride lasts 0.5 s.
   const guan = await openMatch(browser, 1);
   await giveBall(guan, 400, 130);
   await guan.waitForTimeout(400);
   await guan.keyboard.down('l');
   await guan.waitForTimeout(120);
   await guan.keyboard.up('l');
-  await guan.waitForFunction(() => window.__sg.state().players[window.__sg.humanIdx].rampageTicks > 0, null, {
+  await guan.waitForFunction(() => window.__sg.state().players[window.__sg.humanIdx].action === 'ride', null, {
     timeout: 3000,
   }).catch(() => {});
   const r0 = await human(guan);
-  report('rampage starts at once on L with the ball', r0.rampageTicks > 0 && r0.ownsBall, `rampageTicks ${r0.rampageTicks}, ownsBall ${r0.ownsBall}`);
-  report('rampage starts the 12 s special cooldown', r0.specialCooldown > 0 && r0.specialCooldown <= 720, `specialCooldown ${r0.specialCooldown}`);
-  await guan.waitForFunction(() => window.__sg.scene.playerViews[window.__sg.humanIdx].sprite?.anims.currentAnim?.key === 'sprite-guanyu:rampage', null, {
+  report('ride starts at once on L with the ball', r0.action === 'ride' && r0.ownsBall, `action ${r0.action}, ownsBall ${r0.ownsBall}`);
+  report('ride starts the 12 s special cooldown', r0.specialCooldown > 0 && r0.specialCooldown <= 720, `specialCooldown ${r0.specialCooldown}`);
+  await guan.waitForFunction(() => window.__sg.scene.playerViews[window.__sg.humanIdx].sprite?.anims.currentAnim?.key === 'sprite-guanyu:lunge', null, {
     timeout: 3000,
   }).catch(() => {});
-  const r1 = await human(guan);
-  report('rampage plays the fire loop sprite', r1.anim === 'sprite-guanyu:rampage', `anim ${r1.anim}`);
-  await guan.waitForFunction(() => window.__sg.scene.children.list.some((o) => o.name === 'fx:dragon' && o.active), null, {
-    timeout: 3000,
-  }).catch(() => {});
-  const dragon = await guan.evaluate(() => ({
-    active: window.__sg.scene.children.list.some((o) => o.name === 'fx:dragon' && o.active),
-    rampageTicks: window.__sg.state().players[window.__sg.humanIdx].rampageTicks,
-  }));
-  report('rampage shows the fire dragon on Guan Yu', dragon.active && dragon.rampageTicks > 0, `fx:dragon active ${dragon.active}, rampageTicks ${dragon.rampageTicks}`);
-  await guan.screenshot({ path: shot('special-rampage.png') });
+  const r1 = await guan.evaluate(() => {
+    const sg = window.__sg;
+    return {
+      anim: sg.scene.playerViews[sg.humanIdx].sprite?.anims.currentAnim?.key ?? null,
+      action: sg.state().players[sg.humanIdx].action,
+      dragon: sg.scene.children.list.some((o) => o.name === 'fx:dragon' && o.active),
+    };
+  });
+  report('ride plays the ride loop sprite', r1.anim === 'sprite-guanyu:lunge' && r1.action === 'ride', `anim ${r1.anim}, action ${r1.action}`);
+  report('ride shows the fire dragon on Guan Yu', r1.dragon, `fx:dragon active ${r1.dragon}`);
+  await guan.screenshot({ path: shot('special-ride.png') });
   await guan.close();
 
   // Roar: Zhang Fei taps L without the ball, with two opponents inside the roar circle (out of punch reach).
@@ -219,25 +219,26 @@ try {
   const touch = await openTouchMatch(browser, 1);
   const tp = touch.page;
   const ballHome = (x, y) => giveBall(tp, x, y);
-  const resetRampage = () =>
-    tp.evaluate(() => {
-      const h = window.__sg.state().players[window.__sg.humanIdx];
-      h.rampageTicks = 0;
-      h.specialCooldown = 0;
+  // Ends any ride still running (0.5 s), then clears the cooldown so the next 大招 press counts.
+  const resetRide = async () => {
+    await tp.waitForFunction(() => window.__sg.state().players[window.__sg.humanIdx].action !== 'ride', null, { timeout: 2000 }).catch(() => {});
+    await tp.evaluate(() => {
+      window.__sg.state().players[window.__sg.humanIdx].specialCooldown = 0;
     });
+  };
 
-  // a. 大招 quick tap with the ball starts the rampage.
+  // a. 大招 quick tap with the ball starts the ride.
   await ballHome(400, 130);
   await tp.waitForTimeout(300);
   await quickTap(touch.cdp, await buttonPoint(tp, 128, 92));
-  await tp.waitForFunction(() => window.__sg.state().players[window.__sg.humanIdx].rampageTicks > 0, null, {
+  await tp.waitForFunction(() => window.__sg.state().players[window.__sg.humanIdx].action === 'ride', null, {
     timeout: 3000,
   }).catch(() => {});
   const qSpecial = await human(tp);
-  report('quick tap on 大招 with the ball starts the rampage', qSpecial.rampageTicks > 0, `rampageTicks ${qSpecial.rampageTicks}`);
+  report('quick tap on 大招 with the ball starts the ride', qSpecial.action === 'ride', `action ${qSpecial.action}`);
 
-  // b. 大招 quick tap without the ball: Guan Yu (shu, no ball needed) rampages at once, with no 需持球 hint.
-  await resetRampage();
+  // b. 大招 quick tap without the ball: Guan Yu (shu, no ball needed) rides at once, with no 需持球 hint.
+  await resetRide();
   await tp.evaluate(() => {
     const s = window.__sg.state();
     const h = s.players[window.__sg.humanIdx];
@@ -256,21 +257,21 @@ try {
   });
   await tp.waitForTimeout(200);
   await quickTap(touch.cdp, await buttonPoint(tp, 128, 92));
-  await tp.waitForFunction(() => window.__sg.state().players[window.__sg.humanIdx].rampageTicks > 0, null, {
+  await tp.waitForFunction(() => window.__sg.state().players[window.__sg.humanIdx].action === 'ride', null, {
     timeout: 3000,
   }).catch(() => {});
   const noBall = await tp.evaluate(() => ({
     hint: window.__sg.lastHint(),
-    rampageTicks: window.__sg.state().players[window.__sg.humanIdx].rampageTicks,
+    action: window.__sg.state().players[window.__sg.humanIdx].action,
   }));
   report(
-    'quick tap on 大招 without the ball starts the shu rampage (no ball needed)',
-    noBall.rampageTicks > 0 && noBall.hint !== '需持球',
-    `rampageTicks ${noBall.rampageTicks}, hint "${noBall.hint}"`,
+    'quick tap on 大招 without the ball starts the shu ride (no ball needed)',
+    noBall.action === 'ride' && noBall.hint !== '需持球',
+    `action ${noBall.action}, hint "${noBall.hint}"`,
   );
 
   // c. 攻擊 quick tap with the ball releases it (a shot or a clear, either way the ball leaves the human).
-  await resetRampage();
+  await resetRide();
   await ballHome(400, 130);
   await tp.waitForTimeout(300);
   await quickTap(touch.cdp, await buttonPoint(tp, 48, 92));

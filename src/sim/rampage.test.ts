@@ -516,7 +516,7 @@ describe('bump damage share (specialBumpPct)', () => {
     return { damage: hit.damage, victimMax: victim.maxStamina, stamina0, stamina: victim.stamina };
   }
 
-  it('guanyu (15%) bump removes 15% of the victim max stamina', () => {
+  it('a 15% bump share removes 15% of the victim max stamina', () => {
     const r = bumpOnce(0.15);
     expect(r.damage).toBeCloseTo(0.15 * r.victimMax, 9);
     expect(r.stamina).toBeCloseTo(r.stamina0 - 0.15 * r.victimMax, 9);

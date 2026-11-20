@@ -8,6 +8,8 @@ import {
   LEAP_BACK_DISTANCE,
   LEAP_FLY_DISTANCE,
   LEAP_RADIUS,
+  RIDE_DISTANCE,
+  RIDE_LANE_HALF,
   ROAR_FORWARD,
   ROAR_RADIUS,
   SPECIAL_STAMINA_COST,
@@ -63,8 +65,11 @@ const SUMMON_AI_RANGE = 200;
 const SUMMON_AI_MIN_OPPONENTS = 2;
 /** Fear (Zhang Liao): cast when an enemy carrier is within FEAR_RADIUS, or at least FEAR_MIN_OPPONENTS standing opponents are. */
 const FEAR_MIN_OPPONENTS = 2;
-/** Rampage (Guan Yu), off the ball: cast when an opponent carrier is within this range. */
-const RAMPAGE_BALL_RANGE = 160;
+/** Ride (Guan Yu), off the ball: the lane starts this far ahead of him; two standing opponents in it, or an opponent carrier, cast it. */
+const RIDE_LANE_MIN_AHEAD = 30;
+const RIDE_LANE_MIN_OPPONENTS = 2;
+/** Ride, owner: an opponent this close makes the ride an escape. */
+const RIDE_OWNER_ESCAPE_RANGE = 90;
 /** Lunge (Zhao Yun), off the ball: cast when an opponent carrier is this far away, roughly in front of the lunger. */
 const LUNGE_BALL_MIN = 60;
 const LUNGE_BALL_MAX = 190;
@@ -165,7 +170,6 @@ function activeFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPl
     if (p.rampageTicks > 0) return rampageFrame(state, p, s);
     return p.role === 'GK' ? gkOwnerFrame(state, ai, p, s) : ownerFrame(state, ai, p, s);
   }
-  if (p.rampageTicks > 0) return rampageChaseFrame(state, p, s);
   if (p.specialMode === 'slash' && p.slashTicks > 0) {
     const chase = slashChaseFrame(state, ai, p, s);
     if (chase !== null) return chase;
@@ -279,6 +283,19 @@ function ownerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPla
     return frame(steerTo(p, land.x, land.y), { l: true });
   }
 
+  // Guan Yu's ride while carrying: the ball stays at his feet, so cast it to escape a close opponent or drive it in.
+  if (
+    p.specialMode === 'ride' &&
+    !p.prevInput.l &&
+    p.specialCooldown === 0 &&
+    p.stamina >= SHOT_MIN_STAMINA &&
+    rideOwnerWanted(state, p) &&
+    nextRandom(ai) < SHOT_FULL_CHANCE
+  ) {
+    s.intent = 'ride';
+    return frame(NO_MOVE, { l: true });
+  }
+
   const goalDist = Math.abs(goalX - p.x);
   const shotRange = p.role === 'DF' ? SHOT_RANGE_DF : SHOT_RANGE_FWD;
   const inShotRange = goalDist < shotRange;
@@ -343,6 +360,14 @@ function offBallSpecialFrame(
   let wanted = false;
   let steer: Move = NO_MOVE;
   switch (p.specialMode) {
+    case 'ride': {
+      const inLane = rideLaneOpponents(state, p);
+      const laneCarrier = inLane.find((t) => t.idx === state.ball.ownerIdx) ?? null;
+      wanted = laneCarrier !== null || inLane.length >= RIDE_LANE_MIN_OPPONENTS;
+      // Facing already points down the lane, so only a carrier needs steering to keep him in the bike's path.
+      steer = laneCarrier !== null ? steerTo(p, laneCarrier.x, laneCarrier.y) : NO_MOVE;
+      break;
+    }
     case 'fear':
       wanted =
         (enemyCarrier !== null && dist(p.x, p.y, enemyCarrier.x, enemyCarrier.y) <= FEAR_RADIUS) ||
@@ -350,10 +375,6 @@ function offBallSpecialFrame(
       break;
     case 'beam':
       wanted = enemyCarrier !== null && Math.abs(enemyCarrier.x - ownGoalX(state, p.team)) < FIELD_W / 2;
-      break;
-    case 'rampage':
-      wanted = enemyCarrier !== null && dist(p.x, p.y, enemyCarrier.x, enemyCarrier.y) <= RAMPAGE_BALL_RANGE;
-      steer = steerTo(p, state.ball.x, state.ball.y);
       break;
     case 'lunge':
       if (enemyCarrier !== null) {
@@ -432,6 +453,32 @@ function leapOwnerWanted(state: GameState, p: Player): boolean {
 }
 
 /**
+ * Owner ride: he faces the opponent goal, and either an opponent is within RIDE_OWNER_ESCAPE_RANGE of him (escape) or
+ * the goal line is within RIDE_DISTANCE with his y inside the goal mouth (drive it in).
+ */
+function rideOwnerWanted(state: GameState, p: Player): boolean {
+  if (p.facingX * attackDir(state, p.team) <= 0) return false;
+  if (opponentsWithin(state, p, RIDE_OWNER_ESCAPE_RANGE) >= 1) return true;
+  const goalX = opponentGoalX(state, p.team);
+  return Math.abs(goalX - p.x) < RIDE_DISTANCE && Math.abs(p.y - CENTER_Y) < GOAL_HALF_W;
+}
+
+/**
+ * Standing opponents whose centre lies in Guan Yu's ride lane: from RIDE_LANE_MIN_AHEAD to RIDE_DISTANCE ahead along his
+ * facing, and within RIDE_LANE_HALF of the line.
+ */
+function rideLaneOpponents(state: GameState, p: Player): Player[] {
+  return state.players.filter((t) => {
+    if (t.team === p.team || t.action === 'down') return false;
+    const dx = t.x - p.x;
+    const dy = t.y - p.y;
+    const along = dx * p.facingX + dy * p.facingY;
+    if (along < RIDE_LANE_MIN_AHEAD || along > RIDE_DISTANCE) return false;
+    return Math.abs(dx * p.facingY - dy * p.facingX) <= RIDE_LANE_HALF;
+  });
+}
+
+/**
  * Cao Cao's slash is worth casting: no blade buff running, and either an opponent stands within SLASH_CAST_RANGE or an
  * opponent carrier is within SLASH_CARRIER_RANGE.
  */
@@ -477,12 +524,6 @@ function slashChaseFrame(
   if (d <= SLASH_STANDOFF && facingDot(p, target.x, target.y) > 0.5) return frame(NO_MOVE);
   const dashOk = p.stamina > DASH_STAMINA_FRAC * p.maxStamina;
   return frame(steerTo(p, target.x, target.y), { dash: dashOk && d > 160 });
-}
-
-/** Rampaging without the ball: steer at the ball (carrier or loose) and never press J. */
-function rampageChaseFrame(state: GameState, p: Player, s: AIState['perPlayer'][number]): InputFrame {
-  s.intent = 'rampageChase';
-  return frame(steerTo(p, state.ball.x, state.ball.y));
 }
 
 /** Rampaging owner: dribble straight at the goal centre, and fire the special once close enough or when the rampage is nearly over. */
