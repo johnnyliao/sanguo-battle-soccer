@@ -40,6 +40,14 @@ const STAGES: Record<ShuId, { label: string; cues: string[] }[]> = {
   ],
 };
 
+/** Alternative cries for the characters whose current shout is being compared (recipes `<id>.shoutA/B/C`). */
+const ALT_SHOUT_IDS: readonly ShuId[] = ['guanyu', 'machao', 'zhaoyun'];
+const ALT_SHOUTS: readonly { label: string; stage: string }[] = [
+  { label: 'A 低沉吼', stage: 'shoutA' },
+  { label: 'B 氣音喊', stage: 'shoutB' },
+  { label: 'C 短促爆喝', stage: 'shoutC' },
+];
+
 /** Same default as AudioPlayer.volume. */
 const VOLUME = 0.5;
 
@@ -86,7 +94,13 @@ export function mountAudition(parent: HTMLElement = document.body): HTMLElement 
     const sec = section(NAMES[id]);
     const row = document.createElement('div');
     row.appendChild(button('普攻', () => playCues([`${id}.attack`])));
-    row.appendChild(button('呼喊', () => playCues([`${id}.shout`])));
+    const alts = ALT_SHOUT_IDS.includes(id);
+    row.appendChild(button(alts ? '呼喊(現行)' : '呼喊', () => playCues([`${id}.shout`])));
+    if (alts) {
+      for (const alt of ALT_SHOUTS) {
+        row.appendChild(button(alt.label, () => playCues([`${id}.${alt.stage}`])));
+      }
+    }
     row.appendChild(button('舊呼喊', () => playCues([`${id}.shoutOld`])));
     for (const stage of STAGES[id]) {
       row.appendChild(button(stage.label, () => playCues(stage.cues)));

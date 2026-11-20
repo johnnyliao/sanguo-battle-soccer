@@ -108,6 +108,15 @@ describe('battle cry recipes', () => {
     expect(cueBus('zhangfei.shoutOld')).toBe('sfx');
     expect(cueBus('zhangfei.roar')).toBe('sfx');
   });
+
+  it('gives guanyu, machao and zhaoyun three alternative shouts on the shout bus', () => {
+    for (const charId of ['guanyu', 'machao', 'zhaoyun']) {
+      for (const alt of ['shoutA', 'shoutB', 'shoutC']) {
+        expect(SYNTH_RECIPES[`${charId}.${alt}`], `${charId}.${alt}`).toBeTypeOf('function');
+        expect(cueBus(`${charId}.${alt}`)).toBe('shout');
+      }
+    }
+  });
 });
 
 describe('AudioPlayer character cues', () => {

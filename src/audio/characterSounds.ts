@@ -22,6 +22,8 @@ export const SHU_CHARS = ['zhangfei', 'guanyu', 'zhugeliang', 'machao', 'zhaoyun
 export type ShuId = (typeof SHU_CHARS)[number];
 
 const ENGINE_ENV: Adsr = { attack: 0.03, decay: 0.05, sustain: 0.9, release: 0.12 };
+/** A short bark: loud at once, cut quickly. */
+const BARK_ENV: Adsr = { attack: 0.004, decay: 0.03, sustain: 0.85, release: 0.05 };
 
 /** Looping engine: a sawtooth glide from f0 to f1 chopped by an LFO and low-passed. */
 function engine(
@@ -107,6 +109,22 @@ const RECIPES: Record<ShuId, Record<string, Recipe>> = {
       breath(ac, out, t0, 0.07, 0.25);
       formantVoice(ac, out, { t0, dur: 0.7, f0: 130, f1: 115, vowel: 'a', peak: 0.5, rough: 0.25, vib: 0.01 });
     },
+    // A: low growl, pitch about 40% below the current cry, saturated, steady long 'a'.
+    shoutA: (ac, out, t0) => warCry(ac, battleSpace(ac, out), {
+      t0, dur: 1.2, f0: 80, fPeak: 95, fEnd: 70, vowels: ['a', 'a'], onset: 'g',
+      peak: 0.6, grit: 0.9, jitter: 0.03, rasp: 0.25, sub: 0.45, presenceDb: 8, lowpass: 3000,
+    }),
+    // B: breathy 'HAAAH'. Formant-shaped noise dominates; the tone is soft with heavy jitter and shimmer.
+    shoutB: (ac, out, t0) => warCry(ac, battleSpace(ac, out), {
+      t0, dur: 1.0, f0: 120, fPeak: 140, fEnd: 100, vowels: ['a', 'a'], onset: 'h', lead: 0.09,
+      peak: 1.1, grit: 0.5, jitter: 0.06, rasp: 0.1, sub: 0.1, presenceDb: 4, lowpass: 3000,
+      voice: 0.4, shimmer: 0.3, breath: 1,
+    }),
+    // C: short bark. Throaty 'g' burst, loud 'o' at once, pitch drops about 30% and cuts off.
+    shoutC: (ac, out, t0) => warCry(ac, battleSpace(ac, out), {
+      t0, dur: 0.5, f0: 110, fPeak: 112, fEnd: 77, fall: 0.12, vowels: ['o', 'o'], onset: 'g',
+      peak: 0.7, grit: 1, jitter: 0.04, rasp: 0.35, sub: 0.3, presenceDb: 8, env: BARK_ENV,
+    }),
     rideStart: (ac, out, t0) => {
       engine(ac, out, t0, 0.5, 70, 140, 0.45, 25, 1500);
       noiseBurst(ac, out, { t0: t0 + 0.02, dur: 0.05, peak: 0.45, env: PLUCK, filter: 'lowpass', f: 2000 });
@@ -183,6 +201,22 @@ const RECIPES: Record<ShuId, Record<string, Recipe>> = {
       formantVoice(ac, out, { t0, dur: 0.1, f0: 150, vowel: 'e', peak: 0.35, rough: 0.3, vib: 0.02, vibRate: 6.5 });
       formantVoice(ac, out, { t0: t0 + 0.1, dur: 0.55, f0: 150, f1: 170, vowel: 'a', peak: 0.5, rough: 0.3, vib: 0.02, vibRate: 6.5 });
     },
+    // A: low growl, 'ya' with the pitch pushing up into the 'a'.
+    shoutA: (ac, out, t0) => warCry(ac, battleSpace(ac, out), {
+      t0, dur: 1.1, f0: 105, fPeak: 125, fEnd: 85, vowels: ['e', 'a'], switchAt: 0.15, onset: 'g',
+      peak: 0.6, grit: 0.95, jitter: 0.04, rasp: 0.4, sub: 0.45, presenceDb: 8, lowpass: 3000,
+    }),
+    // B: breathy 'HAAAH' at about the current pitch. Formant-shaped noise dominates.
+    shoutB: (ac, out, t0) => warCry(ac, battleSpace(ac, out), {
+      t0, dur: 1.1, f0: 165, fPeak: 185, fEnd: 150, vowels: ['a', 'a'], onset: 'h', lead: 0.09,
+      peak: 1.3, grit: 0.4, jitter: 0.06, rasp: 0.1, sub: 0.1, presenceDb: 4, lowpass: 3000,
+      voice: 0.4, shimmer: 0.3, breath: 1,
+    }),
+    // C: short bark. Hard 'k' burst, loud 'a' at once, pitch drops about 30% and cuts off.
+    shoutC: (ac, out, t0) => warCry(ac, battleSpace(ac, out), {
+      t0, dur: 0.5, f0: 150, fPeak: 152, fEnd: 105, fall: 0.12, vowels: ['a', 'a'], onset: 'k',
+      peak: 0.7, grit: 1, jitter: 0.04, rasp: 0.5, sub: 0.3, presenceDb: 8, env: BARK_ENV,
+    }),
     // War horn for 0.9 s, then six hoof strides at 0.5 s apart (3 s of hooves, fading out).
     cast: (ac, out, t0) => {
       const horn = ac.createBiquadFilter();
@@ -229,6 +263,30 @@ const RECIPES: Record<ShuId, Record<string, Recipe>> = {
       breath(ac, out, t0, 0.05, 0.25);
       formantVoice(ac, out, { t0, dur: 0.32, f0: 165, vowel: 'a', peak: 0.5, rough: 0.08, vib: 0.01 });
     },
+    // A: low growl. Two short plosives, the first rising, then a lower 'a'.
+    shoutA: (ac, out, t0) => {
+      const space = battleSpace(ac, out);
+      warCry(ac, space, {
+        t0, dur: 0.12, f0: 115, fPeak: 135, fEnd: 135, fall: 0.04, vowels: ['a', 'a'], onset: 'g',
+        peak: 0.6, grit: 0.9, jitter: 0.04, rasp: 0.3, sub: 0.4, presenceDb: 8, lowpass: 3000,
+        env: { attack: 0.008, decay: 0.02, sustain: 0.7, release: 0.04 },
+      });
+      warCry(ac, space, {
+        t0: t0 + 0.12, dur: 0.78, f0: 135, fPeak: 135, fEnd: 95, vowels: ['a', 'a'], onset: 'g',
+        peak: 0.6, grit: 0.9, jitter: 0.04, rasp: 0.3, sub: 0.4, presenceDb: 8, lowpass: 3000,
+      });
+    },
+    // B: breathy 'HAAAH' at about the current pitch. Formant-shaped noise dominates.
+    shoutB: (ac, out, t0) => warCry(ac, battleSpace(ac, out), {
+      t0, dur: 1.0, f0: 170, fPeak: 190, fEnd: 150, vowels: ['a', 'a'], onset: 'h', lead: 0.08,
+      peak: 1.3, grit: 0.4, jitter: 0.06, rasp: 0.1, sub: 0.1, presenceDb: 4, lowpass: 3000,
+      voice: 0.4, shimmer: 0.3, breath: 1,
+    }),
+    // C: short bark. Breathy 'h' burst, loud 'o' into 'a', pitch drops about 30% and cuts off.
+    shoutC: (ac, out, t0) => warCry(ac, battleSpace(ac, out), {
+      t0, dur: 0.5, f0: 160, fPeak: 162, fEnd: 112, fall: 0.12, vowels: ['o', 'a'], switchAt: 0.25, onset: 'h',
+      peak: 0.7, grit: 1, jitter: 0.04, rasp: 0.3, sub: 0.3, presenceDb: 8, env: BARK_ENV,
+    }),
     lungeStart: (ac, out, t0) => {
       noiseBurst(ac, out, {
         t0, dur: 0.35, peak: 0.4, env: { attack: 0.05, decay: 0.1, sustain: 0.6, release: 0.15 },
@@ -250,9 +308,9 @@ const RECIPES: Record<ShuId, Record<string, Recipe>> = {
   },
 };
 
-/** Battle cries ('.shout') play through the hard-limited shout bus; every other cue uses the normal master. */
+/** Battle cries ('.shout', '.shoutA/B/C') play through the hard-limited shout bus; every other cue uses the normal master. */
 export function cueBus(name: string): Bus {
-  return name.endsWith('.shout') ? 'shout' : 'sfx';
+  return /\.shout[ABC]?$/.test(name) ? 'shout' : 'sfx';
 }
 
 /** Every synthesized cue, keyed `<charId>.<stage>`. */

@@ -285,6 +285,16 @@ export interface WarCryOpts {
   fall?: number;
   /** Amplitude envelope (default CRY_ENV). */
   env?: Adsr;
+  /** Length of the plosive or aspiration before the voices, in seconds (default 0.045). */
+  lead?: number;
+  /** Lowpass cutoff in Hz on the tonal voices after the saturator (a glottal-like source). Off by default. */
+  lowpass?: number;
+  /** Level of the three tonal voices relative to the default (1). */
+  voice?: number;
+  /** Amplitude wander depth (default 0.18, about ±18%). */
+  shimmer?: number;
+  /** Breathy voice: white noise through the same vowel formants, level relative to peak. 0 = none (default). */
+  breath?: number;
 }
 
 const CRY_ENV: Adsr = { attack: 0.01, decay: 0.08, sustain: 0.9, release: 0.22 };
@@ -310,6 +320,38 @@ const WAR_FORMANTS: Record<WarVowel, readonly number[]> = {
   e: [500, 1800, 2700],
 };
 const WAR_FORMANT_GAIN = [1, 0.5, 0.3];
+
+/** Runs `input` through the two shouted vowels, crossfading from the first to the second at switchAt. */
+function vowelBanks(
+  ac: BaseAudioContext,
+  input: AudioNode,
+  t0: number,
+  switchAt: number,
+  vowels: readonly [WarVowel, WarVowel],
+): GainNode {
+  const formants = ac.createGain();
+  const fades = [
+    { vowel: vowels[0], from: 1, to: 0 },
+    { vowel: vowels[1], from: 0, to: 1 },
+  ];
+  for (const { vowel, from, to } of fades) {
+    const bank = ac.createGain();
+    bank.gain.setValueAtTime(from, t0);
+    bank.gain.setValueAtTime(from, switchAt);
+    bank.gain.linearRampToValueAtTime(to, switchAt + 0.06);
+    WAR_FORMANTS[vowel].forEach((freq, k) => {
+      const band = ac.createBiquadFilter();
+      band.type = 'bandpass';
+      band.frequency.value = freq;
+      band.Q.value = 6;
+      const bandLevel = ac.createGain();
+      bandLevel.gain.value = WAR_FORMANT_GAIN[k];
+      input.connect(band).connect(bandLevel).connect(bank);
+    });
+    bank.connect(formants);
+  }
+  return formants;
+}
 
 const wanderCache = new WeakMap<BaseAudioContext, AudioBuffer>();
 
@@ -398,7 +440,8 @@ export function battleSpace(ac: BaseAudioContext, out: AudioNode): AudioNode {
  */
 export function warCry(ac: BaseAudioContext, out: AudioNode, o: WarCryOpts): void {
   const end = o.t0 + o.dur;
-  const start = o.t0 + CRY_LEAD;
+  const lead = o.lead ?? CRY_LEAD;
+  const start = o.t0 + lead;
   const env = o.env ?? CRY_ENV;
   const fall = o.fall ?? 0.3;
   const rise = Math.min(CRY_RISE, o.dur * 0.4);
@@ -407,7 +450,7 @@ export function warCry(ac: BaseAudioContext, out: AudioNode, o: WarCryOpts): voi
   const pitch = { f0: o.f0, fPeak: o.fPeak, fEnd: o.fEnd };
 
   noiseBurst(ac, out, {
-    t0: o.t0, dur: CRY_LEAD + 0.01, peak: o.peak * 0.6, env: CRY_ONSET_ENV,
+    t0: o.t0, dur: lead + 0.01, peak: o.peak * 0.6, env: CRY_ONSET_ENV,
     filter: onset.filter, f: onset.f, q: onset.q,
   });
 
@@ -436,45 +479,43 @@ export function warCry(ac: BaseAudioContext, out: AudioNode, o: WarCryOpts): voi
     wanderSource(ac, i * 0.37, vs, end - vs).connect(depth).connect(src.frequency);
 
     const level = ac.createGain();
-    level.gain.value = o.peak * 0.4;
+    level.gain.value = o.peak * 0.4 * (o.voice ?? 1);
     const shaper = ac.createWaveShaper();
     shaper.curve = drive(o.grit);
     shaper.oversample = '2x';
     src.connect(level).connect(shaper);
-
-    const formants = ac.createGain();
-    const fades = [
-      { vowel: o.vowels[0], from: 1, to: 0 },
-      { vowel: o.vowels[1], from: 0, to: 1 },
-    ];
-    for (const { vowel, from, to } of fades) {
-      const bank = ac.createGain();
-      bank.gain.setValueAtTime(from, o.t0);
-      bank.gain.setValueAtTime(from, switchAt);
-      bank.gain.linearRampToValueAtTime(to, switchAt + 0.06);
-      WAR_FORMANTS[vowel].forEach((freq, k) => {
-        const band = ac.createBiquadFilter();
-        band.type = 'bandpass';
-        band.frequency.value = freq;
-        band.Q.value = 6;
-        const bandLevel = ac.createGain();
-        bandLevel.gain.value = WAR_FORMANT_GAIN[k];
-        shaper.connect(band).connect(bandLevel).connect(bank);
-      });
-      bank.connect(formants);
+    let body: AudioNode = shaper;
+    if (o.lowpass !== undefined) {
+      const lp = ac.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = o.lowpass;
+      body = shaper.connect(lp);
     }
 
-    // Amplitude wander of about ±18%, multiplied on top of the envelope.
+    const formants = vowelBanks(ac, body, o.t0, switchAt, o.vowels);
+    // Amplitude wander (shimmer), multiplied on top of the envelope.
     const gate = ac.createGain();
     envelope(gate.gain, vs, end - vs, 1, env);
     const amp = ac.createGain();
     const ampDepth = ac.createGain();
-    ampDepth.gain.value = 0.18;
+    ampDepth.gain.value = o.shimmer ?? 0.18;
     wanderSource(ac, i * 0.37 + 0.19, vs, end - vs).connect(ampDepth).connect(amp.gain);
     formants.connect(gate).connect(amp).connect(mix);
     src.start(vs);
     src.stop(end + 0.02);
   });
+
+  if (o.breath) {
+    // Whispered voice: white noise through the same crossfading vowel formants, from the first sample.
+    const hiss = ac.createBufferSource();
+    hiss.buffer = noiseBuffer(ac);
+    hiss.loop = true;
+    const hissGate = ac.createGain();
+    envelope(hissGate.gain, o.t0, end - o.t0, o.peak * o.breath, env);
+    vowelBanks(ac, hiss, o.t0, switchAt, o.vowels).connect(hissGate).connect(mix);
+    hiss.start(o.t0);
+    hiss.stop(end + 0.02);
+  }
 
   noiseBurst(ac, mix, {
     t0: start, dur: end - start, peak: o.peak * o.rasp, env, filter: 'bandpass', f: 2500, q: 1.2,
