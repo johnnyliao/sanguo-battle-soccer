@@ -252,6 +252,8 @@ export type SimEvent =
   | { type: 'slashStart'; playerIdx: number }
   /** The slash buff ends (timer, or the phase left play). */
   | { type: 'slashEnd'; playerIdx: number }
+  /** One swing of the slash buff, along (dirX, dirY): a melee hit check in front of him, then one blade wave. */
+  | { type: 'slashSwing'; playerIdx: number; dirX: number; dirY: number }
   /** A blade wave is fired at (x, y) flying along (dirX, dirY). */
   | { type: 'slashWave'; playerIdx: number; waveId: number; x: number; y: number; dirX: number; dirY: number }
   /** A blade wave ends at (x, y): hitIdx is the opponent it struck, or -1 when it ran out of range (or the phase left play). */

@@ -6,8 +6,8 @@ import type Phaser from 'phaser';
  * copies that JSON, so re-run the tool and update the numbers here if the sheet changes.
  */
 
-/** `rampage` loops while invincible with the ball; `shot` is the special ball's launch pose; `lunge` is the dash pose (Guan Yu's ride loop); `dismount` is Guan Yu's pose as his ride ends; `cast` is the beam channel; `land` is a leap's landing crouch (Simayi only); `slashLoop` is Cao Cao's blade loop while his slash buff runs. */
-export type SpriteAnim = 'idle' | 'run' | 'attack' | 'charge' | 'special' | 'cast' | 'rampage' | 'shot' | 'hitstun' | 'down' | 'dive' | 'recover' | 'lunge' | 'dismount' | 'land' | 'slashLoop';
+/** `rampage` loops while invincible with the ball; `shot` is the special ball's launch pose; `lunge` is the dash pose (Guan Yu's ride loop); `dismount` is Guan Yu's pose as his ride ends; `cast` is the beam channel; `land` is a leap's landing crouch (Simayi only); `slashSwing` is Cao Cao's blade swing, played once per swing and held on its last frame until the next. */
+export type SpriteAnim = 'idle' | 'run' | 'attack' | 'charge' | 'special' | 'cast' | 'rampage' | 'shot' | 'hitstun' | 'down' | 'dive' | 'recover' | 'lunge' | 'dismount' | 'land' | 'slashSwing';
 
 /**
  * Effects played over the character (see MatchScene): a spear thrust or fan slash, the lunge's dragon, an impact burst,
@@ -451,7 +451,7 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
       charge: { frames: [ccat(2, 0)], fps: 1, repeat: -1 },
       cast: { frames: [ccat(3, 1)], fps: 1, repeat: -1 },
       special: { frames: [ccat(3, 0), ccat(3, 1), ccat(3, 2), ccat(3, 3)], fps: 6, repeat: 0 },
-      slashLoop: { frames: [ccat(4, 0), ccat(4, 1), ccat(4, 2), ccat(4, 3)], fps: 10, repeat: -1 },
+      slashSwing: { frames: [ccat(4, 0), ccat(4, 1), ccat(4, 2), ccat(4, 3)], fps: 14, repeat: 0 },
       rampage: { frames: [ccat(4, 1), ccat(4, 2)], fps: 8, repeat: -1 },
       lunge: { frames: [ccat(4, 1), ccat(4, 2)], fps: 8, repeat: -1 },
       shot: { frames: [ccat(2, 1)], fps: 1, repeat: -1 },

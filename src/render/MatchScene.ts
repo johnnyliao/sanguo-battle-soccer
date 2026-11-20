@@ -276,6 +276,8 @@ const RUN_SPEED = 20;
 /** How long the special pose (activation) and the special-shot pose override the action animation. */
 const SPECIAL_POSE_MS = 900;
 const SHOT_POSE_MS = 400;
+/** Cao Cao's blade swing: its 4 frames at 14 fps (about 0.28 s), held on the last frame until the next swing. */
+const SLASH_SWING_POSE_MS = 280;
 const ROAR_SHAKE_MS = 160;
 const ROAR_SHAKE_INTENSITY = 0.004;
 /** Zhang Fei's roar: the charge at his feet (its size), then the soundwave starts after the charge (ROAR_CHARGE_MS). */
@@ -794,6 +796,8 @@ export class MatchScene extends Phaser.Scene {
         }
       } else if (e.type === 'specialShot') {
         this.playPose(e.playerIdx, 'shot', SHOT_POSE_MS);
+      } else if (e.type === 'slashSwing') {
+        this.playPose(e.playerIdx, 'slashSwing', SLASH_SWING_POSE_MS);
       } else if (e.type === 'rideStart') {
         this.rideStartFx(e);
       } else if (e.type === 'rideHit') {
@@ -1899,14 +1903,14 @@ export class MatchScene extends Phaser.Scene {
       default:
         break;
     }
-    if (p.slashTicks > 0) return 'slashLoop';
+    if (p.slashTicks > 0) return 'slashSwing';
     if (p.rampageTicks > 0) return 'rampage';
     if (p.chargeTicks > 0) return 'charge';
     return Math.abs(p.vx) > RUN_SPEED ? 'run' : 'idle';
   }
 
   /** Plays a special pose on this player's sprite and holds it for `ms`. */
-  private playPose(idx: number, anim: 'special' | 'shot' | 'land' | 'cast' | 'dismount', ms: number): void {
+  private playPose(idx: number, anim: 'special' | 'shot' | 'land' | 'cast' | 'dismount' | 'slashSwing', ms: number): void {
     this.poseUntil[idx] = this.time.now + ms;
     this.poseAnim[idx] = anim;
     const view = this.playerViews[idx];

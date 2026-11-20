@@ -4,10 +4,12 @@ import {
   DOWN_TICKS_EXHAUSTED,
   EMPTY_INPUT,
   FIELD_D,
+  HITSTUN_TICKS,
   SLASH_DAMAGE_RATIO,
   SLASH_FIRST_DELAY,
   SLASH_HEAL_RATIO,
   SLASH_HITSTUN_TICKS,
+  SLASH_INTERVAL,
   SLASH_TICKS,
   SPECIAL_COOLDOWN_TICKS,
   SPECIAL_STAMINA_COST,
@@ -142,13 +144,15 @@ describe('slash cast', () => {
   });
 });
 
-describe('blade wave timing', () => {
-  it('fires 10 waves at 30, 60, ..., 300 ticks after the cast, then ends the buff', () => {
+describe('swing and blade wave timing', () => {
+  it('swings and fires a blade wave 16 times, at 18, 36, ..., 288 ticks after the cast, then ends the buff', () => {
     const state = slashState();
     castSlash(state);
     const log = run(state, SLASH_TICKS);
-    const fires = ofType(log, 'slashWave').map((e) => e.tick);
-    expect(fires).toEqual([30, 60, 90, 120, 150, 180, 210, 240, 270, 300]);
+    const ticks = Array.from({ length: 16 }, (_, i) => (i + 1) * SLASH_INTERVAL);
+    expect(ticks[0]).toBe(SLASH_FIRST_DELAY);
+    expect(ofType(log, 'slashSwing').map((e) => e.tick)).toEqual(ticks);
+    expect(ofType(log, 'slashWave').map((e) => e.tick)).toEqual(ticks);
     expect(ofType(log, 'slashEnd').map((e) => e.tick)).toEqual([300]);
     expect(state.players[0].slashTicks).toBe(0);
   });
@@ -162,10 +166,13 @@ describe('blade wave timing', () => {
     cao.actionTimer = 1000;
     const skipped = run(state, 1);
     expect(ofType(skipped, 'slashWave')).toHaveLength(0);
+    expect(ofType(skipped, 'slashSwing')).toHaveLength(0);
     cao.action = 'normal';
     cao.actionTimer = 0;
     const log = run(state, SLASH_TICKS - SLASH_FIRST_DELAY);
-    expect(ofType(log, 'slashWave').map((e) => e.tick)).toEqual([60, 90, 120, 150, 180, 210, 240, 270, 300]);
+    const ticks = [36, 54, 72, 90, 108, 126, 144, 162, 180, 198, 216, 234, 252, 270, 288];
+    expect(ofType(log, 'slashSwing').map((e) => e.tick)).toEqual(ticks);
+    expect(ofType(log, 'slashWave').map((e) => e.tick)).toEqual(ticks);
     expect(cao.slashTicks).toBe(0);
   });
 });
@@ -221,8 +228,8 @@ describe('blade wave aim', () => {
 describe('blade wave hits', () => {
   it('hits the first opponent in its path only, and the wave ends there', () => {
     const state = slashState();
-    park(state, 5, 340);
-    park(state, 6, 370);
+    park(state, 5, 380);
+    park(state, 6, 410);
     castSlash(state);
     const log = runUntil(state, 'slashWaveEnd');
     const ends = ofType(log, 'slashWaveEnd');
@@ -237,7 +244,7 @@ describe('blade wave hits', () => {
     const state = slashState();
     const cao = state.players[0];
     const victim = state.players[5];
-    park(state, 5, 340);
+    park(state, 5, 380);
     castSlash(state);
     const log = runUntil(state, 'slashWaveEnd');
     const hit = ofType(log, 'hit')[0].event;
@@ -256,7 +263,7 @@ describe('blade wave hits', () => {
   it('Cao Cao heals only up to his max stamina', () => {
     const state = slashState();
     const cao = state.players[0];
-    park(state, 5, 340);
+    park(state, 5, 380);
     castSlash(state);
     cao.stamina = MAX_STAMINA - 1;
     const log = runUntil(state, 'slashWaveEnd');
@@ -266,7 +273,7 @@ describe('blade wave hits', () => {
 
   it('the victim keeps the ball he holds', () => {
     const state = slashState();
-    park(state, 5, 340);
+    park(state, 5, 380);
     state.ball.ownerIdx = 5;
     state.ball.lastTouchIdx = 5;
     castSlash(state);
@@ -317,7 +324,7 @@ describe('blade wave hits', () => {
   it('an exhausted victim goes down for DOWN_TICKS_EXHAUSTED', () => {
     const state = slashState();
     const victim = state.players[5];
-    park(state, 5, 340);
+    park(state, 5, 380);
     victim.stamina = 0.5;
     castSlash(state);
     const log = runUntil(state, 'slashWaveEnd');
@@ -361,6 +368,100 @@ describe('buff control and end', () => {
     expect(ofType(log, 'slashWaveEnd').map((e) => e.event.hitIdx)).toEqual([-1]);
     const after = run(state, 60);
     expect(ofType(after, 'slashWave')).toHaveLength(0);
+  });
+});
+
+describe('swing melee', () => {
+  it('a swing punches an opponent right in front of him, with punch damage and punch hit kind', () => {
+    const state = slashState();
+    const victim = state.players[5];
+    park(state, 5, 340); // centre 40 px ahead: 22 px past his body edge, inside the reach
+    castSlash(state);
+    const hits = ofType(run(state, SLASH_FIRST_DELAY), 'hit');
+    expect(hits[0].tick).toBe(SLASH_FIRST_DELAY);
+    expect(hits[0].event.kind).toBe('punch');
+    expect(hits[0].event.victimIdx).toBe(5);
+    // Punch damage at power 5 against defense 5: round(8 + 5 * 1.2 - 5 * 0.5) = 12.
+    expect(hits[0].event.damage).toBe(12);
+    expect(victim.stamina).toBeCloseTo(MAX_STAMINA - 12, 6);
+  });
+
+  it('a punch hit leaves the victim in hitstun with the normal punch stun', () => {
+    const state = slashState();
+    const victim = state.players[5];
+    park(state, 5, 340);
+    castSlash(state);
+    run(state, SLASH_FIRST_DELAY);
+    expect(victim.action).toBe('hitstun');
+    expect(victim.actionTimer).toBeGreaterThan(0);
+    expect(victim.actionTimer).toBeLessThanOrEqual(HITSTUN_TICKS);
+  });
+
+  it('an opponent just behind him is not hit by the melee', () => {
+    const state = slashState();
+    park(state, 5, 260);
+    castSlash(state);
+    const log = run(state, SLASH_FIRST_DELAY);
+    expect(ofType(log, 'slashSwing')).toHaveLength(1);
+    expect(ofType(log, 'hit')).toHaveLength(0);
+    expect(state.players[5].stamina).toBe(MAX_STAMINA);
+  });
+
+  it('an opponent 60 px ahead is out of the melee reach', () => {
+    const state = slashState();
+    park(state, 5, 360);
+    castSlash(state);
+    const log = run(state, SLASH_FIRST_DELAY);
+    expect(ofType(log, 'slashSwing')).toHaveLength(1);
+    expect(ofType(log, 'hit')).toHaveLength(0);
+    expect(state.players[5].stamina).toBe(MAX_STAMINA);
+  });
+
+  it('an opponent in front but too far to the side is out of the melee', () => {
+    const state = slashState();
+    park(state, 5, 340, MID_Y + 30);
+    castSlash(state);
+    const log = run(state, SLASH_FIRST_DELAY);
+    expect(ofType(log, 'hit')).toHaveLength(0);
+    expect(state.players[5].stamina).toBe(MAX_STAMINA);
+  });
+
+  it('a swing is skipped during hitstun, so an opponent hit by a punch is not punched again', () => {
+    const state = slashState();
+    const cao = state.players[0];
+    park(state, 5, 340);
+    castSlash(state);
+    run(state, SLASH_FIRST_DELAY - 1);
+    cao.action = 'hitstun';
+    cao.actionTimer = 1000;
+    const log = run(state, 1);
+    expect(ofType(log, 'slashSwing')).toHaveLength(0);
+    expect(ofType(log, 'hit')).toHaveLength(0);
+  });
+});
+
+describe('swing movement and ball', () => {
+  it('he walks at normal speed during the buff and stays in normal action', () => {
+    const plain = slashState();
+    const state = slashState();
+    castSlash(state);
+    const move: InputFrame[] = [{ ...EMPTY_INPUT, moveX: 1 }];
+    run(plain, 60, move);
+    const log = run(state, 60, move);
+    expect(state.players[0].action).toBe('normal');
+    expect(ofType(log, 'slashSwing').length).toBeGreaterThan(0);
+    expect(state.players[0].x - 300).toBeCloseTo(plain.players[0].x - 300, 6);
+  });
+
+  it('keeps the ball through all 16 swings', () => {
+    const state = slashState();
+    state.ball.ownerIdx = 0;
+    state.ball.lastTouchIdx = 0;
+    castSlash(state);
+    const log = run(state, SLASH_TICKS - 1);
+    expect(ofType(log, 'slashSwing')).toHaveLength(16);
+    expect(state.ball.ownerIdx).toBe(0);
+    expect(ofType(log, 'looseBall')).toHaveLength(0);
   });
 });
 

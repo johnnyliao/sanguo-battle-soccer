@@ -85,6 +85,8 @@ import {
   SLASH_HEAL_RATIO,
   SLASH_HITSTUN_TICKS,
   SLASH_INTERVAL,
+  SLASH_MELEE_HALF_DEPTH,
+  SLASH_MELEE_REACH,
   SLASH_TICKS,
   SLASH_WAVE_RANGE,
   SLASH_WAVE_SPEED,
@@ -1346,24 +1348,50 @@ function startSlash(state: GameState, p: Player): void {
 }
 
 /**
- * Counts the slash buff down and fires a blade wave every SLASH_INTERVAL ticks from SLASH_FIRST_DELAY after the cast. A
- * slash that falls while he is not normal (hitstun, down, a punch...) is lost; the timer keeps running. The buff ends
- * when its timer runs out.
+ * Counts the slash buff down and runs a swing every SLASH_INTERVAL ticks from SLASH_FIRST_DELAY after the cast. A swing that
+ * falls while he is not normal (hitstun, down, a punch...) is lost; the timer keeps running. The buff ends when its timer
+ * runs out.
  */
 function tickSlash(state: GameState, p: Player): void {
   if (p.slashTicks === 0) return;
   p.slashTicks--;
   const elapsed = SLASH_TICKS - p.slashTicks;
   const due = elapsed >= SLASH_FIRST_DELAY && (elapsed - SLASH_FIRST_DELAY) % SLASH_INTERVAL === 0;
-  if (due && p.action === 'normal') fireBladeWave(state, p);
+  if (due && p.action === 'normal') swingSlash(state, p);
   if (p.slashTicks === 0) state.events.push({ type: 'slashEnd', playerIdx: p.idx });
 }
 
 /**
- * One blade wave from his position, aimed at the nearest opponent that is not down or recovering and is on his facing side
- * (the sign of facingX, or his attack direction when facingX is 0). With no such opponent it flies straight to that side.
+ * One swing: emits slashSwing along the wave direction, a melee punch hit on every opponent in front of him, then one blade
+ * wave. He keeps moving and any ball he holds.
  */
-function fireBladeWave(state: GameState, p: Player): void {
+function swingSlash(state: GameState, p: Player): void {
+  const aim = slashAim(state, p);
+  state.events.push({ type: 'slashSwing', playerIdx: p.idx, dirX: aim.dirX, dirY: aim.dirY });
+  meleeSlash(state, p, aim.side);
+  fireBladeWave(state, p, aim.dirX, aim.dirY);
+}
+
+/**
+ * The swing's melee: every opponent that is standing and not invincible, within SLASH_MELEE_REACH px of his front edge on the
+ * side (+1 or -1) he faces and within SLASH_MELEE_HALF_DEPTH px vertically, takes a normal punch hit.
+ */
+function meleeSlash(state: GameState, p: Player, side: number): void {
+  const victims = state.players.filter((v) => {
+    if (v.team === p.team || v.action === 'down' || v.action === 'recover' || isInvincible(v)) return false;
+    const ahead = (v.x - p.x) * side;
+    if (ahead <= 0 || Math.abs(v.y - p.y) > SLASH_MELEE_HALF_DEPTH) return false;
+    return ahead - p.radius - v.radius <= SLASH_MELEE_REACH;
+  });
+  for (const v of victims) applyHit(state, p, v, 'punch');
+}
+
+/**
+ * The facing side for a swing (the sign of facingX, or his attack direction when facingX is 0) and the blade wave's direction:
+ * toward the nearest opponent that is not down or recovering and is on that side. With no such opponent it points straight to
+ * that side.
+ */
+function slashAim(state: GameState, p: Player): { side: number; dirX: number; dirY: number } {
   const side = p.facingX !== 0 ? Math.sign(p.facingX) : attackDir(state, p.team);
   let target: Player | null = null;
   let targetDist = Infinity;
@@ -1376,12 +1404,16 @@ function fireBladeWave(state: GameState, p: Player): void {
       targetDist = d;
     }
   }
-  let dirX = side;
-  let dirY = 0;
-  if (target !== null) {
-    dirX = (target.x - p.x) / targetDist;
-    dirY = (target.y - p.y) / targetDist;
-  }
+  if (target === null) return { side, dirX: side, dirY: 0 };
+  return {
+    side,
+    dirX: (target.x - p.x) / targetDist,
+    dirY: (target.y - p.y) / targetDist,
+  };
+}
+
+/** One blade wave from his position flying along (dirX, dirY). */
+function fireBladeWave(state: GameState, p: Player, dirX: number, dirY: number): void {
   // One fire per player per tick, so this id is unique among the waves in play.
   const wave: BladeWave = {
     id: state.tick * state.players.length + p.idx,

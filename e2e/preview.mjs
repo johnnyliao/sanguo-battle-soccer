@@ -2,6 +2,7 @@
 // Covers 關羽 / 張飛 / 趙雲 / 諸葛亮 / 馬超 (shu roster) and 許褚 / 張遼 / 司馬懿 (wei roster). Screenshots go to the scratchpad preview dir;
 // the fear shot (fear-zhangliao.png) is taken during Zhang Liao's fear, with the victims feared. Simayi's flight shot
 // (leap-simayi-flight.png) is taken mid-air, and the landing shot (leap-simayi.png) at the landing, with the victims burst and silenced.
+// Cao Cao's slash: 3 swings (slashSwing) land within ~1 s of the special, and the blade waves are drawn (slash-caocao.png).
 // Xu Chu's guard: once it starts, a test-staged opponent shot comes in at his goal. The swallow shot (tiger-xuchu-swallow.png) is
 // taken while the ball is held in his mouth, and the spit shot (tiger-xuchu-spit.png) while the fire trail follows the lob.
 // Usage: node e2e/preview.mjs <url>
@@ -279,6 +280,20 @@ try {
         () => true,
         () => false,
       );
+    // Taken right at the special, before the screenshot delay below.
+    if (c.effect === 'slashWave') {
+      // Swings come every 0.3 s (18 ticks) from the cast, so 3 land within 1 s (60 ticks). The buff timer (300 minus slashTicks)
+      // is read as soon as the third swing is seen, which is the sim time since the cast.
+      const swung = await page
+        .waitForFunction(() => window.__sg.preview().events.filter((t) => t === 'slashSwing').length >= 3, null, { timeout: 2000, polling: 'raf' })
+        .then(
+          () => true,
+          () => false,
+        );
+      const elapsed = await page.evaluate(() => 300 - window.__sg.state().players[window.__sg.humanIdx].slashTicks);
+      const swings = await page.evaluate(() => window.__sg.preview().events.filter((t) => t === 'slashSwing').length);
+      report(`${name} swings (slashSwing) at least 3 times within ~1 s of the special`, swung && elapsed <= 66, `swings ${swings}, ${elapsed} ticks after the cast`);
+    }
     // Silence lasts 2 s, so the victims are counted at the landing itself, not after the 250 ms wait below.
     const silencedAtLand =
       c.effect === 'leapLand'

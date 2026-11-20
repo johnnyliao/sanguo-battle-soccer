@@ -105,4 +105,13 @@
 - [x] 1. sim：mode 'ride' + 測試 — worker — verify: vitest
 - [x] 2. AI — worker（與 3 平行）
 - [x] 3. 切圖、fx、sprites.ts、MatchScene、e2e — worker（me 看截圖）
-- [ ] 4. CLAUDE.md、驗證 → commit、push、部署、正式網址 e2e — me＋worker
+- [x] 4. CLAUDE.md、驗證 → commit、push、部署、正式網址 e2e — me＋worker
+
+---
+# Goal 7（2026-11-20 晚）曹操自動揮刀
+大招 5 秒內每 0.3 秒（18 tick）自動揮一刀（共 16 刀）：每刀＝前方近身攻擊判定（效果同普通攻擊）＋射一道刀氣（命中扣 5%、回 5%、硬直 0.3 秒）。揮刀不鎖移動、可帶球。每刀播一輪第 5 排揮刀動畫（約 0.3 秒）。
+
+# Steps 7
+- [x] 1. sim＋render＋e2e — worker — verify: vitest、e2e
+- [ ] 2. CLAUDE.md、commit、push、部署、正式網址 e2e — me＋worker
+- 11-20：許褚 preview e2e「spits the ball」偶發失敗一次（重跑通過），疑似截圖時機，待追。
