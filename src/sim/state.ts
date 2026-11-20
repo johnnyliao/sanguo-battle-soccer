@@ -86,6 +86,7 @@ export function createInitialState(
         chargeTicks: 0,
         rampageTicks: 0,
         bumpCooldown: 0,
+        silenceTicks: 0,
         specialMode: def.special.mode ?? 'rampage',
         specialCooldown: 0,
         specialBuffer: 0,

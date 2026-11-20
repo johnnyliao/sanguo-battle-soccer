@@ -12,6 +12,7 @@ import {
   FIELD_W,
   EMPTY_INPUT,
   GOAL_HALF_W,
+  LEAP_FLY_TICKS,
   LUNGE_TICKS,
   RIDER_HIT_RADIUS,
   SPECIAL_COOLDOWN_TICKS,
@@ -68,6 +69,8 @@ interface PlayerView {
   label: Phaser.GameObjects.Text;
   /** Invincibility timer above the name (human only, during a rampage or lunge). */
   tag: Phaser.GameObjects.Text;
+  /** '沉默' above the name while a leap has silenced him. */
+  silence: Phaser.GameObjects.Text;
   /** Set when the character's sheet loaded. The block figure is drawn when this is null. */
   sprite: Phaser.GameObjects.Sprite | null;
   spriteCfg: SpriteConfig | null;
@@ -101,6 +104,10 @@ interface FxInstance {
   rampageOf: number | null;
   /** Feared player idx whose fear this effect is (chains, icon), so the fear's end fades it. */
   fearOf: number | null;
+  /** Leaping player idx whose flight this effect is (the crow trail), so the landing fades it. */
+  leapOf: number | null;
+  /** A follower that rises with his height z (a leap's crow trail). */
+  lifted: boolean;
   /** Draw alpha while held. */
   alpha: number;
   /** A follower that turns with his facing: flipped, and its offset x turned around. */
@@ -126,6 +133,8 @@ interface FxSpawn {
   castOf?: number;
   rampageOf?: number;
   fearOf?: number;
+  leapOf?: number;
+  lifted?: boolean;
   alpha?: number;
   mirror?: boolean;
   depthOff?: number;
@@ -146,11 +155,18 @@ function positionBlockReason(state: GameState, p: Player): string | null {
   return null;
 }
 
+/** Why the player cannot cast a special while silenced by a leap. Null when he is not silenced. */
+function silenceBlockReason(p: Player): string | null {
+  return p.silenceTicks > 0 ? '沉默' : null;
+}
+
 /**
  * Why the human's L press starts no special, or null when none of the three reasons applies (the sim then buffers
  * the press). Checked before the step that consumes the press.
  */
 function specialBlockReason(state: GameState, p: Player): string | null {
+  const silence = silenceBlockReason(p);
+  if (silence !== null) return silence;
   const position = positionBlockReason(state, p);
   if (position !== null) return position;
   if (p.specialCooldown > 0) return `冷卻中 ${Math.ceil(p.specialCooldown / TICK_HZ)} 秒`;
@@ -282,6 +298,18 @@ const IMPACT_FX_SIZE = 80;
 /** Roar spark on each victim, and the height of a hit's burst over the victim's feet. */
 const SPARK_FX_SIZE = 60;
 const HIT_FX_LIFT = 20;
+/** Simayi's leap: the smoke at his start (its size), the crow trail behind him in the air (its width, its offset behind him and its height), the green ring where he lands (its width), the burst on each victim, the fade after the landing, and the landing crouch's pose time. */
+const LEAP_SMOKE_FX_SIZE = 80;
+const LEAP_TRAIL_FX_W = 150;
+const LEAP_TRAIL_BACK = 50;
+const LEAP_TRAIL_LIFT = 28;
+const LEAP_RING_FX_W = 150;
+const LEAP_VICTIM_FX_SIZE = 80;
+const LEAP_SHAKE_MS = 120;
+const LEAP_SHAKE_INTENSITY = 0.003;
+const LEAP_LAND_POSE_MS = 400;
+/** Silence label above a silenced player's name. */
+const SILENCE_COLOR = '#7cff6b';
 /** Zhang Liao's fear: the ghost burst over him (its width), the chains ring under each feared player (its width), and the '!' icon over his head (its width, gap above his sprite). */
 const FEAR_GHOST_FX_SIZE = 150;
 const FEAR_CHAIN_FX_SIZE = 80;
@@ -708,7 +736,7 @@ export class MatchScene extends Phaser.Scene {
       } else if (e.type === 'special') {
         this.showSpecial(`${e.name}！`, SPECIAL_COLORS[e.kind]);
         // A lunge shows its dash pose for the whole dash, and a beam its channel pose (spriteAnimFor), not the activation pose.
-        if (players[e.playerIdx].specialMode !== 'lunge' && players[e.playerIdx].specialMode !== 'beam') {
+        if (players[e.playerIdx].specialMode !== 'lunge' && players[e.playerIdx].specialMode !== 'beam' && players[e.playerIdx].specialMode !== 'leap') {
           this.playPose(e.playerIdx, 'special', SPECIAL_POSE_MS);
         }
       } else if (e.type === 'specialShot') {
@@ -740,6 +768,15 @@ export class MatchScene extends Phaser.Scene {
         this.lungeFx(e);
       } else if (e.type === 'lungeEnd') {
         this.burstFx(e.playerIdx, e.x, e.y);
+      } else if (e.type === 'leapStart') {
+        const p = players[e.playerIdx];
+        this.groundFx(e.playerIdx, 'smoke', p.x, p.y, LEAP_SMOKE_FX_SIZE);
+      } else if (e.type === 'leapFly') {
+        this.leapTrailFx(e.playerIdx);
+      } else if (e.type === 'leapLand') {
+        this.cameras.main.shake(LEAP_SHAKE_MS, LEAP_SHAKE_INTENSITY);
+        this.leapLandFx(e);
+        this.playPose(e.playerIdx, 'land', LEAP_LAND_POSE_MS);
       } else if (e.type === 'summonStart') {
         this.cameras.main.shake(SUMMON_SHAKE_MS, SUMMON_SHAKE_INTENSITY);
         this.summonFx(e.playerIdx);
@@ -887,6 +924,8 @@ export class MatchScene extends Phaser.Scene {
       castOf: s.castOf ?? null,
       rampageOf: s.rampageOf ?? null,
       fearOf: s.fearOf ?? null,
+      leapOf: s.leapOf ?? null,
+      lifted: s.lifted ?? false,
       alpha: s.alpha ?? 1,
       mirror: s.mirror ?? false,
       depthOff: s.depthOff ?? 0.5,
@@ -1148,6 +1187,56 @@ export class MatchScene extends Phaser.Scene {
     }
   }
 
+  /** Simayi's crow flock in the air: trailing him behind his facing, lifted with his height, until the landing fades it. */
+  private leapTrailFx(idx: number): void {
+    const owner = this.fxOwner(idx);
+    if (!owner) return;
+    const p = this.state.players[idx];
+    const feet = worldToScreen(p.x, p.y, 0);
+    const forever = Number.POSITIVE_INFINITY;
+    const lift = owner.cfg.displayHeight / 2;
+    this.playFx(owner.fx, 'crows', {
+      x: feet.sx - LEAP_TRAIL_BACK,
+      y: feet.sy - lift,
+      w: LEAP_TRAIL_FX_W,
+      h: (LEAP_TRAIL_FX_W * owner.fx.frameHeight) / owner.fx.frameWidth,
+      depth: p.y - 0.5,
+      follow: idx,
+      offX: -LEAP_TRAIL_BACK,
+      offY: -LEAP_TRAIL_LIFT,
+      mirror: true,
+      depthOff: -0.5,
+      lifted: true,
+      holdMs: forever,
+      endMs: forever,
+      leapOf: idx,
+    });
+  }
+
+  /** Simayi's landing: the green ring on the landing point, and a burst over each victim. */
+  private leapLandFx(e: Extract<SimEvent, { type: 'leapLand' }>): void {
+    const now = this.time.now;
+    for (const f of this.fx) {
+      if (f.leapOf !== e.playerIdx) continue;
+      f.holdMs = now - f.startMs;
+      f.endMs = f.holdMs + FX_FADE_MS;
+    }
+    this.groundFx(e.playerIdx, 'ring', e.x, e.y, LEAP_RING_FX_W);
+    const owner = this.fxOwner(e.playerIdx);
+    if (!owner) return;
+    for (const idx of e.victimIdxs) {
+      const v = this.state.players[idx];
+      const pt = worldToScreen(v.x, v.y, HIT_FX_LIFT);
+      this.playFx(owner.fx, 'burst', {
+        x: pt.sx,
+        y: pt.sy,
+        w: LEAP_VICTIM_FX_SIZE,
+        h: (LEAP_VICTIM_FX_SIZE * owner.fx.frameHeight) / owner.fx.frameWidth,
+        depth: v.y + 0.5,
+      });
+    }
+  }
+
   /** Zhang Liao's fear cast: the ghost burst over him, not following him. */
   private fearCastFx(idx: number): void {
     const owner = this.fxOwner(idx);
@@ -1303,7 +1392,8 @@ export class MatchScene extends Phaser.Scene {
         const p = this.state.players[f.follow];
         const feet = worldToScreen(p.x, p.y, 0);
         const dir = f.mirror && p.facingX < 0 ? -1 : 1;
-        f.sprite.setPosition(feet.sx + f.offX * dir, feet.sy + f.offY).setDepth(p.y + f.depthOff);
+        const lift = f.lifted ? p.z : 0;
+        f.sprite.setPosition(feet.sx + f.offX * dir, feet.sy + f.offY - lift).setDepth(p.y + f.depthOff);
         if (f.mirror) f.sprite.setFlipX(p.facingX < 0);
       }
       return true;
@@ -1438,8 +1528,13 @@ export class MatchScene extends Phaser.Scene {
         .text(0, 0, '', { ...style, fontSize: '11px', color: hexCss(GOLD) })
         .setOrigin(0.5, 1)
         .setVisible(false);
-      const container = this.add.container(0, 0, sprite ? [gfx, sprite, label, tag] : [gfx, label, tag]);
-      return { container, gfx, label, sprite, spriteCfg, tag };
+      const silence = this.add
+        .text(0, 0, '沉默', { ...style, fontSize: '11px', color: SILENCE_COLOR })
+        .setOrigin(0.5, 1)
+        .setVisible(false);
+      const parts = sprite ? [gfx, sprite, label, tag, silence] : [gfx, label, tag, silence];
+      const container = this.add.container(0, 0, parts);
+      return { container, gfx, label, sprite, spriteCfg, tag, silence };
     });
     // The special hint lives in the human's container, so it follows the figure above the name.
     this.hintText = this.add
@@ -1474,6 +1569,9 @@ export class MatchScene extends Phaser.Scene {
       case 'lunge':
       case 'cast':
         return p.action;
+      case 'leap':
+        // The back-hop shows the crouch, then the flight shows the dash pose.
+        return p.actionTimer > LEAP_FLY_TICKS ? 'special' : 'lunge';
       case 'charge':
         return 'charge';
       default:
@@ -1485,7 +1583,7 @@ export class MatchScene extends Phaser.Scene {
   }
 
   /** Plays a special pose on this player's sprite and holds it for `ms`. */
-  private playPose(idx: number, anim: 'special' | 'shot', ms: number): void {
+  private playPose(idx: number, anim: 'special' | 'shot' | 'land', ms: number): void {
     this.poseUntil[idx] = this.time.now + ms;
     this.poseAnim[idx] = anim;
     const view = this.playerViews[idx];
@@ -1621,9 +1719,12 @@ export class MatchScene extends Phaser.Scene {
     const invincible = p.idx === this.humanIdx && isInvincible(p);
     view.tag.setVisible(invincible);
     if (invincible) {
-      const ticks = p.action === 'lunge' ? p.actionTimer : p.rampageTicks;
+      const ticks = p.action === 'lunge' || p.action === 'leap' ? p.actionTimer : p.rampageTicks;
       view.tag.setPosition(0, labelY - 20).setText(`無敵 ${(ticks / TICK_HZ).toFixed(1)}`);
     }
+    const silenced = p.silenceTicks > 0;
+    view.silence.setVisible(silenced);
+    if (silenced) view.silence.setPosition(0, labelY - 22);
     if (p.idx === this.humanIdx) {
       const tipY = labelY - 13;
       g.fillStyle(HUMAN_MARK, 1);
@@ -1995,7 +2096,8 @@ export class MatchScene extends Phaser.Scene {
     this.clockText.setText(`${match.half === 1 ? '上半場' : '下半場'} ${mm}:${ss}`);
 
     const p = players[this.humanIdx];
-    const block = positionBlockReason(this.state, p) ?? (p.stamina < SPECIAL_STAMINA_COST ? '體力不足' : null);
+    const block =
+      silenceBlockReason(p) ?? positionBlockReason(this.state, p) ?? (p.stamina < SPECIAL_STAMINA_COST ? '體力不足' : null);
     this.touch.setSpecialStatus({ cooldownTicks: p.specialCooldown, cooldownTotal: SPECIAL_COOLDOWN_TICKS, block });
     this.hudNameText.setText(p.name).setVisible(true);
 

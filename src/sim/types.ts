@@ -30,7 +30,8 @@ export type PlayerAction =
   | 'dive'
   | 'lunge'
   | 'cast'
-  | 'fear';
+  | 'fear'
+  | 'leap';
 
 export type AttackKind = 'punch' | 'tackle' | 'special';
 
@@ -71,9 +72,11 @@ export interface Player {
   /** Ticks during which this player cannot be bumped by a rampaging opponent again. */
   bumpCooldown: number;
   /** What the special button (L) does: a rampage, a roar (shockwave) for Zhang Fei, a lunge (long dash) for Zhao Yun, a beam (channel, then strikes one opponent) for Zhuge Liang, a summon (cavalry riders) for Ma Chao, or a fear (opponents stand still) for Zhang Liao. */
-  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear';
+  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap';
   /** Ticks until the special can be used again. Set when a rampage starts or a roar fires. */
   specialCooldown: number;
+  /** Ticks left silenced (a leap landing): only movement works, no J, K or L. 0 = not silenced. */
+  silenceTicks: number;
   /** Ticks left on a buffered L press. A press made while busy waits here and fires once the player can act. 0 = none. */
   specialBuffer: number;
   specialKind: SpecialKind;
@@ -171,6 +174,12 @@ export type SimEvent =
   | { type: 'lungeStart'; playerIdx: number; x: number; y: number; dirX: number; dirY: number }
   /** A lunge ends (timer, field edge, or phase change). */
   | { type: 'lungeEnd'; playerIdx: number; x: number; y: number }
+  /** A leap starts (the back-hop begins). */
+  | { type: 'leapStart'; playerIdx: number }
+  /** A leap's back-hop ends and the flight begins. */
+  | { type: 'leapFly'; playerIdx: number }
+  /** A leap lands at (x, y); victimIdxs are the opponents it reached. */
+  | { type: 'leapLand'; playerIdx: number; x: number; y: number; victimIdxs: number[] }
   /** A beam channel starts (the player stands still). */
   | { type: 'beamCharge'; playerIdx: number }
   /** The channel is cut short without striking (the caster was hit, or the phase left play). */

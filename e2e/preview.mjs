@@ -1,6 +1,7 @@
 // Skill preview check: team select (phone touch) -> 預覽 on each character -> the special fires -> back to team select.
-// Covers 關羽 / 張飛 / 趙雲 / 諸葛亮 / 馬超 (shu roster) and 張遼 (wei roster). Screenshots go to the scratchpad preview dir;
-// the fear shot (fear-zhangliao.png) is taken during Zhang Liao's fear, with the victims feared.
+// Covers 關羽 / 張飛 / 趙雲 / 諸葛亮 / 馬超 (shu roster) and 張遼 / 司馬懿 (wei roster). Screenshots go to the scratchpad preview dir;
+// the fear shot (fear-zhangliao.png) is taken during Zhang Liao's fear, with the victims feared. Simayi's flight shot
+// (leap-simayi-flight.png) is taken mid-air, and the landing shot (leap-simayi.png) at the landing, with the victims burst and silenced.
 // Usage: node e2e/preview.mjs <url>
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
@@ -26,6 +27,7 @@ const CASES = [
   { id: 'machao', name: '馬超', slot: 3, effect: 'riderSpawn' },
   { id: 'zhaoyun', name: '趙雲', slot: 4, effect: 'lungeStart' },
   { id: 'zhangliao', name: '張遼', slot: 4, effect: 'fear', wei: true },
+  { id: 'simayi', name: '司馬懿', slot: 3, effect: 'leapLand', wei: true },
 ];
 
 const errors = [];
@@ -150,6 +152,18 @@ try {
     const banner = await page.evaluate(() => window.__sg.state().players[window.__sg.humanIdx].charId);
     report(`${name} preview human is the character`, banner === c.id, `charId ${banner}`);
 
+    if (c.effect === 'leapLand') {
+      // Mid-air (the flight is above 20 px high): the crow trail is on him.
+      const airborne = await page
+        .waitForFunction(() => window.__sg.state().players[window.__sg.humanIdx].z > 20, null, { timeout: 6000 })
+        .then(
+          () => true,
+          () => false,
+        );
+      await page.screenshot({ path: shot('leap-simayi-flight.png') });
+      report(`${name} mid-flight height`, airborne);
+    }
+
     // Wait for the special and its effect event.
     const fired = await page
       .waitForFunction(
@@ -168,6 +182,13 @@ try {
     await page.screenshot({ path: shot(`preview-${c.id}.png`) });
     const events = await page.evaluate(() => window.__sg.preview().events);
     report(`${name} special fires (${c.effect})`, fired, `events ${[...new Set(events)].join(',')}`);
+
+    if (c.effect === 'leapLand') {
+      // Landing: the victims are silenced (沉默 label) and the burst is on them.
+      const silenced = await page.evaluate(() => window.__sg.state().players.filter((p) => p.silenceTicks > 0).length);
+      await page.screenshot({ path: shot('leap-simayi.png') });
+      report(`${name} victims are silenced at landing`, silenced > 0, `silenced ${silenced}`);
+    }
 
     if (c.effect === 'fear') {
       // Mid-fear (3 s): the victims are feared, and their chains and '!' follow them.

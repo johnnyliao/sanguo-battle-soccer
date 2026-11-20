@@ -86,6 +86,20 @@ export const BEAM_SPEED = 560;
 export const FEAR_TICKS = 180;
 /** Share of each feared opponent's maxStamina that the fear takes. */
 export const FEAR_STAMINA_RATIO = 0.1;
+/** Simayi's leap (鷹視狼顧): the back-hop, moving LEAP_BACK_DISTANCE opposite his facing over LEAP_BACK_TICKS. */
+export const LEAP_BACK_TICKS = 9;
+export const LEAP_BACK_DISTANCE = 30;
+/** The flight: LEAP_FLY_DISTANCE along his facing over LEAP_FLY_TICKS. */
+export const LEAP_FLY_TICKS = 30;
+export const LEAP_FLY_DISTANCE = 320;
+/** Height of the flight's parabolic arc at its middle (for rendering via p.z). Z is 0 on takeoff and landing. */
+export const LEAP_PEAK_Z = 40;
+/** Opponents whose centre is within this many px of the landing point are hit. */
+export const LEAP_RADIUS = 70;
+/** Share of each victim's maxStamina that the landing takes (15%). */
+export const LEAP_STAMINA_RATIO = 0.15;
+/** Ticks a leap victim stays silenced (2 s): only movement works. */
+export const SILENCE_TICKS = 120;
 /** Ticks before any special can be used again (12 s). */
 export const SPECIAL_COOLDOWN_TICKS = 720;
 /** An L press made during a busy action stays buffered this long (0.3 s) and fires once the player can act. */

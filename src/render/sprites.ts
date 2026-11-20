@@ -6,15 +6,16 @@ import type Phaser from 'phaser';
  * copies that JSON, so re-run the tool and update the numbers here if the sheet changes.
  */
 
-/** `rampage` loops while invincible with the ball; `shot` is the special ball's launch pose; `lunge` is the dash pose; `cast` is the beam channel. */
-export type SpriteAnim = 'idle' | 'run' | 'attack' | 'charge' | 'special' | 'cast' | 'rampage' | 'shot' | 'hitstun' | 'down' | 'dive' | 'recover' | 'lunge';
+/** `rampage` loops while invincible with the ball; `shot` is the special ball's launch pose; `lunge` is the dash pose; `cast` is the beam channel; `land` is a leap's landing crouch (Simayi only). */
+export type SpriteAnim = 'idle' | 'run' | 'attack' | 'charge' | 'special' | 'cast' | 'rampage' | 'shot' | 'hitstun' | 'down' | 'dive' | 'recover' | 'lunge' | 'land';
 
 /**
  * Effects played over the character (see MatchScene): a spear thrust or fan slash, the lunge's dragon, an impact burst,
  * for Zhuge Liang's beam the channel circle, the energy ball and the impact, for Ma Chao's summon the call and the
  * smoke a rider leaves when it vanishes, for Guan Yu's rampage the aura and exhaust, his special ball's fire dragon,
  * and for Zhang Fei's roar the charge and the soundwave, for Zhang Liao's fear the ghost burst over him, the chains ring and
- * the '!' icon over each feared player, and the chains' shatter when the fear ends.
+ * the '!' icon over each feared player, and the chains' shatter when the fear ends. For Simayi's leap: the feather fan slash
+ * (punch), the smoke at his start, the crow flock trailing him in the air, the green ring where he lands, and the green burst on each victim.
  */
 export type FxAnim =
   | 'thrust'
@@ -33,7 +34,9 @@ export type FxAnim =
   | 'ghost'
   | 'chains'
   | 'alarm'
-  | 'shatter';
+  | 'shatter'
+  | 'crows'
+  | 'ring';
 
 export interface SpriteMeta {
   frameWidth: number;
@@ -73,7 +76,8 @@ export interface SpriteConfig {
   displayHeight: number;
   /** Shadow width multiplier vs the block figure (wider under Guan Yu's bike). */
   shadowScale: number;
-  anims: Record<SpriteAnim, SpriteAnimDef>;
+  /** Every animation the character uses. `land` is only defined where a leap's landing pose plays (Simayi). */
+  anims: Partial<Record<SpriteAnim, SpriteAnimDef>>;
   /** Optional effect sheet for this character's thrust, lunge and impact burst. */
   fx?: FxSheet;
 }
@@ -100,6 +104,7 @@ const ZHUGELIANG_META: SpriteMeta = { frameWidth: 211, frameHeight: 197, cols: 4
 const MACHAO_META: SpriteMeta = { frameWidth: 211, frameHeight: 195, cols: 4, rows: 5, anchorX: 91, anchorY: 191 };
 const MACHAO_CAVALRY_META: SpriteMeta = { frameWidth: 280, frameHeight: 206, cols: 4, rows: 2, anchorX: 145, anchorY: 156 };
 const ZHANGLIAO_META: SpriteMeta = { frameWidth: 421, frameHeight: 272, cols: 4, rows: 5, anchorX: 272, anchorY: 265 };
+const SIMAYI_META: SpriteMeta = { frameWidth: 263, frameHeight: 244, cols: 4, rows: 6, anchorX: 132, anchorY: 240 };
 
 /** Frame index of a sheet cell (row-major) for a sheet with this meta. */
 const cellAt = (meta: SpriteMeta) => (row: number, col: number): number => row * meta.cols + col;
@@ -110,6 +115,7 @@ const gat = cellAt(ZHUGELIANG_META);
 const mat = cellAt(MACHAO_META);
 const cat = cellAt(MACHAO_CAVALRY_META);
 const lat = cellAt(ZHANGLIAO_META);
+const sat = cellAt(SIMAYI_META);
 /** The Zhao Yun and Zhuge Liang effect sheets are 4 columns of 181 px frames. */
 const fxat = (row: number, col: number): number => row * 4 + col;
 
@@ -340,6 +346,43 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
       },
     },
   },
+  simayi: {
+    key: 'sprite-simayi',
+    url: 'sprites/simayi.png',
+    meta: SIMAYI_META,
+    displayHeight: 56,
+    shadowScale: 1.0,
+    anims: {
+      idle: { frames: [sat(0, 0), sat(0, 1), sat(0, 2), sat(0, 3)], fps: 6, repeat: -1 },
+      run: { frames: [sat(1, 0), sat(1, 1), sat(1, 2), sat(1, 3)], fps: 10, repeat: -1 },
+      attack: { frames: [sat(2, 0), sat(2, 1), sat(2, 2), sat(2, 3)], fps: 14, repeat: 0 },
+      charge: { frames: [sat(2, 0)], fps: 1, repeat: -1 },
+      cast: { frames: [sat(3, 0)], fps: 1, repeat: -1 },
+      special: { frames: [sat(3, 0), sat(3, 1)], fps: 12, repeat: 0 },
+      lunge: { frames: [sat(3, 2), sat(3, 3), sat(4, 0)], fps: 10, repeat: -1 },
+      land: { frames: [sat(4, 1), sat(4, 2)], fps: 6, repeat: 0 },
+      shot: { frames: [sat(2, 3)], fps: 1, repeat: -1 },
+      dive: { frames: [sat(5, 1)], fps: 1, repeat: -1 },
+      hitstun: { frames: [sat(5, 0)], fps: 1, repeat: -1 },
+      down: { frames: [sat(5, 1), sat(5, 2)], fps: 6, repeat: 0 },
+      recover: { frames: [sat(5, 3)], fps: 1, repeat: -1 },
+    },
+    fx: {
+      key: 'fx-simayi',
+      url: 'sprites/simayi-fx.png',
+      frameWidth: 180,
+      frameHeight: 180,
+      punch: 'slash',
+      punchWidth: 90,
+      anims: {
+        slash: { frames: [fxat(0, 0), fxat(0, 1), fxat(0, 2), fxat(0, 3)], fps: 20, repeat: 0 },
+        smoke: { frames: [fxat(1, 0), fxat(1, 1), fxat(1, 2), fxat(1, 3)], fps: 12, repeat: 0 },
+        crows: { frames: [fxat(2, 0), fxat(2, 1), fxat(2, 2), fxat(2, 3)], fps: 12, repeat: -1 },
+        ring: { frames: [fxat(3, 0), fxat(3, 1), fxat(3, 2), fxat(3, 3)], fps: 10, repeat: 0 },
+        burst: { frames: [fxat(4, 0), fxat(4, 1), fxat(4, 2), fxat(4, 3)], fps: 14, repeat: 0 },
+      },
+    },
+  },
 };
 
 /** Stadium art (plain images): tiling backdrop, grass, foreground barricades, and the goal's dragon post (53×160, foot at footX/footY). */
@@ -398,6 +441,7 @@ export function createSpriteAnims(anims: Phaser.Animations.AnimationManager, tex
       const key = spriteAnimKey(cfg, name);
       if (anims.exists(key)) continue;
       const def = cfg.anims[name];
+      if (!def) continue;
       anims.create({
         key,
         frames: anims.generateFrameNumbers(cfg.key, { frames: def.frames }),

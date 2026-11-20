@@ -4,6 +4,9 @@ import {
   FIELD_W,
   GK_AREA_DEPTH,
   GOAL_HALF_W,
+  LEAP_BACK_DISTANCE,
+  LEAP_FLY_DISTANCE,
+  LEAP_RADIUS,
   ROAR_FORWARD,
   ROAR_RADIUS,
   SPECIAL_STAMINA_COST,
@@ -68,6 +71,14 @@ const RAMPAGE_BALL_RANGE = 160;
 const LUNGE_BALL_MIN = 60;
 const LUNGE_BALL_MAX = 190;
 const LUNGE_BALL_LATERAL = 50;
+/** Leap (Sima Yi): net distance the leap carries him along his facing (back-hop then flight). */
+const LEAP_LAND = LEAP_FLY_DISTANCE - LEAP_BACK_DISTANCE;
+/** Leap, off the ball: the carrier must be this far ahead of him along his facing, and near the landing spot. */
+const LEAP_BALL_MIN_AHEAD = 260;
+const LEAP_BALL_MAX_AHEAD = 380;
+const LEAP_TARGET_MIN_OPPONENTS = 2;
+/** Leap, owner: an opponent this close makes the leap an escape and advance. */
+const LEAP_OWNER_ESCAPE_RANGE = 100;
 
 const PRESSURE_RANGE = 40;
 const PRESSURE_PASS_CHANCE = 0.04;
@@ -125,6 +136,17 @@ function decide(state: GameState, ai: AIState, p: Player): InputFrame {
   if (s.cooldown > 0) s.cooldown--;
   if (s.holdTicks > 0) s.holdTicks--;
 
+  // Silenced (Sima Yi's leap): no attack, shot, pass, call or special. A silenced holder dribbles at the opponent goal;
+  // anyone else moves as usual with J, K and L held off.
+  if (p.silenceTicks > 0 && p.action === 'normal' && state.ball.ownerIdx === p.idx) {
+    s.intent = 'silencedDribble';
+    return frame(steerTo(p, opponentGoalX(state, p.team), CENTER_Y));
+  }
+  const f = activeFrame(state, ai, p, s);
+  return p.silenceTicks > 0 ? { ...f, j: false, k: false, l: false } : f;
+}
+
+function activeFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPlayer'][number]): InputFrame {
   const roar = roarFrame(state, p, s);
   if (roar !== null) return roar;
   if (p.action !== 'normal') return { ...EMPTY_INPUT };
@@ -215,6 +237,20 @@ function ownerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPla
     return frame(NO_MOVE, { l: true });
   }
 
+  // Sima Yi's leap while carrying: the ball travels with him, so cast it when it takes him toward goal out of trouble.
+  if (
+    p.specialMode === 'leap' &&
+    !p.prevInput.l &&
+    p.specialCooldown === 0 &&
+    p.stamina >= SHOT_MIN_STAMINA &&
+    leapOwnerWanted(state, p) &&
+    nextRandom(ai) < SHOT_FULL_CHANCE
+  ) {
+    s.intent = 'leap';
+    const land = leapLanding(p);
+    return frame(steerTo(p, land.x, land.y), { l: true });
+  }
+
   const goalDist = Math.abs(goalX - p.x);
   const shotRange = p.role === 'DF' ? SHOT_RANGE_DF : SHOT_RANGE_FWD;
   const inShotRange = goalDist < shotRange;
@@ -297,6 +333,18 @@ function offBallSpecialFrame(
         steer = steerTo(p, enemyCarrier.x, enemyCarrier.y);
       }
       break;
+    case 'leap':
+      if (enemyCarrier !== null) {
+        const land = leapLanding(p);
+        const ahead = (enemyCarrier.x - p.x) * p.facingX + (enemyCarrier.y - p.y) * p.facingY;
+        wanted =
+          ahead >= LEAP_BALL_MIN_AHEAD &&
+          ahead <= LEAP_BALL_MAX_AHEAD &&
+          (dist(enemyCarrier.x, enemyCarrier.y, land.x, land.y) < LEAP_RADIUS ||
+            opponentsNear(state, p.team, land.x, land.y, LEAP_RADIUS) >= LEAP_TARGET_MIN_OPPONENTS);
+        steer = steerTo(p, land.x, land.y);
+      }
+      break;
     case 'summon':
       wanted = opponentsWithin(state, p, SUMMON_AI_RANGE) >= SUMMON_AI_MIN_OPPONENTS;
       break;
@@ -306,6 +354,25 @@ function offBallSpecialFrame(
   if (!wanted || nextRandom(ai) >= SHOT_FULL_CHANCE) return null;
   s.intent = 'offBall';
   return frame(steer, { l: true });
+}
+
+/** Where a leap from p lands if cast now: LEAP_LAND along his facing (the sim normalises facing on the cast). */
+function leapLanding(p: Player): { x: number; y: number } {
+  return { x: p.x + p.facingX * LEAP_LAND, y: p.y + p.facingY * LEAP_LAND };
+}
+
+/**
+ * Owner leap: he faces the opponent goal, the landing spot is on the field, and either an opponent is within
+ * LEAP_OWNER_ESCAPE_RANGE of him (escape and advance) or LEAP_TARGET_MIN_OPPONENTS sit within LEAP_RADIUS of the landing.
+ */
+function leapOwnerWanted(state: GameState, p: Player): boolean {
+  if (p.facingX * attackDir(state, p.team) <= 0) return false;
+  const land = leapLanding(p);
+  if (land.x < 0 || land.x > FIELD_W || land.y < 0 || land.y > FIELD_D) return false;
+  return (
+    opponentsWithin(state, p, LEAP_OWNER_ESCAPE_RANGE) >= 1 ||
+    opponentsNear(state, p.team, land.x, land.y, LEAP_RADIUS) >= LEAP_TARGET_MIN_OPPONENTS
+  );
 }
 
 /** Rampaging without the ball: steer at the ball (carrier or loose) and never press J. */

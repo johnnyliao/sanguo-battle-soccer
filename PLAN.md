@@ -36,4 +36,20 @@
 - [x] 4. AI：新規則下的放招時機 — worker
 - [x] 5. 張遼角色圖＋特效切圖、sprites.ts、MatchScene 特效 — worker（me 看截圖）
 - [x] 6. specialText、CLAUDE.md、預覽 e2e 更新 — me/worker
-- [~] 7. tsc、vitest、build、本機 e2e → commit、push、部署、正式網址 e2e — me＋worker
+- [x] 7. tsc、vitest、build、本機 e2e → commit、push、部署、正式網址 e2e — me＋worker
+
+---
+# Goal 3（2026-11-20 晚）
+司馬懿新大招：後跳後往前飛一大段，落地小範圍扣 15% 體力＋沉默 2 秒（不能放大招、不能攻擊）。新角色圖（6 排）與綠色烏鴉特效。完成後 commit、push、部署、正式網址 e2e。
+
+# Constraints / decisions
+- 不需持球；持球則球跟著飛、落地仍在腳下。
+- 後跳 ~30px（9 tick），前飛 ~320px（30 tick），全程無敵；落地半徑 ~70px。
+- 沉默 120 tick：不能 L、J（攻擊／鏟球／撲救／射門／蓄力）、K（傳球／叫球）；只能移動（持球可帶球）。
+- 圖：art-src/simayi-sheet.png（1024×1536，6×4：待機、走、扇攻擊、起跳 4 格、空中/落地/起身、受擊/倒地/起身）、art-src/simayi-fx.png（1122×1402，5×4：羽扇斬、黑煙後跳、烏鴉飛行尾跡、落地綠焰圈、命中爆）。
+
+# Steps 3
+- [x] 1. sim：mode 'leap' + 沉默狀態 + 測試 — worker — verify: vitest
+- [x] 2. AI：放招時機 — worker（與 3 平行）
+- [x] 3. 切圖、sprites.ts、MatchScene 特效、e2e — worker（me 看截圖）
+- [ ] 4. CLAUDE.md、tsc/vitest/build → commit、push、部署、正式網址 e2e — me＋worker

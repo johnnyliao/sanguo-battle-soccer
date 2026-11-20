@@ -7,6 +7,7 @@ import {
   FIELD_W,
   createInitialState,
   RAMPAGE_TICKS,
+  SILENCE_TICKS,
   hashState,
   ownGoalX,
   step,
@@ -187,15 +188,16 @@ function driveOne(
   idx: number,
   ticks: number,
   pin: boolean,
-): { pressedL: boolean; pressedJ: boolean } {
+): { pressedL: boolean; pressedJ: boolean; pressedK: boolean } {
   const p = state.players[idx];
   const { x, y, facingX, facingY } = p;
-  const seen = { pressedL: false, pressedJ: false };
+  const seen = { pressedL: false, pressedJ: false, pressedK: false };
   for (let t = 0; t < ticks; t++) {
     if (pin) Object.assign(p, { x, y, facingX, facingY });
     const frames = computeAIInputs(state, ai, NO_HUMANS).map((f, i) => (i === idx ? f : { ...EMPTY_INPUT }));
     seen.pressedL = seen.pressedL || frames[idx].l;
     seen.pressedJ = seen.pressedJ || frames[idx].j;
+    seen.pressedK = seen.pressedK || frames[idx].k;
     step(state, frames);
   }
   return seen;
@@ -317,6 +319,94 @@ describe('AI specials (no-ball and owner rules)', () => {
     place(one, 8, 1000, FIELD_D / 2);
     carry(one, 7);
     expect(driveOne(one, createAIState(28), 3, TICKS, true).pressedL).toBe(false);
+  });
+
+  it('Sima Yi leaps off the ball when an opponent carrier is in his landing spot, and not when the carrier is too near or too far ahead', () => {
+    const inSpot = specialState(29);
+    place(inSpot, 8, 500, FIELD_D / 2, 1);
+    place(inSpot, 2, 790, FIELD_D / 2);
+    carry(inSpot, 2);
+    expect(driveOne(inSpot, createAIState(29), 8, TICKS, true).pressedL).toBe(true);
+
+    const tooNear = specialState(29);
+    place(tooNear, 8, 500, FIELD_D / 2, 1);
+    place(tooNear, 2, 700, FIELD_D / 2);
+    carry(tooNear, 2);
+    expect(driveOne(tooNear, createAIState(29), 8, TICKS, true).pressedL).toBe(false);
+
+    const tooFar = specialState(29);
+    place(tooFar, 8, 500, FIELD_D / 2, 1);
+    place(tooFar, 2, 900, FIELD_D / 2);
+    carry(tooFar, 2);
+    expect(driveOne(tooFar, createAIState(29), 8, TICKS, true).pressedL).toBe(false);
+  });
+
+  it('Sima Yi leaps off the ball when two opponents stand in his landing spot, even with the carrier 100 px off it', () => {
+    const state = specialState(30);
+    place(state, 8, 500, FIELD_D / 2, 1);
+    place(state, 2, 770, FIELD_D / 2 + 100);
+    place(state, 0, 790, FIELD_D / 2);
+    place(state, 1, 790, FIELD_D / 2 + 20);
+    carry(state, 2);
+    expect(driveOne(state, createAIState(30), 8, TICKS, true).pressedL).toBe(true);
+  });
+
+  it('a silenced Sima Yi off the ball never presses J, K or L, even with a carrier in his landing spot', () => {
+    const state = specialState(31);
+    place(state, 8, 500, FIELD_D / 2, 1);
+    place(state, 2, 790, FIELD_D / 2);
+    carry(state, 2);
+    state.players[8].silenceTicks = SILENCE_TICKS;
+    // Silence wears off after SILENCE_TICKS steps, so only watch inside that window.
+    const seen = driveOne(state, createAIState(31), 8, SILENCE_TICKS / 2, true);
+    expect(seen.pressedL).toBe(false);
+    expect(seen.pressedJ).toBe(false);
+    expect(seen.pressedK).toBe(false);
+  });
+
+  it('Sima Yi carrying toward goal leaps when an opponent is within 100 px or two sit in the landing spot, and not otherwise', () => {
+    const escape = specialState(32);
+    place(escape, 8, 600, FIELD_D / 2, -1);
+    place(escape, 2, 540, FIELD_D / 2);
+    carry(escape, 8);
+    expect(driveOne(escape, createAIState(32), 8, TICKS, true).pressedL).toBe(true);
+
+    const twoAtLanding = specialState(32);
+    place(twoAtLanding, 8, 600, FIELD_D / 2, -1);
+    place(twoAtLanding, 0, 310, FIELD_D / 2);
+    place(twoAtLanding, 1, 310, FIELD_D / 2 + 30);
+    carry(twoAtLanding, 8);
+    expect(driveOne(twoAtLanding, createAIState(32), 8, TICKS, true).pressedL).toBe(true);
+
+    const facingAway = specialState(32);
+    place(facingAway, 8, 600, FIELD_D / 2, 1);
+    place(facingAway, 2, 540, FIELD_D / 2);
+    carry(facingAway, 8);
+    expect(driveOne(facingAway, createAIState(32), 8, TICKS, true).pressedL).toBe(false);
+
+    const alone = specialState(32);
+    place(alone, 8, 600, FIELD_D / 2, -1);
+    carry(alone, 8);
+    expect(driveOne(alone, createAIState(32), 8, TICKS, true).pressedL).toBe(false);
+
+    const offField = specialState(32);
+    place(offField, 8, 200, FIELD_D / 2, -1);
+    place(offField, 2, 140, FIELD_D / 2);
+    carry(offField, 8);
+    expect(driveOne(offField, createAIState(32), 8, TICKS, true).pressedL).toBe(false);
+  });
+
+  it('a silenced Sima Yi carrying the ball dribbles at the opponent goal with no J, K or L', () => {
+    const state = specialState(33);
+    place(state, 8, 600, FIELD_D / 2, 1);
+    carry(state, 8);
+    state.players[8].silenceTicks = SILENCE_TICKS;
+    const seen = driveOne(state, createAIState(33), 8, 20, false);
+    expect(state.players[8].silenceTicks).toBeGreaterThan(0);
+    expect(seen.pressedL).toBe(false);
+    expect(seen.pressedJ).toBe(false);
+    expect(seen.pressedK).toBe(false);
+    expect(state.players[8].x).toBeLessThan(600);
   });
 });
 

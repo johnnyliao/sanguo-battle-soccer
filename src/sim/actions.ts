@@ -26,6 +26,13 @@ import {
   KICK_NO_TOUCH,
   KICK_RECOVER_TICKS,
   KNOCKBACK_SPEED,
+  LEAP_BACK_DISTANCE,
+  LEAP_BACK_TICKS,
+  LEAP_FLY_DISTANCE,
+  LEAP_FLY_TICKS,
+  LEAP_PEAK_Z,
+  LEAP_RADIUS,
+  LEAP_STAMINA_RATIO,
   LOOSE_BALL_NO_TOUCH,
   LUNGE_SPEED,
   LUNGE_TICKS,
@@ -64,6 +71,7 @@ import {
   SHOT_BASE_SPEED,
   SHOT_SPEED_PER_CHARGE,
   SHOT_SPEED_PER_POWER,
+  SILENCE_TICKS,
   SPECIAL_BUFFER_TICKS,
   SPECIAL_COOLDOWN_TICKS,
   SPECIAL_FLAT_Z,
@@ -80,6 +88,7 @@ import {
   SUMMON_TICKS,
   TACKLE_SPEED_MULT,
   TACKLE_TICKS,
+  TICK_HZ,
 } from './constants';
 import { attackDir, goalMouth, inOwnArea, opponentGoalX } from './field';
 import { rngInt, rngNext } from './rng';
@@ -133,7 +142,8 @@ export function updateAction(state: GameState, p: Player, input: InputFrame): vo
   applyGravity(p);
   tickRampage(state, p);
   tickSpecialCooldown(state, p);
-  if (input.l && !p.prevInput.l && p.action !== 'fear') p.specialBuffer = SPECIAL_BUFFER_TICKS;
+  if (p.silenceTicks > 0) p.silenceTicks--;
+  if (input.l && !p.prevInput.l && p.action !== 'fear' && p.silenceTicks === 0) p.specialBuffer = SPECIAL_BUFFER_TICKS;
   else if (p.specialBuffer > 0) p.specialBuffer--;
   switch (p.action) {
     case 'normal':
@@ -171,6 +181,9 @@ export function updateAction(state: GameState, p: Player, input: InputFrame): vo
       break;
     case 'fear':
       updateFear(p);
+      break;
+    case 'leap':
+      updateLeap(state, p);
       break;
   }
 }
@@ -280,8 +293,10 @@ function updateNormal(state: GameState, p: Player, input: InputFrame): void {
 
   const ownsBall = state.ball.ownerIdx === p.idx;
   const baseSpeed = maxSpeedOf(p);
+  // Silenced (a leap landing): only movement works, so J and K do nothing.
+  const silenced = p.silenceTicks > 0;
 
-  if (ownsBall) {
+  if (ownsBall && !silenced) {
     if (input.k && !p.prevInput.k) {
       if (rampaging) endRampage(state, p);
       passBall(state, p);
@@ -301,13 +316,13 @@ function updateNormal(state: GameState, p: Player, input: InputFrame): void {
     }
   }
 
-  if (input.k && !p.prevInput.k) {
+  if (input.k && !p.prevInput.k && !silenced) {
     p.callPassTicks = CALL_PASS_TICKS;
     state.events.push({ type: 'callPass', playerIdx: p.idx });
   }
 
   // A rampage without the ball (a no-ball special) makes J do nothing: no punch, tackle or dive.
-  if (input.j && !p.prevInput.j && !ownsBall && !rampaging) {
+  if (input.j && !p.prevInput.j && !ownsBall && !rampaging && !silenced) {
     if (dashHeld) {
       startAttack(state, p, 'tackle', TACKLE_TICKS);
       p.vx = p.facingX * baseSpeed * TACKLE_SPEED_MULT;
@@ -439,11 +454,11 @@ function releaseCharge(state: GameState, p: Player, input: InputFrame): void {
 /**
  * Buffered L press: starts the special if a press is buffered, the match is in play, and it is ready (cooldown 0,
  * enough stamina). A roar (Zhang Fei) and a fear (Zhang Liao) are instant. Every other special needs the ball unless
- * its character has specialNoBall; a rampage, lunge or beam starts at once, and a summon keeps the ball.
+ * its character has specialNoBall; a rampage, lunge, beam or leap starts at once, and a summon keeps the ball.
  * A special that cannot start yet keeps the buffer. Returns true if it started.
  */
 function trySpecial(state: GameState, p: Player, input: InputFrame): boolean {
-  if (p.specialBuffer === 0 || state.match.phase !== 'play') return false;
+  if (p.specialBuffer === 0 || state.match.phase !== 'play' || p.silenceTicks > 0) return false;
   if (p.specialCooldown > 0 || p.stamina < SPECIAL_STAMINA_COST) return false;
   if (p.specialMode === 'roar') {
     p.specialBuffer = 0;
@@ -460,6 +475,7 @@ function trySpecial(state: GameState, p: Player, input: InputFrame): boolean {
   if (p.specialMode === 'lunge') startLunge(state, p, input);
   else if (p.specialMode === 'beam') startBeamCast(state, p);
   else if (p.specialMode === 'summon') startSummon(state, p);
+  else if (p.specialMode === 'leap') startLeap(state, p);
   else startRampage(state, p);
   return true;
 }
@@ -545,6 +561,113 @@ function endLunge(state: GameState, p: Player): void {
   }
   toNormal(p);
   state.events.push({ type: 'lungeEnd', playerIdx: p.idx, x: p.x, y: p.y });
+}
+
+/**
+ * Simayi's leap (鷹視狼顧): a back-hop opposite his facing, then a long flight along it, invincible throughout. He keeps
+ * any ball at his feet. The landing hits the opponents near him (see landLeap).
+ */
+function startLeap(state: GameState, p: Player): void {
+  const len = Math.sqrt(p.facingX * p.facingX + p.facingY * p.facingY);
+  if (len > 0) {
+    p.facingX /= len;
+    p.facingY /= len;
+  } else {
+    p.facingX = attackDir(state, p.team);
+    p.facingY = 0;
+  }
+  p.stamina -= SPECIAL_STAMINA_COST;
+  p.specialCooldown = SPECIAL_COOLDOWN_TICKS;
+  p.chargeTicks = 0;
+  p.action = 'leap';
+  p.actionTimer = LEAP_BACK_TICKS + LEAP_FLY_TICKS;
+  const backSpeed = (LEAP_BACK_DISTANCE / LEAP_BACK_TICKS) * TICK_HZ;
+  p.vx = -p.facingX * backSpeed;
+  p.vy = -p.facingY * backSpeed;
+  state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
+  state.events.push({ type: 'leapStart', playerIdx: p.idx });
+}
+
+/**
+ * One leap tick. The back-hop runs while the timer is above LEAP_FLY_TICKS; the flight follows, with z on a parabola that
+ * peaks at LEAP_PEAK_Z and is 0 on landing. Input is ignored. The leap ends (and lands) when its timer runs out, or ends
+ * quietly when the phase leaves play.
+ */
+function updateLeap(state: GameState, p: Player): void {
+  if (state.match.phase !== 'play') {
+    endLeap(p);
+    return;
+  }
+  p.actionTimer--;
+  // Flight tick n is 1..LEAP_FLY_TICKS; back-hop ticks are 0 or below.
+  const flyTick = LEAP_FLY_TICKS - p.actionTimer;
+  if (flyTick === 1) {
+    const flySpeed = (LEAP_FLY_DISTANCE / LEAP_FLY_TICKS) * TICK_HZ;
+    p.vx = p.facingX * flySpeed;
+    p.vy = p.facingY * flySpeed;
+    state.events.push({ type: 'leapFly', playerIdx: p.idx });
+  }
+  integrate(p);
+  if (flyTick < 1) return;
+  const t = Math.min(1, flyTick / LEAP_FLY_TICKS);
+  p.z = 4 * LEAP_PEAK_Z * t * (1 - t);
+  p.vz = 0;
+  if (p.actionTimer <= 0) landLeap(state, p);
+}
+
+/** Back to normal on the spot, with no velocity and on the ground. Used when the phase leaves play. */
+function endLeap(p: Player): void {
+  p.z = 0;
+  p.vz = 0;
+  p.vx = 0;
+  p.vy = 0;
+  toNormal(p);
+}
+
+/**
+ * Leap landing: every opponent within LEAP_RADIUS of his landing point that is not invincible is hit (see leapVictim).
+ * The landing is reported before the hits.
+ */
+function landLeap(state: GameState, p: Player): void {
+  endLeap(p);
+  const victims = state.players.filter(
+    (v) => v.team !== p.team && !isInvincible(v) && distance(p.x, p.y, v.x, v.y) <= LEAP_RADIUS,
+  );
+  state.events.push({
+    type: 'leapLand',
+    playerIdx: p.idx,
+    x: p.x,
+    y: p.y,
+    victimIdxs: victims.map((v) => v.idx),
+  });
+  for (const v of victims) leapVictim(state, p, v);
+}
+
+/**
+ * One leap victim: cancels a beam channel, loses LEAP_STAMINA_RATIO of maxStamina and is silenced for SILENCE_TICKS. Going
+ * to zero stamina knocks him down (a down player keeps his timer). Otherwise he is stunned for HITSTUN_TICKS, unless he is
+ * already down or recovering. He keeps any ball he holds.
+ */
+function leapVictim(state: GameState, p: Player, v: Player): void {
+  reportCastCancel(state, v);
+  v.chargeTicks = 0;
+  const cost = LEAP_STAMINA_RATIO * v.maxStamina;
+  v.stamina = Math.max(0, v.stamina - cost);
+  v.silenceTicks = SILENCE_TICKS;
+
+  let down = false;
+  if (v.stamina <= 0) {
+    if (v.action !== 'down') {
+      setDown(v, DOWN_TICKS_EXHAUSTED);
+      down = true;
+    }
+  } else if (v.action !== 'down' && v.action !== 'recover') {
+    v.action = 'hitstun';
+    v.actionTimer = HITSTUN_TICKS;
+  }
+
+  state.events.push({ type: 'hit', attackerIdx: p.idx, victimIdx: v.idx, kind: 'special', damage: cost });
+  if (down) state.events.push({ type: 'down', playerIdx: v.idx });
 }
 
 /** Unit direction from (x, y) to the centre of the goal the team attacks. Falls back to the attack direction on the line. */
@@ -1202,9 +1325,9 @@ function findVictim(
   return undefined;
 }
 
-/** Invincible players (rampaging or lunging) cannot be hit, tackled, stolen from, roared at, or pierced by a special. */
+/** Invincible players (rampaging, lunging or leaping) cannot be hit, tackled, stolen from, roared at, or pierced by a special. */
 export function isInvincible(p: Player): boolean {
-  return p.rampageTicks > 0 || p.action === 'lunge';
+  return p.rampageTicks > 0 || p.action === 'lunge' || p.action === 'leap';
 }
 
 /**
@@ -1213,7 +1336,8 @@ export function isInvincible(p: Player): boolean {
  */
 export function applyRampageBumps(state: GameState): void {
   for (const r of state.players) {
-    if (!isInvincible(r)) continue;
+    // A leap hits only on landing (see landLeap), so a leaper bumps nobody in the air.
+    if (!isInvincible(r) || r.action === 'leap') continue;
     for (const o of state.players) {
       if (o.team === r.team || o.action === 'down' || o.bumpCooldown > 0 || isInvincible(o)) continue;
       const dx = o.x - r.x;

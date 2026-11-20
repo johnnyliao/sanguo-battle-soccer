@@ -11,7 +11,7 @@ function ch(
   stats: [number, number, number, number, number],
   specialName: string,
   specialKind: SpecialKind,
-  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' = 'rampage',
+  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' = 'rampage',
   opts: { noBall?: boolean; bumpPct?: number } = {},
 ): CharacterDef {
   const [power, speed, stamina, technique, defense] = stats;
@@ -35,7 +35,7 @@ export const RAW_CHARACTERS: CharacterDef[] = [
   ch('xuchu', '許褚', 'wei', 'GK', 'L', [9, 3, 10, 2, 9], '虎痴裸衣', 'pierce'),
   ch('dianwei', '典韋', 'wei', 'DF', 'L', [10, 4, 9, 2, 8], '雙戟旋風', 'lob'),
   ch('caocao', '曹操', 'wei', 'MF', 'M', [6, 6, 6, 8, 5], '挾天子令', 'zigzag'),
-  ch('simayi', '司馬懿', 'wei', 'MF', 'S', [4, 5, 7, 9, 6], '鷹視狼顧', 'zigzag'),
+  ch('simayi', '司馬懿', 'wei', 'MF', 'S', [4, 5, 7, 9, 6], '鷹視狼顧', 'zigzag', 'leap', { noBall: true }),
   ch('zhangliao', '張遼', 'wei', 'FW', 'M', [7, 10, 6, 7, 2], '遼來了', 'straight', 'fear', { noBall: true }),
   ch('huanggai', '黃蓋', 'wu', 'GK', 'L', [8, 3, 10, 3, 9], '苦肉火船', 'pierce'),
   ch('taishici', '太史慈', 'wu', 'DF', 'M', [8, 6, 8, 5, 7], '神射一箭', 'straight'),

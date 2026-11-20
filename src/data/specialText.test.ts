@@ -50,6 +50,12 @@ describe('specialDescription', () => {
     expect(d.effect).toContain('無法行動');
   });
 
+  it('leap works with or without the ball and silences the landing area', () => {
+    const d = specialDescription(def('zigzag', 'leap', true));
+    expect(d.condition).toBe('持球或不持球');
+    expect(d.effect).toContain('沉默 2 秒');
+  });
+
   it('summon needs the ball and calls cavalry', () => {
     const d = specialDescription(def('straight', 'summon'));
     expect(d.condition).toBe('持球');
@@ -57,7 +63,7 @@ describe('specialDescription', () => {
   });
 
   it('keeps effect texts short enough for one team-select line', () => {
-    const modes = ['rampage', 'roar', 'lunge', 'beam', 'summon', 'fear'] as const;
+    const modes = ['rampage', 'roar', 'lunge', 'beam', 'summon', 'fear', 'leap'] as const;
     for (const mode of modes) {
       for (const kind of ['straight', 'zigzag', 'lob', 'pierce', 'beam'] as const) {
         expect(specialDescription(def(kind, mode)).effect.length).toBeLessThanOrEqual(20);
