@@ -1,5 +1,5 @@
 // Turns a character sheet (grid of frames on white, with or without black ground lines) into a transparent sprite sheet.
-// Usage: node tools/make-sprite.mjs <input sheet.png> <output sprite.png> [--scale <factor>] [--keep-white] [--rows <n>] [--grid-cut]
+// Usage: node tools/make-sprite.mjs <input sheet.png> <output sprite.png> [--scale <factor>] [--keep-white] [--clear-pockets] [--fill-line-gaps] [--rows <n>] [--grid-cut]
 // Writes <output>.png (uniform frames, packed, transparent), <output>.json (frameWidth, frameHeight,
 // cols, rows, anchorX, anchorY) and test-results/<name>-preview.png for a visual check.
 // --scale downscales the packed sheet (frame size and anchor in the json are scaled to match).
@@ -28,6 +28,17 @@ if (scaleAt >= 0) argv.splice(scaleAt, 2);
 const keepAt = argv.indexOf('--keep-white');
 const KEEP_WHITE = keepAt >= 0;
 if (keepAt >= 0) argv.splice(keepAt, 1);
+// --clear-pockets (with --keep-white): an enclosed white pocket of at least 150 px that is at least half pure white
+//   (#fafafa and up, no tint) is background, e.g. the gap between raised arms and the head. Cream fur and shading are
+//   not pure white, so they stay opaque.
+const clearAt = argv.indexOf('--clear-pockets');
+const CLEAR_POCKETS = clearAt >= 0;
+if (clearAt >= 0) argv.splice(clearAt, 1);
+// --fill-line-gaps: a ground-line run (at most 80 px) that sits inside the figure, with art on both ends and art directly
+//   above, stays opaque. Without it the line cuts a see-through slit through dark trousers or boots.
+const fillAt = argv.indexOf('--fill-line-gaps');
+const FILL_LINE_GAPS = fillAt >= 0;
+if (fillAt >= 0) argv.splice(fillAt, 1);
 // --grid-cut: old behaviour, each frame takes only the art inside its own column cut and row band.
 const gridAt = argv.indexOf('--grid-cut');
 const GRID_CUT = gridAt >= 0;
@@ -49,7 +60,7 @@ const metaPath = outPath.replace(/\.png$/, '.json');
 const previewPath = resolve(repoRoot, 'test-results', `${basename(outPath, '.png')}-preview.png`);
 
 // Runs in the page. Everything the pixel work needs is inside this function.
-function processSheet({ dataUrl, cols, rows, pad, scale, keepWhite, gridCut }) {
+function processSheet({ dataUrl, cols, rows, pad, scale, keepWhite, clearPockets, fillLineGaps, gridCut }) {
   return (async () => {
     const img = new Image();
     img.src = dataUrl;
@@ -260,7 +271,8 @@ function processSheet({ dataUrl, cols, rows, pad, scale, keepWhite, gridCut }) {
           }
         }
       }
-      if (comp.length >= POCKET_MIN) {
+      const pureWhite = comp.filter((q) => minc[q] >= 250 && maxc[q] - minc[q] <= 6).length;
+      if (comp.length >= POCKET_MIN || (clearPockets && comp.length >= 150 && pureWhite >= 0.5 * comp.length)) {
         for (const q of comp) outside[q] = 1;
       } else if (comp.length >= 20) {
         const xs = comp.map((p) => p % W);
@@ -270,6 +282,26 @@ function processSheet({ dataUrl, cols, rows, pad, scale, keepWhite, gridCut }) {
     }
     const removed = new Uint8Array(N);
     for (let p = 0; p < N; p++) removed[p] = outside[p] || lineMask[p] ? 1 : 0;
+    if (fillLineGaps && lineMode) {
+      // A run of line pixels inside the figure: art on both ends and directly above every pixel of the run.
+      for (const l of lines) {
+        for (let y = l.yt; y <= l.yb; y++) {
+          let x = 0;
+          while (x < W) {
+            if (!(removed[y * W + x] && lineMask[y * W + x])) {
+              x++;
+              continue;
+            }
+            const s = x;
+            while (x < W && removed[y * W + x] && lineMask[y * W + x]) x++;
+            const e = x - 1;
+            let inside = s > 0 && e < W - 1 && e - s + 1 <= 80 && !removed[y * W + s - 1] && !removed[y * W + e + 1];
+            for (let q = s; inside && q <= e; q++) if (removed[(y - 1) * W + q]) inside = false;
+            if (inside) for (let q = s; q <= e; q++) removed[y * W + q] = 0;
+          }
+        }
+      }
+    }
 
     // 7) Alpha: opaque everywhere except removed pixels. Edge pixels next to removed area that are light
     //    get partial alpha by whiteness, and their color is un-premultiplied against white (no white halo).
@@ -652,7 +684,17 @@ const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--ena
 let result;
 try {
   const page = await browser.newPage();
-  result = await page.evaluate(processSheet, { dataUrl, cols: COLS, rows: ROWS, pad: PAD, scale: SCALE, keepWhite: KEEP_WHITE, gridCut: GRID_CUT });
+  result = await page.evaluate(processSheet, {
+    dataUrl,
+    cols: COLS,
+    rows: ROWS,
+    pad: PAD,
+    scale: SCALE,
+    keepWhite: KEEP_WHITE,
+    clearPockets: CLEAR_POCKETS,
+    fillLineGaps: FILL_LINE_GAPS,
+    gridCut: GRID_CUT,
+  });
 } finally {
   await browser.close();
 }

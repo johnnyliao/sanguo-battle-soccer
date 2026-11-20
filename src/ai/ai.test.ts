@@ -8,6 +8,7 @@ import {
   createInitialState,
   RAMPAGE_TICKS,
   SILENCE_TICKS,
+  TIGER_GUARD_TICKS,
   hashState,
   ownGoalX,
   step,
@@ -407,6 +408,111 @@ describe('AI specials (no-ball and owner rules)', () => {
     expect(seen.pressedJ).toBe(false);
     expect(seen.pressedK).toBe(false);
     expect(state.players[8].x).toBeLessThan(600);
+  });
+});
+
+describe('AI tiger guard (Xu Chu, off the ball)', () => {
+  const XU_CHU = 5;
+  const TIGER_TICKS_CHECK = 200;
+
+  /** Wei (idx 5-9) with Xu Chu at idx 5 standing just inside his own goal line. */
+  function tigerState(seed: number): { state: GameState; goalX: number; inward: number } {
+    const state = specialState(seed);
+    const goalX = ownGoalX(state, 1);
+    const inward = goalX === 0 ? 1 : -1;
+    expect(state.players[XU_CHU].specialMode).toBe('tiger');
+    place(state, XU_CHU, goalX + inward * 60, FIELD_D / 2, inward);
+    return { state, goalX, inward };
+  }
+
+  /** Shu idx 2 carries the ball `dist` px in from the goal line. */
+  function shuCarrierAt(state: GameState, goalX: number, inward: number, dist: number): void {
+    place(state, 2, goalX + inward * dist, FIELD_D / 2);
+    carry(state, 2);
+  }
+
+  /** Loose ball `dist` px in from the goal line, moving toward (or away from) Xu Chu's goal, last touched by `touchIdx`. */
+  function looseBall(state: GameState, goalX: number, inward: number, dist: number, toward: boolean, touchIdx: number): void {
+    const dir = goalX === 0 ? -1 : 1;
+    state.ball.x = goalX + inward * dist;
+    state.ball.y = FIELD_D / 2;
+    state.ball.vx = (toward ? dir : -dir) * 600;
+    state.ball.vy = 0;
+    state.ball.ownerIdx = -1;
+    state.ball.lastTouchIdx = touchIdx;
+  }
+
+  /** True if Xu Chu presses L on any of `ticks` frames. Nothing is stepped, so the state stays exactly as set up. */
+  function pressesL(state: GameState, seed: number, ticks = TIGER_TICKS_CHECK): boolean {
+    const ai = createAIState(seed);
+    for (let t = 0; t < ticks; t++) {
+      if (computeAIInputs(state, ai, NO_HUMANS)[XU_CHU].l) return true;
+    }
+    return false;
+  }
+
+  it('casts when an opponent carries the ball within 260 px of his goal line', () => {
+    const { state, goalX, inward } = tigerState(41);
+    shuCarrierAt(state, goalX, inward, 200);
+    expect(pressesL(state, 41)).toBe(true);
+  });
+
+  it('casts against an incoming opponent shot within 350 px of his goal line', () => {
+    const { state, goalX, inward } = tigerState(42);
+    looseBall(state, goalX, inward, 300, true, 2);
+    expect(pressesL(state, 42)).toBe(true);
+  });
+
+  it('does not cast when the opponent carrier is 400 px from his goal line', () => {
+    const { state, goalX, inward } = tigerState(43);
+    shuCarrierAt(state, goalX, inward, 400);
+    expect(pressesL(state, 43)).toBe(false);
+  });
+
+  it('does not cast when the loose ball is moving away from his goal', () => {
+    const { state, goalX, inward } = tigerState(44);
+    looseBall(state, goalX, inward, 300, false, 2);
+    expect(pressesL(state, 44)).toBe(false);
+  });
+
+  it('does not cast for a loose ball last touched by a teammate', () => {
+    const { state, goalX, inward } = tigerState(45);
+    looseBall(state, goalX, inward, 300, true, 6);
+    expect(pressesL(state, 45)).toBe(false);
+  });
+
+  it('does not cast while a tiger guard is already running', () => {
+    const { state, goalX, inward } = tigerState(46);
+    shuCarrierAt(state, goalX, inward, 200);
+    state.players[XU_CHU].tigerTicks = TIGER_GUARD_TICKS;
+    expect(pressesL(state, 46)).toBe(false);
+  });
+
+  it('does not cast while silenced', () => {
+    const { state, goalX, inward } = tigerState(47);
+    shuCarrierAt(state, goalX, inward, 200);
+    state.players[XU_CHU].silenceTicks = SILENCE_TICKS;
+    expect(pressesL(state, 47)).toBe(false);
+  });
+
+  it('on the press frame his movement equals the normal goalkeeper frame, with L added', () => {
+    const normalSetup = tigerState(48);
+    shuCarrierAt(normalSetup.state, normalSetup.goalX, normalSetup.inward, 200);
+    normalSetup.state.players[XU_CHU].tigerTicks = TIGER_GUARD_TICKS;
+    const normal = computeAIInputs(normalSetup.state, createAIState(48), NO_HUMANS)[XU_CHU];
+    expect(normal.l).toBe(false);
+    expect(normal.moveX).not.toBe(0);
+
+    const { state, goalX, inward } = tigerState(48);
+    shuCarrierAt(state, goalX, inward, 200);
+    const ai = createAIState(48);
+    let press: InputFrame | null = null;
+    for (let t = 0; t < TIGER_TICKS_CHECK && press === null; t++) {
+      const f = computeAIInputs(state, ai, NO_HUMANS)[XU_CHU];
+      if (f.l) press = f;
+    }
+    expect(press).not.toBeNull();
+    expect({ ...press, l: false }).toEqual(normal);
   });
 });
 

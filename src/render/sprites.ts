@@ -16,6 +16,8 @@ export type SpriteAnim = 'idle' | 'run' | 'attack' | 'charge' | 'special' | 'cas
  * and for Zhang Fei's roar the charge and the soundwave, for Zhang Liao's fear the ghost burst over him, the chains ring and
  * the '!' icon over each feared player, and the chains' shatter when the fear ends. For Simayi's leap: the feather fan slash
  * (punch), the smoke at his start, the crow flock trailing him in the air, the green ring where he lands, and the green burst on each victim.
+ * For Xu Chu's tiger guard: the ground smash (punch), the fire ring running round him, the tiger maw over him while a shot is
+ * held, the fire roar (spit and forward roar), and the flaming trail of the spat ball.
  */
 export type FxAnim =
   | 'thrust'
@@ -36,7 +38,12 @@ export type FxAnim =
   | 'alarm'
   | 'shatter'
   | 'crows'
-  | 'ring';
+  | 'ring'
+  | 'smash'
+  | 'fireRing'
+  | 'maw'
+  | 'roar'
+  | 'trail';
 
 export interface SpriteMeta {
   frameWidth: number;
@@ -105,6 +112,7 @@ const MACHAO_META: SpriteMeta = { frameWidth: 211, frameHeight: 195, cols: 4, ro
 const MACHAO_CAVALRY_META: SpriteMeta = { frameWidth: 280, frameHeight: 206, cols: 4, rows: 2, anchorX: 145, anchorY: 156 };
 const ZHANGLIAO_META: SpriteMeta = { frameWidth: 421, frameHeight: 272, cols: 4, rows: 5, anchorX: 272, anchorY: 265 };
 const SIMAYI_META: SpriteMeta = { frameWidth: 263, frameHeight: 244, cols: 4, rows: 6, anchorX: 132, anchorY: 240 };
+const XUCHU_META: SpriteMeta = { frameWidth: 282, frameHeight: 290, cols: 4, rows: 6, anchorX: 116, anchorY: 214 };
 
 /** Frame index of a sheet cell (row-major) for a sheet with this meta. */
 const cellAt = (meta: SpriteMeta) => (row: number, col: number): number => row * meta.cols + col;
@@ -116,6 +124,7 @@ const mat = cellAt(MACHAO_META);
 const cat = cellAt(MACHAO_CAVALRY_META);
 const lat = cellAt(ZHANGLIAO_META);
 const sat = cellAt(SIMAYI_META);
+const xat = cellAt(XUCHU_META);
 /** The Zhao Yun and Zhuge Liang effect sheets are 4 columns of 181 px frames. */
 const fxat = (row: number, col: number): number => row * 4 + col;
 
@@ -380,6 +389,43 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
         crows: { frames: [fxat(2, 0), fxat(2, 1), fxat(2, 2), fxat(2, 3)], fps: 12, repeat: -1 },
         ring: { frames: [fxat(3, 0), fxat(3, 1), fxat(3, 2), fxat(3, 3)], fps: 10, repeat: 0 },
         burst: { frames: [fxat(4, 0), fxat(4, 1), fxat(4, 2), fxat(4, 3)], fps: 14, repeat: 0 },
+      },
+    },
+  },
+  xuchu: {
+    key: 'sprite-xuchu',
+    url: 'sprites/xuchu.png',
+    meta: XUCHU_META,
+    displayHeight: 60,
+    shadowScale: 1.2,
+    anims: {
+      idle: { frames: [xat(0, 0), xat(0, 1), xat(0, 2), xat(0, 3)], fps: 6, repeat: -1 },
+      run: { frames: [xat(1, 0), xat(1, 1), xat(1, 2), xat(1, 3)], fps: 10, repeat: -1 },
+      attack: { frames: [xat(2, 0), xat(2, 1), xat(2, 2), xat(2, 3)], fps: 14, repeat: 0 },
+      charge: { frames: [xat(2, 0)], fps: 1, repeat: -1 },
+      cast: { frames: [xat(4, 2)], fps: 1, repeat: -1 },
+      special: { frames: [xat(4, 0), xat(4, 1), xat(4, 2)], fps: 8, repeat: 0 },
+      rampage: { frames: [xat(4, 1), xat(4, 2)], fps: 8, repeat: -1 },
+      lunge: { frames: [xat(4, 1), xat(4, 2)], fps: 8, repeat: -1 },
+      shot: { frames: [xat(2, 2)], fps: 1, repeat: -1 },
+      dive: { frames: [xat(3, 1), xat(3, 2), xat(3, 3)], fps: 8, repeat: 0 },
+      hitstun: { frames: [xat(5, 0)], fps: 1, repeat: -1 },
+      down: { frames: [xat(5, 1), xat(5, 2)], fps: 6, repeat: 0 },
+      recover: { frames: [xat(5, 3)], fps: 1, repeat: -1 },
+    },
+    fx: {
+      key: 'fx-xuchu',
+      url: 'sprites/xuchu-fx.png',
+      frameWidth: 180,
+      frameHeight: 180,
+      punch: 'smash',
+      punchWidth: 90,
+      anims: {
+        smash: { frames: [fxat(0, 0), fxat(0, 1), fxat(0, 2), fxat(0, 3)], fps: 20, repeat: 0 },
+        fireRing: { frames: [fxat(1, 0), fxat(1, 1), fxat(1, 2), fxat(1, 3)], fps: 10, repeat: -1 },
+        maw: { frames: [fxat(2, 0), fxat(2, 1), fxat(2, 2), fxat(2, 3)], fps: 6, repeat: 0 },
+        roar: { frames: [fxat(3, 0), fxat(3, 1), fxat(3, 2), fxat(3, 3)], fps: 10, repeat: 0 },
+        trail: { frames: [fxat(4, 0), fxat(4, 1), fxat(4, 2), fxat(4, 3)], fps: 14, repeat: -1 },
       },
     },
   },

@@ -79,6 +79,12 @@ const LEAP_BALL_MAX_AHEAD = 380;
 const LEAP_TARGET_MIN_OPPONENTS = 2;
 /** Leap, owner: an opponent this close makes the leap an escape and advance. */
 const LEAP_OWNER_ESCAPE_RANGE = 100;
+/** Tiger guard (Xu Chu), off the ball: per-tick chance once a threat holds (the window is short, so higher than the others). */
+const TIGER_AI_CHANCE = 0.1;
+/** Tiger, off the ball: an opponent carrier this close (in x) to his own goal line. */
+const TIGER_CARRIER_RANGE = 260;
+/** Tiger, off the ball: a moving loose ball last touched by an opponent, heading at his goal, this close (in x) to the goal line. */
+const TIGER_SHOT_RANGE = 350;
 
 const PRESSURE_RANGE = 40;
 const PRESSURE_PASS_CHANCE = 0.04;
@@ -303,6 +309,13 @@ function offBallSpecialFrame(
   s: AIState['perPlayer'][number],
 ): InputFrame | null {
   if (!p.specialNoBall || p.prevInput.l || p.specialCooldown > 0 || p.stamina < SHOT_MIN_STAMINA) return null;
+  // Xu Chu's tiger guard: the goalkeeper's normal frame (freeFrame) with L added on top, so his movement is unchanged.
+  if (p.specialMode === 'tiger') {
+    if (!tigerThreat(state, p) || nextRandom(ai) >= TIGER_AI_CHANCE) return null;
+    const normal = freeFrame(state, ai, p, s);
+    s.intent = 'tiger';
+    return { ...normal, l: true };
+  }
   const carrier = state.ball.ownerIdx === -1 ? null : state.players[state.ball.ownerIdx];
   const enemyCarrier = carrier !== null && carrier.team !== p.team ? carrier : null;
   let wanted = false;
@@ -354,6 +367,24 @@ function offBallSpecialFrame(
   if (!wanted || nextRandom(ai) >= SHOT_FULL_CHANCE) return null;
   s.intent = 'offBall';
   return frame(steer, { l: true });
+}
+
+/**
+ * Xu Chu's tiger guard is worth casting: no guard running yet, and either an opponent carries the ball within
+ * TIGER_CARRIER_RANGE of his goal line, or a moving loose ball last touched by an opponent heads at his goal from
+ * within TIGER_SHOT_RANGE.
+ */
+function tigerThreat(state: GameState, p: Player): boolean {
+  if (p.tigerTicks > 0) return false;
+  const goalX = ownGoalX(state, p.team);
+  const ball = state.ball;
+  if (ball.ownerIdx !== -1) {
+    const carrier = state.players[ball.ownerIdx];
+    return carrier.team !== p.team && Math.abs(carrier.x - goalX) < TIGER_CARRIER_RANGE;
+  }
+  if (ball.lastTouchIdx === -1 || state.players[ball.lastTouchIdx].team === p.team) return false;
+  const towardGoal = goalX === 0 ? ball.vx < 0 : ball.vx > 0;
+  return towardGoal && Math.abs(ball.x - goalX) < TIGER_SHOT_RANGE;
 }
 
 /** Where a leap from p lands if cast now: LEAP_LAND along his facing (the sim normalises facing on the cast). */

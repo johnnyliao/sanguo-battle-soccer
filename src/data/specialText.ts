@@ -31,5 +31,7 @@ export function specialDescription(def: CharacterDef): { condition: string; effe
       return { condition, effect: '震懾全場敵人，3 秒內無法行動' };
     case 'leap':
       return { condition: '持球或不持球', effect: '後跳飛撲，落地扣敵人體力並沉默 2 秒' };
+    case 'tiger':
+      return { condition: '持球或不持球', effect: '5秒吞射門，吐球砸人扣80%，沒吞則震退' };
   }
 }

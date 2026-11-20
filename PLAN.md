@@ -52,4 +52,21 @@
 - [x] 1. sim：mode 'leap' + 沉默狀態 + 測試 — worker — verify: vitest
 - [x] 2. AI：放招時機 — worker（與 3 平行）
 - [x] 3. 切圖、sprites.ts、MatchScene 特效、e2e — worker（me 看截圖）
-- [ ] 4. CLAUDE.md、tsc/vitest/build → commit、push、部署、正式網址 e2e — me＋worker
+- [x] 4. CLAUDE.md、tsc/vitest/build → commit、push、部署、正式網址 e2e — me＋worker
+
+---
+# Goal 4（2026-11-20 晚）
+許褚（GK）新大招「惡虎吞天」：背後召喚虎頭，自動吞下一次射正球門的射門，吐出成超遠高飛球；砸到敵人扣 80%＋暈眩 3 秒；沒吞到則往前小範圍震退扣 10%。新角色圖（6 排）與火虎特效。完成後 commit、push、部署、正式網址 e2e。
+
+# Constraints / decisions（未指定處由 me 先定，已告知使用者）
+- 不需持球；按下後「虎守」最長 5 秒（300 tick），許褚倒地時不攔。
+- 攔截：敵方射正球門的射門（含必殺球）進入許褚 150px 內 → 吞；不含帶球衝門。
+- 吞後球留虎口 0.5 秒，往敵方方向吐出高飛球 ~450px；落下途中碰到敵人扣 80%、暈眩 180 tick。
+- 5 秒內沒吞到：前方 ~90px 半圓震退、扣 10%。
+- 圖：art-src/xuchu-sheet.png（6×4：待機、走、攻擊、撲救 4 格、吼叫/持錘、受擊/倒地/起身）、art-src/xuchu-fx.png（5×4：地面爆裂、火虎環、虎頭吞（張口/漩渦/閉口發光）、虎頭吐、火虎尾跡）。
+
+# Steps 4
+- [x] 1. sim：mode 'tiger' + 測試 — worker — verify: vitest
+- [x] 2. AI：放招時機 — worker（與 3 平行）
+- [x] 3. 切圖、sprites.ts、MatchScene 特效、e2e — worker（me 看截圖）
+- [ ] 4. CLAUDE.md、驗證 → commit、push、部署、正式網址 e2e — me＋worker

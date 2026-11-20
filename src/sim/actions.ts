@@ -89,6 +89,11 @@ import {
   TACKLE_SPEED_MULT,
   TACKLE_TICKS,
   TICK_HZ,
+  TIGER_BALL_STAMINA_RATIO,
+  TIGER_GUARD_TICKS,
+  TIGER_ROAR_RADIUS,
+  TIGER_ROAR_STAMINA_RATIO,
+  TIGER_STUN_TICKS,
 } from './constants';
 import { attackDir, goalMouth, inOwnArea, opponentGoalX } from './field';
 import { rngInt, rngNext } from './rng';
@@ -141,6 +146,7 @@ export function updateAction(state: GameState, p: Player, input: InputFrame): vo
   if (p.callPassTicks > 0) p.callPassTicks--;
   applyGravity(p);
   tickRampage(state, p);
+  tickTiger(state, p);
   tickSpecialCooldown(state, p);
   if (p.silenceTicks > 0) p.silenceTicks--;
   if (input.l && !p.prevInput.l && p.action !== 'fear' && p.silenceTicks === 0) p.specialBuffer = SPECIAL_BUFFER_TICKS;
@@ -476,6 +482,7 @@ function trySpecial(state: GameState, p: Player, input: InputFrame): boolean {
   else if (p.specialMode === 'beam') startBeamCast(state, p);
   else if (p.specialMode === 'summon') startSummon(state, p);
   else if (p.specialMode === 'leap') startLeap(state, p);
+  else if (p.specialMode === 'tiger') startTiger(state, p);
   else startRampage(state, p);
   return true;
 }
@@ -1066,6 +1073,116 @@ function updateFear(p: Player): void {
   p.vy = 0;
   p.actionTimer--;
   if (p.actionTimer <= 0) toNormal(p);
+}
+
+/**
+ * Xu Chu's tiger guard (惡虎吞天): an instant cast, with or without the ball. He keeps acting normally while the guard runs
+ * (see step.ts for the swallow and the spat ball). Any ball he holds stays at his feet.
+ */
+function startTiger(state: GameState, p: Player): void {
+  p.stamina -= SPECIAL_STAMINA_COST;
+  p.specialCooldown = SPECIAL_COOLDOWN_TICKS;
+  p.chargeTicks = 0;
+  p.tigerTicks = TIGER_GUARD_TICKS;
+  p.action = 'normal';
+  p.actionTimer = 0;
+  state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
+  state.events.push({ type: 'tigerStart', playerIdx: p.idx });
+}
+
+/** Counts the tiger guard down. When it runs out without a swallow (the swallow sets it to 0 first), Xu Chu roars. */
+function tickTiger(state: GameState, p: Player): void {
+  if (p.tigerTicks === 0) return;
+  p.tigerTicks--;
+  if (p.tigerTicks === 0) tigerRoar(state, p);
+}
+
+/**
+ * Expiry roar: every opponent that is standing and not invincible, within TIGER_ROAR_RADIUS of Xu Chu and in front of him
+ * (along his attack direction), is knocked back and loses a share of stamina. Going to zero stamina knocks him down,
+ * otherwise he is stunned for HITSTUN_TICKS. A holder drops the ball.
+ */
+function tigerRoar(state: GameState, p: Player): void {
+  const dir = attackDir(state, p.team);
+  const victims = state.players.filter(
+    (v) =>
+      v.team !== p.team &&
+      v.action !== 'down' &&
+      !isInvincible(v) &&
+      (v.x - p.x) * dir >= 0 &&
+      distance(p.x, p.y, v.x, v.y) <= TIGER_ROAR_RADIUS,
+  );
+  state.events.push({ type: 'tigerRoar', playerIdx: p.idx, victimIdxs: victims.map((v) => v.idx) });
+  for (const v of victims) tigerRoarKnock(state, p, v);
+}
+
+/** One expiry-roar victim: knocked away from Xu Chu like a roar victim, with the tiger roar's stamina share. */
+function tigerRoarKnock(state: GameState, p: Player, v: Player): void {
+  reportCastCancel(state, v);
+  const dist = distance(p.x, p.y, v.x, v.y);
+  const dirX = dist > 0 ? (v.x - p.x) / dist : attackDir(state, p.team);
+  const dirY = dist > 0 ? (v.y - p.y) / dist : 0;
+  const massMult = Math.min(1.4, Math.max(0.8, p.mass / v.mass));
+  v.vx = dirX * ROAR_KNOCK_SPEED * massMult;
+  v.vy = dirY * ROAR_KNOCK_SPEED * massMult;
+  v.vz = ROAR_VZ;
+  v.chargeTicks = 0;
+  const cost = TIGER_ROAR_STAMINA_RATIO * v.maxStamina;
+  v.stamina = Math.max(0, v.stamina - cost);
+
+  let down = false;
+  if (v.stamina <= 0) {
+    setDown(v, DOWN_TICKS_EXHAUSTED);
+    down = true;
+  } else {
+    v.action = 'hitstun';
+    v.actionTimer = HITSTUN_TICKS;
+  }
+
+  state.events.push({ type: 'hit', attackerIdx: p.idx, victimIdx: v.idx, kind: 'special', damage: cost });
+  if (down) state.events.push({ type: 'down', playerIdx: v.idx });
+  if (state.ball.ownerIdx === v.idx) knockLooseBall(state, p, v, dirX, dirY);
+}
+
+/**
+ * One spat-ball victim (see step.ts): loses TIGER_BALL_STAMINA_RATIO of maxStamina, is knocked along the ball's direction,
+ * and is stunned for TIGER_STUN_TICKS. Going to zero stamina knocks him down instead.
+ */
+export function tigerBallHit(state: GameState, tiger: Player, v: Player, dirX: number, dirY: number): void {
+  reportCastCancel(state, v);
+  v.chargeTicks = 0;
+  const cost = TIGER_BALL_STAMINA_RATIO * v.maxStamina;
+  v.stamina = Math.max(0, v.stamina - cost);
+
+  const knock = (KNOCKBACK_SPEED * tiger.mass) / v.mass;
+  v.vx = dirX * knock;
+  v.vy = dirY * knock;
+  v.vz = HIT_VZ;
+
+  let down = false;
+  if (v.stamina <= 0) {
+    setDown(v, DOWN_TICKS_EXHAUSTED);
+    down = true;
+  } else {
+    v.action = 'hitstun';
+    v.actionTimer = TIGER_STUN_TICKS;
+  }
+
+  state.events.push({ type: 'hit', attackerIdx: tiger.idx, victimIdx: v.idx, kind: 'special', damage: cost });
+  if (down) state.events.push({ type: 'down', playerIdx: v.idx });
+}
+
+/**
+ * Ends every tiger guard (silently, no roar) and any tiger ball when the phase leaves play. Called from step after the
+ * match phase is updated.
+ */
+export function endTigerWindows(state: GameState): void {
+  for (const p of state.players) {
+    if (p.tigerTicks === 0) continue;
+    p.tigerTicks = 0;
+    state.events.push({ type: 'tigerEnd', playerIdx: p.idx });
+  }
+  state.ball.tiger = null;
 }
 
 /** Clears a rampage and reports it. Callers only call this while the player is rampaging. */

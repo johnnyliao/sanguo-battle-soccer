@@ -31,7 +31,8 @@ export type PlayerAction =
   | 'lunge'
   | 'cast'
   | 'fear'
-  | 'leap';
+  | 'leap'
+  | 'tiger';
 
 export type AttackKind = 'punch' | 'tackle' | 'special';
 
@@ -71,12 +72,14 @@ export interface Player {
   rampageTicks: number;
   /** Ticks during which this player cannot be bumped by a rampaging opponent again. */
   bumpCooldown: number;
-  /** What the special button (L) does: a rampage, a roar (shockwave) for Zhang Fei, a lunge (long dash) for Zhao Yun, a beam (channel, then strikes one opponent) for Zhuge Liang, a summon (cavalry riders) for Ma Chao, or a fear (opponents stand still) for Zhang Liao. */
-  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap';
+  /** What the special button (L) does: a rampage, a roar (shockwave) for Zhang Fei, a lunge (long dash) for Zhao Yun, a beam (channel, then strikes one opponent) for Zhuge Liang, a summon (cavalry riders) for Ma Chao, a fear (opponents stand still) for Zhang Liao, or a tiger guard (swallows a shot, spits it at opponents) for Xu Chu. */
+  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger';
   /** Ticks until the special can be used again. Set when a rampage starts or a roar fires. */
   specialCooldown: number;
   /** Ticks left silenced (a leap landing): only movement works, no J, K or L. 0 = not silenced. */
   silenceTicks: number;
+  /** Ticks left in a tiger guard window (Xu Chu). 0 = no window. Reaching 0 without a swallow fires the expiry roar. */
+  tigerTicks: number;
   /** Ticks left on a buffered L press. A press made while busy waits here and fires once the player can act. 0 = none. */
   specialBuffer: number;
   specialKind: SpecialKind;
@@ -141,6 +144,22 @@ export interface Ball {
   /** Index of the last player who touched the ball, or -1. */
   lastTouchIdx: number | -1;
   special: SpecialShot | null;
+  /** A swallowed shot (held, then spat) or a spat tiger ball in flight. null otherwise. See TigerBall. */
+  tiger: TigerBall | null;
+}
+
+/**
+ * Xu Chu's swallowed ball. Kept apart from ball.special because a special shot ends on walls and goal nets, runs a keeper
+ * save roll, and hits with fixed costs and stuns, none of which apply to the tiger ball. phase 'hold': the ball sits in his
+ * mouth and cannot be picked up, for holdTicks more ticks. phase 'flight': the spat ball, a tiger ball until its first
+ * landing. hit lists the opponents it has already knocked (each victim at most once).
+ */
+export interface TigerBall {
+  tigerIdx: number;
+  team: 0 | 1;
+  phase: 'hold' | 'flight';
+  holdTicks: number;
+  hit: number[];
 }
 
 export type SimEvent =
@@ -189,6 +208,16 @@ export type SimEvent =
   /** Zhang Liao's fear: the caster and the opponents it reached (the fear's victims). */
   | { type: 'fear'; playerIdx: number; victimIdxs: number[] }
   | { type: 'specialEnd' }
+  /** Xu Chu's tiger guard starts (cast without the ball). */
+  | { type: 'tigerStart'; playerIdx: number }
+  /** Xu Chu swallows an on-target shot; the ball is held at (x, y). */
+  | { type: 'tigerSwallow'; playerIdx: number; x: number; y: number }
+  /** The held ball is spat out as a high lob toward the opponent goal. */
+  | { type: 'tigerSpit'; playerIdx: number }
+  /** The guard runs out without a swallow: Xu Chu roars forward at victimIdxs. */
+  | { type: 'tigerRoar'; playerIdx: number; victimIdxs: number[] }
+  /** The guard ends without a roar (the phase left play). */
+  | { type: 'tigerEnd'; playerIdx: number }
   | { type: 'whistle'; reason: 'kickoff' | 'half' | 'full' }
   | { type: 'goal'; team: 0 | 1; scorerIdx: number }
   | { type: 'matchEnd'; score: [number, number] }

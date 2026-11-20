@@ -1,7 +1,9 @@
 // Skill preview check: team select (phone touch) -> 預覽 on each character -> the special fires -> back to team select.
-// Covers 關羽 / 張飛 / 趙雲 / 諸葛亮 / 馬超 (shu roster) and 張遼 / 司馬懿 (wei roster). Screenshots go to the scratchpad preview dir;
+// Covers 關羽 / 張飛 / 趙雲 / 諸葛亮 / 馬超 (shu roster) and 許褚 / 張遼 / 司馬懿 (wei roster). Screenshots go to the scratchpad preview dir;
 // the fear shot (fear-zhangliao.png) is taken during Zhang Liao's fear, with the victims feared. Simayi's flight shot
 // (leap-simayi-flight.png) is taken mid-air, and the landing shot (leap-simayi.png) at the landing, with the victims burst and silenced.
+// Xu Chu's guard: once it starts, a test-staged opponent shot comes in at his goal. The swallow shot (tiger-xuchu-swallow.png) is
+// taken while the ball is held in his mouth, and the spit shot (tiger-xuchu-spit.png) while the fire trail follows the lob.
 // Usage: node e2e/preview.mjs <url>
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
@@ -26,6 +28,7 @@ const CASES = [
   { id: 'zhugeliang', name: '諸葛亮', slot: 2, effect: 'beamStrike' },
   { id: 'machao', name: '馬超', slot: 3, effect: 'riderSpawn' },
   { id: 'zhaoyun', name: '趙雲', slot: 4, effect: 'lungeStart' },
+  { id: 'xuchu', name: '許褚', slot: 0, effect: 'tigerSwallow', wei: true },
   { id: 'zhangliao', name: '張遼', slot: 4, effect: 'fear', wei: true },
   { id: 'simayi', name: '司馬懿', slot: 3, effect: 'leapLand', wei: true },
 ];
@@ -81,6 +84,27 @@ async function tapPreview(page, slot) {
   const p = await toPage(page, rect.x + rect.w / 2, rect.y + rect.h / 2);
   await page.touchscreen.tap(p.x, p.y);
 }
+
+// Test-only: an opponent's shot at Xu Chu's own goal, along the sim's attack direction (sim field.ts attackDir: team 0 attacks +x
+// unless swapped; his own goal is the other end). The ball starts 60 px in front of him toward that goal.
+const stageTigerShot = () => {
+  const s = window.__sg.state();
+  const tiger = s.players[window.__sg.humanIdx];
+  const attack = (tiger.team === 0 ? 1 : -1) * (s.match.swapped ? -1 : 1);
+  const dir = -attack;
+  const shooter = s.players.find((p) => p.team !== tiger.team);
+  const b = s.ball;
+  b.ownerIdx = -1;
+  b.lastTouchIdx = shooter.idx;
+  b.special = null;
+  b.x = tiger.x + dir * 60;
+  b.y = tiger.y;
+  b.z = 0;
+  b.vx = dir * 10;
+  b.vy = 0;
+  b.vz = 0;
+  return { shooter: shooter.idx, tigerX: tiger.x };
+};
 
 const browser = await chromium.launch({
   args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
@@ -162,6 +186,24 @@ try {
         );
       await page.screenshot({ path: shot('leap-simayi-flight.png') });
       report(`${name} mid-flight height`, airborne);
+    }
+
+    if (c.effect === 'tigerSwallow') {
+      // Guard starts (tigerStart), then the staged shot is swallowed; the hold is 0.5 s, so the swallow shot is taken right away.
+      await page.waitForFunction(() => window.__sg.preview().events.includes('tigerStart'), null, { timeout: 6000 });
+      await page.evaluate(stageTigerShot);
+      const held = await page
+        .waitForFunction(() => window.__sg.state().ball.tiger?.phase === 'hold', null, { timeout: 4000 })
+        .then(() => true, () => false);
+      // Taken at CSS scale: the lob lands about 0.9 s after the spit, and a 2x shot is too slow to catch the flight.
+      await page.screenshot({ path: shot('tiger-xuchu-swallow.png'), scale: 'css' });
+      report(`${name} swallows the shot (ball held)`, held);
+      // The spit: the lob flies with the fire trail, and the shot is taken as soon as the flight is seen.
+      const spat = await page
+        .waitForFunction(() => window.__sg.state().ball.tiger?.phase === 'flight', null, { timeout: 4000, polling: 'raf' })
+        .then(() => true, () => false);
+      await page.screenshot({ path: shot('tiger-xuchu-spit.png'), scale: 'css' });
+      report(`${name} spits the ball (lob in flight)`, spat);
     }
 
     // Wait for the special and its effect event.

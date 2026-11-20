@@ -33,6 +33,7 @@ export function createInitialState(
       ownerIdx: -1,
       lastTouchIdx: -1,
       special: null,
+      tiger: null,
     },
     match: {
       phase: 'kickoff',
@@ -87,6 +88,7 @@ export function createInitialState(
         rampageTicks: 0,
         bumpCooldown: 0,
         silenceTicks: 0,
+        tigerTicks: 0,
         specialMode: def.special.mode ?? 'rampage',
         specialCooldown: 0,
         specialBuffer: 0,

@@ -21,6 +21,12 @@ import {
   SPECIAL_MAX_TICKS,
   SPECIAL_ZIGZAG_AMP,
   SPECIAL_ZIGZAG_FREQ,
+  TIGER_HOLD_TICKS,
+  TIGER_MOUTH_FORWARD,
+  TIGER_MOUTH_Z,
+  TIGER_SPIT_DISTANCE,
+  TIGER_SPIT_VZ,
+  TIGER_SWALLOW_RANGE,
   WALL_BOUNCE,
 } from './constants';
 import {
@@ -28,11 +34,13 @@ import {
   applySpecialHit,
   clampPlayerToField,
   clearRiders,
+  endTigerWindows,
   isInvincible,
+  tigerBallHit,
   updateAction,
   updateRiders,
 } from './actions';
-import { inOwnArea, goalMouth, isInGoalMouth } from './field';
+import { attackDir, inOwnArea, goalMouth, isInGoalMouth } from './field';
 import { updateMatch } from './match';
 import { updatePk } from './pk';
 import { rngNext } from './rng';
@@ -43,6 +51,7 @@ import {
   type InputFrame,
   type Player,
   type SpecialShot,
+  type TigerBall,
 } from './types';
 
 /** Impact speed above which a ground bounce is reported as an event. */
@@ -81,8 +90,11 @@ export function step(state: GameState, inputs: InputFrame[]): GameState {
     updateBall(state);
     updatePickup(state);
     updateMatch(state);
-    // Riders only live while the phase is play: a goal, half time, kickoff or PK start clears them.
-    if (state.match.phase !== 'play') clearRiders(state);
+    // Riders and tiger guards only live while the phase is play: a goal, half time, kickoff or PK start clears them.
+    if (state.match.phase !== 'play') {
+      clearRiders(state);
+      endTigerWindows(state);
+    }
   }
 
   for (let i = 0; i < state.players.length; i++) {
@@ -149,6 +161,9 @@ function updatePossession(state: GameState): void {
 function updateBall(state: GameState): void {
   const b = state.ball;
   if (b.ownerIdx !== -1) return;
+
+  if (b.tiger !== null && advanceTigerBall(state)) return;
+  if (tryTigerSwallow(state)) return;
 
   if (b.special !== null) {
     // A special ball that ends this tick still gets the wall / goal-net handling below.
@@ -303,6 +318,137 @@ function resolveSpecialContacts(state: GameState, sp: SpecialShot): boolean {
   return false;
 }
 
+/**
+ * Xu Chu's guard (惡虎吞天): the first on-target opponent shot that comes within TIGER_SWALLOW_RANGE of a guarding tiger is
+ * swallowed. A shot is an unowned moving ball last touched by an opponent of the tiger. A swallow ends the guard and any
+ * special shot. Returns true if a ball was swallowed (the ball is then held, see advanceTigerBall).
+ */
+function tryTigerSwallow(state: GameState): boolean {
+  const b = state.ball;
+  if (b.lastTouchIdx === -1 || b.tiger !== null) return false;
+  if (Math.sqrt(b.vx * b.vx + b.vy * b.vy) <= BALL_STOP_SPEED) return false;
+  const shooter = state.players[b.lastTouchIdx];
+  for (const tiger of state.players) {
+    if (tiger.tigerTicks === 0 || tiger.team === shooter.team) continue;
+    if (tiger.action === 'down' || tiger.action === 'recover') continue;
+    const dx = b.x - tiger.x;
+    const dy = b.y - tiger.y;
+    if (Math.sqrt(dx * dx + dy * dy) > TIGER_SWALLOW_RANGE) continue;
+    if (!crossesOwnMouth(state, tiger.team, b)) continue;
+    swallowBall(state, tiger);
+    return true;
+  }
+  return false;
+}
+
+/** True if the ball's straight xy path crosses the goal line `team` defends, inside the goal mouth. */
+function crossesOwnMouth(state: GameState, team: 0 | 1, b: Ball): boolean {
+  if (b.vx === 0) return false;
+  const side: 0 | 1 = attackDir(state, team) === 1 ? 0 : 1;
+  const mouth = goalMouth(side);
+  const t = (mouth.x - b.x) / b.vx;
+  if (t <= 0) return false;
+  const y = b.y + b.vy * t;
+  return y >= mouth.yMin && y <= mouth.yMax;
+}
+
+/** The ball is caught in the tiger's mouth: a hold with no velocity, in front of him and high off the ground. */
+function swallowBall(state: GameState, tiger: Player): void {
+  const b = state.ball;
+  tiger.tigerTicks = 0;
+  if (b.special !== null) {
+    b.special = null;
+    state.events.push({ type: 'specialEnd' });
+  }
+  b.tiger = { tigerIdx: tiger.idx, team: tiger.team, phase: 'hold', holdTicks: TIGER_HOLD_TICKS, hit: [] };
+  placeInMouth(state, tiger);
+  state.events.push({ type: 'tigerSwallow', playerIdx: tiger.idx, x: b.x, y: b.y });
+}
+
+function placeInMouth(state: GameState, tiger: Player): void {
+  const b = state.ball;
+  b.x = tiger.x + attackDir(state, tiger.team) * TIGER_MOUTH_FORWARD;
+  b.y = tiger.y;
+  b.z = TIGER_MOUTH_Z;
+  b.vx = 0;
+  b.vy = 0;
+  b.vz = 0;
+}
+
+/**
+ * One tick of a tiger ball. Returns true while the ball is under the tiger's control (held or flying), so the normal ball
+ * physics is skipped. A hold follows his mouth until its ticks run out, then the ball is spat. A flight arcs and hits the
+ * opponents it passes; its first landing (or leaving the field) ends the tiger ball. The landing tick leaves the ball
+ * loose at z 0, and the next tick runs normal physics.
+ */
+function advanceTigerBall(state: GameState): boolean {
+  const b = state.ball;
+  const t = b.tiger;
+  if (t === null) return false;
+  const tiger = state.players[t.tigerIdx];
+  if (t.phase === 'hold') {
+    placeInMouth(state, tiger);
+    t.holdTicks--;
+    if (t.holdTicks <= 0) spitTigerBall(state, tiger, t);
+    return true;
+  }
+
+  b.vz -= GRAVITY * DT;
+  b.x += b.vx * DT;
+  b.y += b.vy * DT;
+  b.z += b.vz * DT;
+  tigerBallContacts(state, t);
+  if (b.z <= 0) {
+    b.z = 0;
+    b.vz = 0;
+    b.tiger = null;
+    return true;
+  }
+  if (b.x < 0 || b.x > FIELD_W || b.y < 0 || b.y > FIELD_D) {
+    b.tiger = null;
+    return false;
+  }
+  return true;
+}
+
+/**
+ * The hold is over: the ball leaves his mouth as a high lob toward the opponent goal (along his attack direction), credited
+ * to him. Horizontal speed is set so the first landing is TIGER_SPIT_DISTANCE from the spit point, with the same gravity
+ * the ball uses in flight.
+ */
+function spitTigerBall(state: GameState, tiger: Player, t: TigerBall): void {
+  const b = state.ball;
+  const vz0 = TIGER_SPIT_VZ;
+  const flightTime = (vz0 + Math.sqrt(vz0 * vz0 + 2 * GRAVITY * TIGER_MOUTH_Z)) / GRAVITY;
+  b.vx = (attackDir(state, tiger.team) * TIGER_SPIT_DISTANCE) / flightTime;
+  b.vy = 0;
+  b.vz = vz0;
+  b.lastTouchIdx = tiger.idx;
+  t.phase = 'flight';
+  state.events.push({ type: 'tigerSpit', playerIdx: tiger.idx });
+}
+
+/**
+ * A spat ball hits each opponent it passes at ball height, the same way a special ball does (see resolveSpecialContacts).
+ * Invincible opponents are skipped; each victim is hit at most once.
+ */
+function tigerBallContacts(state: GameState, t: TigerBall): void {
+  const b = state.ball;
+  const tiger = state.players[t.tigerIdx];
+  const speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+  const dirX = speed > 0 ? b.vx / speed : attackDir(state, tiger.team);
+  const dirY = speed > 0 ? b.vy / speed : 0;
+  for (const p of state.players) {
+    if (p.team === t.team || p.action === 'down' || t.hit.includes(p.idx) || isInvincible(p)) continue;
+    const dx = b.x - p.x;
+    const dy = b.y - p.y;
+    if (Math.sqrt(dx * dx + dy * dy) >= p.radius + BALL_RADIUS + SPECIAL_CONTACT_PAD) continue;
+    if (Math.abs(b.z - p.z) >= SPECIAL_CONTACT_Z) continue;
+    t.hit.push(p.idx);
+    tigerBallHit(state, tiger, p, dirX, dirY);
+  }
+}
+
 /** Save chance of a goalkeeper against a special shot. */
 function specialSaveChance(gk: Player, shooter: Player): number {
   return clamp(0.3 + (gk.stats.defense - shooter.stats.power) * 0.08, 0.05, 0.6);
@@ -357,7 +503,7 @@ function parryFastBall(state: GameState, gk: Player): void {
 function updatePickup(state: GameState): void {
   const ball = state.ball;
   const inNet = ball.x < 0 || ball.x > FIELD_W;
-  if (state.match.phase === 'play' && ball.ownerIdx === -1 && ball.special === null && !inNet) {
+  if (state.match.phase === 'play' && ball.ownerIdx === -1 && ball.special === null && ball.tiger === null && !inNet) {
     let best = -1;
     let bestDist = Infinity;
     for (let i = 0; i < state.players.length; i++) {

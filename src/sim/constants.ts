@@ -134,6 +134,27 @@ export const RIDER_SEPARATION_DIST = 45;
 export const RIDER_SEPARATION_ACCEL = 600;
 /** A roaming rider (no valid target) picks a new direction every this many ticks. */
 export const RIDER_WANDER_TICKS = 40;
+/** Xu Chu's tiger guard (惡虎吞天): the window in which he swallows an on-target shot (5 s). */
+export const TIGER_GUARD_TICKS = 300;
+/** A shot on target that passes within this many px of Xu Chu is swallowed. */
+export const TIGER_SWALLOW_RANGE = 150;
+/** Ticks the swallowed ball is held in his mouth before it is spat out (0.5 s). */
+export const TIGER_HOLD_TICKS = 30;
+/** Where the held ball sits: this many px in front of Xu Chu (along his attack direction), at this height. */
+export const TIGER_MOUTH_FORWARD = 20;
+export const TIGER_MOUTH_Z = 30;
+/** Horizontal distance a spat ball travels before its first landing, measured from the spit point. */
+export const TIGER_SPIT_DISTANCE = 450;
+/** Upward speed of the spat ball, px per second. Sets the arc height and flight time together with GRAVITY. */
+export const TIGER_SPIT_VZ = 240;
+/** Share of a tiger ball victim's maxStamina that it takes (80%). */
+export const TIGER_BALL_STAMINA_RATIO = 0.8;
+/** How long a tiger ball victim is stunned (3 s). */
+export const TIGER_STUN_TICKS = 180;
+/** Expiry roar: opponents within this many px in front of Xu Chu are knocked back. */
+export const TIGER_ROAR_RADIUS = 90;
+/** Share of each expiry-roar victim's maxStamina that the roar takes (10%). */
+export const TIGER_ROAR_STAMINA_RATIO = 0.1;
 
 export const KICKOFF_TICKS = 60;
 export const GOAL_CELEBRATE_TICKS = 150;

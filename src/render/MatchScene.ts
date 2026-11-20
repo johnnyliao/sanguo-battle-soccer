@@ -344,6 +344,22 @@ const BEAM_HIT_LIFT = 20;
 const BEAM_FADE_MS = 150;
 const BEAM_SHAKE_MS = 120;
 const BEAM_SHAKE_INTENSITY = 0.002;
+/**
+ * Xu Chu's tiger guard: the fire ring round him (its width), the tiger maw over him while a shot is held and the fire roar
+ * (both width TIGER_HEAD_FX_W, centred TIGER_HEAD_AHEAD px in front of his feet, at TIGER_HEAD_LIFT of his sprite height),
+ * the forward roar (centred TIGER_ROAR_AHEAD px in front), the flaming trail of the spat ball (its width), the roar's
+ * length in ms (its 4 frames at 10 fps) and the cast pose time.
+ */
+const TIGER_RING_FX_W = 110;
+const TIGER_HEAD_FX_W = 140;
+const TIGER_HEAD_AHEAD = 30;
+const TIGER_ROAR_AHEAD = 80;
+const TIGER_HEAD_LIFT = 0.9;
+const TIGER_TRAIL_FX_W = 120;
+const TIGER_ROAR_FX_MS = 400;
+const TIGER_POSE_MS = 400;
+const TIGER_SHAKE_MS = 160;
+const TIGER_SHAKE_INTENSITY = 0.004;
 /** Why-not hint above the human's name: shown for HINT_MS, rising HINT_RISE px while it fades. */
 const HINT_MS = 1000;
 const HINT_RISE = 8;
@@ -474,6 +490,10 @@ export class MatchScene extends Phaser.Scene {
   /** Zhang Liao's fear: the caster of each player feared by him, and the feared players whose chains are on (see updateFearFx). */
   private fearCaster = new Map<number, number>();
   private fearShown = new Set<number>();
+  /** Xu Chu's tiger guard effects: the fire ring round him, the maw over him while a shot is held, and the trail of the spat ball. */
+  private tigerRing = new Map<number, FxInstance>();
+  private tigerMaw = new Map<number, FxInstance>();
+  private tigerTrail: FxInstance | null = null;
 
   private homeText!: Phaser.GameObjects.Text;
   private awayText!: Phaser.GameObjects.Text;
@@ -583,6 +603,9 @@ export class MatchScene extends Phaser.Scene {
     this.fx = [];
     this.fearCaster.clear();
     this.fearShown.clear();
+    this.tigerRing.clear();
+    this.tigerMaw.clear();
+    this.tigerTrail = null;
     this.scorers = [];
     this.resultQueued = false;
     this.prevHumanL = false;
@@ -761,6 +784,21 @@ export class MatchScene extends Phaser.Scene {
       } else if (e.type === 'fear') {
         for (const v of e.victimIdxs) this.fearCaster.set(v, e.playerIdx);
         this.fearCastFx(e.playerIdx);
+      } else if (e.type === 'tigerStart') {
+        this.tigerRingFx(e.playerIdx);
+      } else if (e.type === 'tigerSwallow') {
+        this.tigerSwallowFx(e.playerIdx);
+        this.playPose(e.playerIdx, 'cast', TIGER_POSE_MS);
+      } else if (e.type === 'tigerSpit') {
+        this.tigerSpitFx(e.playerIdx);
+        this.playPose(e.playerIdx, 'cast', TIGER_POSE_MS);
+      } else if (e.type === 'tigerRoar') {
+        this.cameras.main.shake(TIGER_SHAKE_MS, TIGER_SHAKE_INTENSITY);
+        this.tigerRoarFx(e.playerIdx);
+        this.playPose(e.playerIdx, 'cast', TIGER_POSE_MS);
+      } else if (e.type === 'tigerEnd') {
+        this.fadeTigerRing(e.playerIdx);
+        this.fadeTigerMaw(e.playerIdx);
       } else if (e.type === 'attack') {
         if (e.kind === 'punch') this.punchFx(e.playerIdx);
       } else if (e.type === 'lungeStart') {
@@ -879,6 +917,7 @@ export class MatchScene extends Phaser.Scene {
     this.drawRiders();
     this.drawBall();
     this.updateFearFx();
+    this.updateTigerTrail();
     this.drawFx();
     this.drawHud();
     this.drawMinimap();
@@ -899,9 +938,9 @@ export class MatchScene extends Phaser.Scene {
   }
 
   /** Adds one effect (additive blend) to the scene and tracks it in this.fx until it is removed. */
-  private playFx(fx: FxSheet, name: FxAnim, s: FxSpawn): void {
+  private playFx(fx: FxSheet, name: FxAnim, s: FxSpawn): FxInstance | null {
     const def = fx.anims[name];
-    if (!def) return;
+    if (!def) return null;
     const durMs = (def.frames.length / def.fps) * 1000;
     const holdMs = s.holdMs ?? durMs;
     const sprite = this.add
@@ -913,7 +952,7 @@ export class MatchScene extends Phaser.Scene {
       .setFlipX(s.flip ?? false)
       .setRotation(s.angle ?? 0)
       .play(fxAnimKey(fx, name));
-    this.fx.push({
+    const instance: FxInstance = {
       sprite,
       startMs: this.time.now,
       holdMs,
@@ -929,7 +968,9 @@ export class MatchScene extends Phaser.Scene {
       alpha: s.alpha ?? 1,
       mirror: s.mirror ?? false,
       depthOff: s.depthOff ?? 0.5,
-    });
+    };
+    this.fx.push(instance);
+    return instance;
   }
 
   /** A punch's streak in front of him at chest height: Zhao Yun's spear thrust or Zhuge Liang's fan slash (sheet's punch). */
@@ -1352,6 +1393,125 @@ export class MatchScene extends Phaser.Scene {
     });
   }
 
+  /** Xu Chu's guard: the fire ring that runs round him until a swallow, a roar or the end fades it. */
+  private tigerRingFx(idx: number): void {
+    const owner = this.fxOwner(idx);
+    if (!owner) return;
+    this.fadeTigerRing(idx);
+    const p = this.state.players[idx];
+    const feet = worldToScreen(p.x, p.y, 0);
+    const lift = owner.cfg.displayHeight * 0.5;
+    const ring = this.playFx(owner.fx, 'fireRing', {
+      x: feet.sx,
+      y: feet.sy - lift,
+      w: TIGER_RING_FX_W,
+      h: (TIGER_RING_FX_W * owner.fx.frameHeight) / owner.fx.frameWidth,
+      depth: p.y - 0.5,
+      holdMs: Number.POSITIVE_INFINITY,
+      follow: idx,
+      offY: -lift,
+      depthOff: -0.5,
+    });
+    if (ring) this.tigerRing.set(idx, ring);
+  }
+
+  /** Xu Chu's tiger head in front of his feet, following him and mirrored to his facing (`ahead` px in front, TIGER_HEAD_LIFT high). */
+  private tigerHeadFx(owner: { cfg: SpriteConfig; fx: FxSheet }, idx: number, name: FxAnim, ahead: number, timing: Partial<FxSpawn>): FxInstance | null {
+    const p = this.state.players[idx];
+    const feet = worldToScreen(p.x, p.y, 0);
+    const dir = p.facingX < 0 ? -1 : 1;
+    const lift = owner.cfg.displayHeight * TIGER_HEAD_LIFT;
+    return this.playFx(owner.fx, name, {
+      x: feet.sx + dir * ahead,
+      y: feet.sy - lift,
+      w: TIGER_HEAD_FX_W,
+      h: (TIGER_HEAD_FX_W * owner.fx.frameHeight) / owner.fx.frameWidth,
+      depth: p.y + 0.5,
+      follow: idx,
+      offX: ahead,
+      offY: -lift,
+      mirror: true,
+      ...timing,
+    });
+  }
+
+  /** The swallow: the ring fades, and the maw opens over him and stays until the spit (or the end). */
+  private tigerSwallowFx(idx: number): void {
+    this.fadeTigerRing(idx);
+    const owner = this.fxOwner(idx);
+    if (!owner) return;
+    const maw = this.tigerHeadFx(owner, idx, 'maw', TIGER_HEAD_AHEAD, { holdMs: Number.POSITIVE_INFINITY });
+    if (maw) this.tigerMaw.set(idx, maw);
+  }
+
+  /** The spit: the maw closes into a fire beam in front of him, and the spat ball gets its trail. */
+  private tigerSpitFx(idx: number): void {
+    this.fadeTigerMaw(idx);
+    const owner = this.fxOwner(idx);
+    if (!owner) return;
+    this.tigerHeadFx(owner, idx, 'roar', TIGER_HEAD_AHEAD, { holdMs: TIGER_ROAR_FX_MS, endMs: TIGER_ROAR_FX_MS + FX_FADE_MS });
+    const trail = this.playFx(owner.fx, 'trail', {
+      x: 0,
+      y: 0,
+      w: TIGER_TRAIL_FX_W,
+      h: (TIGER_TRAIL_FX_W * owner.fx.frameHeight) / owner.fx.frameWidth,
+      depth: 0,
+      holdMs: Number.POSITIVE_INFINITY,
+    });
+    this.tigerTrail = trail;
+  }
+
+  /** The forward roar when the guard runs out: the fire beam in front of him, and the ring fades. */
+  private tigerRoarFx(idx: number): void {
+    this.fadeTigerRing(idx);
+    const owner = this.fxOwner(idx);
+    if (!owner) return;
+    this.tigerHeadFx(owner, idx, 'roar', TIGER_ROAR_AHEAD, { holdMs: TIGER_ROAR_FX_MS, endMs: TIGER_ROAR_FX_MS + FX_FADE_MS });
+  }
+
+  private fadeTigerRing(idx: number): void {
+    const ring = this.tigerRing.get(idx);
+    if (!ring) return;
+    this.fadeFx(ring);
+    this.tigerRing.delete(idx);
+  }
+
+  private fadeTigerMaw(idx: number): void {
+    const maw = this.tigerMaw.get(idx);
+    if (!maw) return;
+    this.fadeFx(maw);
+    this.tigerMaw.delete(idx);
+  }
+
+  /** Starts the fade of an effect that was playing with no end (its holdMs was open-ended). */
+  private fadeFx(f: FxInstance): void {
+    f.holdMs = this.time.now - f.startMs;
+    f.endMs = f.holdMs + FX_FADE_MS;
+  }
+
+  /**
+   * The spat ball's flaming trail: on the ball while it flies, turned to its screen velocity (mirrored when flying left),
+   * and faded at its first landing.
+   */
+  private updateTigerTrail(): void {
+    const trail = this.tigerTrail;
+    if (!trail) return;
+    const ball = this.state.ball;
+    if (ball.tiger?.phase !== 'flight') {
+      this.fadeFx(trail);
+      this.tigerTrail = null;
+      return;
+    }
+    const pt = worldToScreen(ball.x, ball.y, ball.z);
+    // Screen velocity: x as is, y squashed like the field, and a rise in z goes up the screen.
+    const vx = ball.vx;
+    const vy = ball.vy * DEPTH_SCALE - ball.vz;
+    // The art faces right. A leftward flight is mirrored, so its angle is taken from the reversed direction.
+    const flip = vx < 0;
+    const angle = flip ? Math.atan2(-vy, -vx) : Math.atan2(vy, vx);
+    trail.sprite.setPosition(pt.sx, pt.sy - BALL_LIFT).setFlipX(flip).setRotation(angle).setDepth(ball.y + 0.4);
+  }
+
   /** A special's hit: Zhang Fei's roar gives a spark on the victim, Guan Yu's rampage bump an impact burst. */
   private specialHitFx(e: Extract<SimEvent, { type: 'hit' }>): void {
     if (e.kind !== 'special') return;
@@ -1359,7 +1519,7 @@ export class MatchScene extends Phaser.Scene {
     const victim = this.state.players[e.victimIdx];
     if (attacker.specialMode === 'roar') {
       this.ownerImpact(attacker.idx, victim.x, victim.y, HIT_FX_LIFT, SPARK_FX_SIZE);
-    } else if (attacker.rampageTicks > 0) {
+    } else if (attacker.rampageTicks > 0 || attacker.specialMode === 'tiger') {
       this.ownerImpact(attacker.idx, victim.x, victim.y, HIT_FX_LIFT, IMPACT_FX_SIZE);
     }
   }
@@ -1583,7 +1743,7 @@ export class MatchScene extends Phaser.Scene {
   }
 
   /** Plays a special pose on this player's sprite and holds it for `ms`. */
-  private playPose(idx: number, anim: 'special' | 'shot' | 'land', ms: number): void {
+  private playPose(idx: number, anim: 'special' | 'shot' | 'land' | 'cast', ms: number): void {
     this.poseUntil[idx] = this.time.now + ms;
     this.poseAnim[idx] = anim;
     const view = this.playerViews[idx];
@@ -1773,7 +1933,9 @@ export class MatchScene extends Phaser.Scene {
 
     const pos = worldToScreen(ball.x, ball.y, ball.z);
     this.spinBall(ball.x, ball.y);
-    this.ballSprite.setPosition(pos.sx, pos.sy - BALL_LIFT).setFrame(this.ballSpinFrame).setDepth(ball.y + 0.5);
+    // A held shot sits in the tiger's mouth, just behind the maw's effect (which is in front of his body).
+    const held = ball.tiger?.phase === 'hold';
+    this.ballSprite.setPosition(pos.sx, pos.sy - BALL_LIFT).setFrame(this.ballSpinFrame).setDepth(ball.y + (held ? 0.4 : 0.5));
   }
 
   /** Advances the ball's rotation frame by the ground distance it rolled since the last draw. Reversed when moving left. */
