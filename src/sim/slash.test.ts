@@ -145,19 +145,20 @@ describe('slash cast', () => {
 });
 
 describe('swing and blade wave timing', () => {
-  it('swings and fires a blade wave 16 times, at 18, 36, ..., 288 ticks after the cast, then ends the buff', () => {
+  it('swings and fires a blade wave 25 times, at 12, 24, ..., 300 ticks after the cast, then ends the buff', () => {
     const state = slashState();
     castSlash(state);
     const log = run(state, SLASH_TICKS);
-    const ticks = Array.from({ length: 16 }, (_, i) => (i + 1) * SLASH_INTERVAL);
+    const ticks = Array.from({ length: 25 }, (_, i) => (i + 1) * SLASH_INTERVAL);
     expect(ticks[0]).toBe(SLASH_FIRST_DELAY);
+    expect(ticks[24]).toBe(SLASH_TICKS);
     expect(ofType(log, 'slashSwing').map((e) => e.tick)).toEqual(ticks);
     expect(ofType(log, 'slashWave').map((e) => e.tick)).toEqual(ticks);
     expect(ofType(log, 'slashEnd').map((e) => e.tick)).toEqual([300]);
     expect(state.players[0].slashTicks).toBe(0);
   });
 
-  it('a slash that falls while he is not normal is lost and the timer keeps running', () => {
+  it('a slash that falls while he cannot act is lost and the timer keeps running', () => {
     const state = slashState();
     const cao = state.players[0];
     castSlash(state);
@@ -170,7 +171,8 @@ describe('swing and blade wave timing', () => {
     cao.action = 'normal';
     cao.actionTimer = 0;
     const log = run(state, SLASH_TICKS - SLASH_FIRST_DELAY);
-    const ticks = [36, 54, 72, 90, 108, 126, 144, 162, 180, 198, 216, 234, 252, 270, 288];
+    const ticks = Array.from({ length: 24 }, (_, i) => (i + 2) * SLASH_INTERVAL);
+    expect(ticks[0]).toBe(2 * SLASH_INTERVAL);
     expect(ofType(log, 'slashSwing').map((e) => e.tick)).toEqual(ticks);
     expect(ofType(log, 'slashWave').map((e) => e.tick)).toEqual(ticks);
     expect(cao.slashTicks).toBe(0);
@@ -440,6 +442,57 @@ describe('swing melee', () => {
   });
 });
 
+describe('swings during his own attacks', () => {
+  it('a swing does not cancel a punch that has not landed yet', () => {
+    const state = slashState();
+    const cao = state.players[0];
+    park(state, 5, 330); // inside the swing melee and inside the punch's reach
+    castSlash(state);
+    run(state, SLASH_FIRST_DELAY - 1);
+    cao.action = 'punch';
+    cao.actionTimer = 1000; // long punch: its own hit window is not reached this tick
+    cao.hitDone = false;
+    const log = run(state, 1);
+    expect(ofType(log, 'slashSwing')).toHaveLength(1);
+    expect(ofType(log, 'hit').some((e) => e.event.attackerIdx === 0 && e.event.kind === 'punch')).toBe(true);
+    expect(cao.hitDone).toBe(false);
+  });
+
+  it('swings keep coming while J is pressed through the buff, and his punches still land', () => {
+    const state = slashState();
+    const cao = state.players[0];
+    park(state, 5, 330);
+    castSlash(state);
+    const log: Logged[] = [];
+    let swingsDuringPunch = 0;
+    for (let i = 0; i < SLASH_TICKS; i++) {
+      const tick = state.tick;
+      const before = cao.action;
+      step(state, [{ ...EMPTY_INPUT, j: i % 4 === 0 }]);
+      for (const event of state.events) log.push({ tick, event });
+      if (before === 'punch' && state.events.some((e) => e.type === 'slashSwing')) swingsDuringPunch++;
+    }
+    expect(ofType(log, 'slashSwing')).toHaveLength(25);
+    expect(swingsDuringPunch).toBeGreaterThan(0);
+    expect(ofType(log, 'attack').some((e) => e.event.playerIdx === 0 && e.event.kind === 'punch')).toBe(true);
+    expect(ofType(log, 'hit').some((e) => e.event.attackerIdx === 0 && e.event.kind === 'punch')).toBe(true);
+  });
+
+  it.each(['down', 'recover', 'hitstun', 'fear', 'dive', 'cast', 'lunge', 'leap', 'ride'] as const)(
+    'no swing fires while he is in %s',
+    (action) => {
+      const state = slashState();
+      const cao = state.players[0];
+      castSlash(state);
+      run(state, SLASH_FIRST_DELAY - 1);
+      cao.action = action;
+      cao.actionTimer = 1000;
+      const log = run(state, 1);
+      expect(ofType(log, 'slashSwing')).toHaveLength(0);
+    },
+  );
+});
+
 describe('swing movement and ball', () => {
   it('he walks at normal speed during the buff and stays in normal action', () => {
     const plain = slashState();
@@ -453,13 +506,13 @@ describe('swing movement and ball', () => {
     expect(state.players[0].x - 300).toBeCloseTo(plain.players[0].x - 300, 6);
   });
 
-  it('keeps the ball through all 16 swings', () => {
+  it('keeps the ball through all 25 swings', () => {
     const state = slashState();
     state.ball.ownerIdx = 0;
     state.ball.lastTouchIdx = 0;
     castSlash(state);
-    const log = run(state, SLASH_TICKS - 1);
-    expect(ofType(log, 'slashSwing')).toHaveLength(16);
+    const log = run(state, SLASH_TICKS);
+    expect(ofType(log, 'slashSwing')).toHaveLength(25);
     expect(state.ball.ownerIdx).toBe(0);
     expect(ofType(log, 'looseBall')).toHaveLength(0);
   });

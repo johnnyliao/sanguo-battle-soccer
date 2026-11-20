@@ -34,7 +34,7 @@ export function specialDescription(def: CharacterDef): { condition: string; effe
     case 'tiger':
       return { condition: '持球或不持球', effect: '5秒吞射正門，吐球砸敵扣80%暈3秒；沒吞則震退扣10%' };
     case 'slash':
-      return { condition: '持球或不持球', effect: '5秒每0.3秒揮刀，刀氣命中扣5%、回補自己5%' };
+      return { condition: '持球或不持球', effect: '5秒每0.2秒揮刀，刀氣命中扣5%、回補自己5%' };
     case 'ride':
       return { condition: '持球或不持球', effect: '騎車衝刺，撞開路上敵人扣 20%' };
     case 'icefield':

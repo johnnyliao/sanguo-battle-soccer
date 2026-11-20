@@ -130,6 +130,7 @@ import {
   type IceField,
   type InputFrame,
   type Player,
+  type PlayerAction,
   type Rider,
   type SpecialShot,
 } from './types';
@@ -410,7 +411,10 @@ function updatePunch(state: GameState, p: Player): void {
     const victim = findVictim(state, p, (v) => {
       return Math.abs(v.z - p.z) < AIR_HIT_Z && distance(cx, cy, v.x, v.y) < PUNCH_HIT_RADIUS + v.radius;
     });
-    if (victim) applyHit(state, p, victim, 'punch');
+    if (victim) {
+      p.hitDone = true;
+      applyHit(state, p, victim, 'punch');
+    }
   }
   if (done) toNormal(p);
 }
@@ -421,7 +425,10 @@ function updateTackle(state: GameState, p: Player): void {
     const victim = findVictim(state, p, (v) => {
       return v.z < TACKLE_MAX_VICTIM_Z && distance(p.x, p.y, v.x, v.y) < p.radius + v.radius + TACKLE_CONTACT_PAD;
     });
-    if (victim) applyHit(state, p, victim, 'tackle');
+    if (victim) {
+      p.hitDone = true;
+      applyHit(state, p, victim, 'tackle');
+    }
   }
   if (done) startRecover(p);
 }
@@ -1397,17 +1404,30 @@ function startSlash(state: GameState, p: Player): void {
   state.events.push({ type: 'slashStart', playerIdx: p.idx });
 }
 
+/** Actions in which a slash swing cannot fire: he is stunned, down, or locked into a special. */
+const SLASH_BLOCKED_ACTIONS: ReadonlySet<PlayerAction> = new Set<PlayerAction>([
+  'down',
+  'recover',
+  'hitstun',
+  'fear',
+  'dive',
+  'cast',
+  'lunge',
+  'leap',
+  'ride',
+]);
+
 /**
  * Counts the slash buff down and runs a swing every SLASH_INTERVAL ticks from SLASH_FIRST_DELAY after the cast. A swing that
- * falls while he is not normal (hitstun, down, a punch...) is lost; the timer keeps running. The buff ends when its timer
- * runs out.
+ * falls while he cannot act (see SLASH_BLOCKED_ACTIONS) is lost; the timer keeps running. He may swing during a punch, tackle,
+ * charge or kick. The buff ends when its timer runs out.
  */
 function tickSlash(state: GameState, p: Player): void {
   if (p.slashTicks === 0) return;
   p.slashTicks--;
   const elapsed = SLASH_TICKS - p.slashTicks;
   const due = elapsed >= SLASH_FIRST_DELAY && (elapsed - SLASH_FIRST_DELAY) % SLASH_INTERVAL === 0;
-  if (due && p.action === 'normal') swingSlash(state, p);
+  if (due && !SLASH_BLOCKED_ACTIONS.has(p.action)) swingSlash(state, p);
   if (p.slashTicks === 0) state.events.push({ type: 'slashEnd', playerIdx: p.idx });
 }
 
@@ -1927,8 +1947,11 @@ function lungeHeal(state: GameState, p: Player): void {
   state.events.push({ type: 'lungeHeal', playerIdx: p.idx, amount: p.stamina - before });
 }
 
+/**
+ * One hit on a victim. Does not touch attacker.hitDone: a punch or tackle sets it itself, so a slash swing (which also calls
+ * this) cannot cancel an attack that has not landed yet.
+ */
 function applyHit(state: GameState, attacker: Player, victim: Player, kind: AttackKind): void {
-  attacker.hitDone = true;
   // An invincible victim (rampaging or lunging): the attack is spent and nothing else changes.
   if (isInvincible(victim)) return;
   reportCastCancel(state, victim);

@@ -312,8 +312,8 @@ const RUN_SPEED = 20;
 /** How long the special pose (activation) and the special-shot pose override the action animation. */
 const SPECIAL_POSE_MS = 900;
 const SHOT_POSE_MS = 400;
-/** Cao Cao's blade swing: its 4 frames at 14 fps (about 0.28 s), held on the last frame until the next swing. */
-const SLASH_SWING_POSE_MS = 280;
+/** Cao Cao's blade swing: its 4 frames at 22 fps (about 0.18 s), held on the last frame until the next swing (one every 0.2 s). */
+const SLASH_SWING_POSE_MS = 180;
 const ROAR_SHAKE_MS = 160;
 const ROAR_SHAKE_INTENSITY = 0.004;
 /** Zhang Fei's roar: the charge at his feet (its size), then the soundwave starts after the charge (ROAR_CHARGE_MS). */
@@ -658,6 +658,31 @@ export class MatchScene extends Phaser.Scene {
     this.load.image(STAMINA_TEX.green, 'sprites/stamina-fill-green.png');
     this.load.image(STAMINA_TEX.yellow, 'sprites/stamina-fill-yellow.png');
     this.load.image(STAMINA_TEX.red, 'sprites/stamina-fill-red.png');
+    this.showLoadingBar();
+  }
+
+  /** Progress bar and percentage while the sprite sheets download. The match stays black until they are in. */
+  private showLoadingBar(): void {
+    const k = this.scale.width / window.innerWidth; // game px per CSS px
+    const cx = this.scale.width / 2;
+    const cy = this.scale.height / 2;
+    const barW = 200 * k;
+    const barH = 10 * k;
+    const x = cx - barW / 2;
+    const frame = this.add.graphics().lineStyle(2 * k, 0xffffff).strokeRect(x, cy, barW, barH);
+    const fill = this.add.graphics();
+    const label = this.add
+      .text(cx, cy - 22 * k, '載入中 0%', { fontFamily: FONT, fontSize: `${Math.round(18 * k)}px`, color: '#ffffff' })
+      .setOrigin(0.5);
+    this.load.on('progress', (p: number) => {
+      fill.clear().fillStyle(0xffffff).fillRect(x, cy, barW * p, barH);
+      label.setText(`載入中 ${Math.round(p * 100)}%`);
+    });
+    this.load.once('complete', () => {
+      frame.destroy();
+      fill.destroy();
+      label.destroy();
+    });
   }
 
   create(): void {

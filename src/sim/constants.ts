@@ -180,10 +180,10 @@ export const TIGER_ROAR_RADIUS = 90;
 export const TIGER_ROAR_STAMINA_RATIO = 0.1;
 /** Cao Cao's slash (霸刀連斬): how long the buff lasts (5 s). */
 export const SLASH_TICKS = 300;
-/** Ticks from the cast to the first swing (0.3 s). */
-export const SLASH_FIRST_DELAY = 18;
-/** Ticks between swings while the buff runs (0.3 s, 16 swings in all). A swing skipped while he is not normal is lost. */
-export const SLASH_INTERVAL = 18;
+/** Ticks from the cast to the first swing (0.2 s). */
+export const SLASH_FIRST_DELAY = 12;
+/** Ticks between swings while the buff runs (0.2 s, 25 swings in all). A swing skipped while he cannot act is lost. */
+export const SLASH_INTERVAL = 12;
 /** Melee reach of a swing: opponents whose body is this many px or less in front of his body edge take a punch hit. */
 export const SLASH_MELEE_REACH = 34;
 /** Melee depth of a swing: opponents further than this many px above or below him are out of the melee. */

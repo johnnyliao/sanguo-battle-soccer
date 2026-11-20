@@ -459,7 +459,7 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
       charge: { frames: [ccat(2, 0)], fps: 1, repeat: -1 },
       cast: { frames: [ccat(3, 1)], fps: 1, repeat: -1 },
       special: { frames: [ccat(3, 0), ccat(3, 1), ccat(3, 2), ccat(3, 3)], fps: 6, repeat: 0 },
-      slashSwing: { frames: [ccat(4, 0), ccat(4, 1), ccat(4, 2), ccat(4, 3)], fps: 14, repeat: 0 },
+      slashSwing: { frames: [ccat(4, 0), ccat(4, 1), ccat(4, 2), ccat(4, 3)], fps: 22, repeat: 0 },
       rampage: { frames: [ccat(4, 1), ccat(4, 2)], fps: 8, repeat: -1 },
       lunge: { frames: [ccat(4, 1), ccat(4, 2)], fps: 8, repeat: -1 },
       shot: { frames: [ccat(2, 1)], fps: 1, repeat: -1 },

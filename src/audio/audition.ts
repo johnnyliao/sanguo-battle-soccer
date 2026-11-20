@@ -23,7 +23,7 @@ const NAMES: Record<SoundCharId, string> = {
 interface Stage {
   label: string;
   cues: string[];
-  /** A sequence to play instead of the cues (Cao Cao's 16 swings). */
+  /** A sequence to play instead of the cues (Cao Cao's 25 swings). */
   run?: () => void;
 }
 
@@ -59,7 +59,7 @@ const STAGES: Record<SoundCharId, Stage[]> = {
   ],
   caocao: [
     { label: '七星', cues: ['caocao.shout', 'caocao.slashStart'] },
-    { label: '揮刀×16', cues: [], run: playSlashSequence },
+    { label: '揮刀×25', cues: [], run: playSlashSequence },
     { label: '回氣', cues: ['caocao.slashHeal'] },
   ],
   zhenji: [
@@ -77,12 +77,12 @@ const STAGES: Record<SoundCharId, Stage[]> = {
   ],
 };
 
-/** Cao Cao's 霸刀連斬 swing interval (SLASH_INTERVAL, 18 ticks at 60 Hz). */
-const SWING_GAP_MS = 300;
+/** Cao Cao's 霸刀連斬 swing interval (SLASH_INTERVAL, 12 ticks at 60 Hz). */
+const SWING_GAP_MS = 200;
 
-/** Plays the 16 swings of 霸刀連斬 at 0.3 s spacing: a swing and a blade wave each, two cuts and two heals. */
+/** Plays the 25 swings of 霸刀連斬 at 0.2 s spacing: a swing and a blade wave each, two cuts and two heals. */
 function playSlashSequence(): void {
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < 25; i++) {
     setTimeout(() => {
       const cues = ['caocao.slashSwing', 'caocao.slashWave'];
       if (i === 4 || i === 12) cues.push('caocao.slashWaveEnd');
