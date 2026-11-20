@@ -166,20 +166,16 @@ try {
   await page.keyboard.up('l');
 
   // The channel ends in a strike on a random standing opponent: he goes down, and the impact plays at him.
-  const struck = await page
-    .waitForFunction(
-      () => {
-        const s = window.__sg.state();
-        const me = s.players[window.__sg.humanIdx];
-        return s.players.some((p) => p.team !== me.team && p.action === 'down');
-      },
-      null,
-      { timeout: 3000 },
-    )
-    .then(
-      () => true,
-      () => false,
-    );
+  // The channel is 30 sim ticks, and sim time runs slower than wall time in a loaded browser (about 1.1 s to 2.2 s here),
+  // so wait for the channel to end (strike, or no target) rather than for a fixed time, then check for a rival down.
+  await page
+    .waitForFunction(() => window.__sg.state().players[window.__sg.humanIdx].action !== 'cast', null, { timeout: 8000 })
+    .catch(() => {});
+  const struck = await page.evaluate(() => {
+    const s = window.__sg.state();
+    const me = s.players[window.__sg.humanIdx];
+    return s.players.some((p) => p.team !== me.team && p.action === 'down');
+  });
   await page.waitForTimeout(60);
   const seenStrike = await page.evaluate(() => window.__fxSeen);
   report('beam strike knocks an opponent down', struck, `struck ${struck}`);

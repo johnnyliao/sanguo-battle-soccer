@@ -127,5 +127,5 @@
 # Steps 8
 - [x] 1. sim＋AI（趙雲回血、怒吼震球、張飛 AI）— worker A — verify: vitest
 - [x] 2. render（頭上體力條、移除中央招式名、移除左上體力條）＋e2e — worker B（與 1 平行）
-- [ ] 3. CLAUDE.md、commit、push、部署、正式網址 e2e — me＋worker
+- [x] 3. CLAUDE.md、commit、push、部署、正式網址 e2e — me＋worker
 - [x] 4. 許褚顯示放大：displayHeight 60→84（縮放比 0.21→0.29，張飛 0.28、關羽 0.27），只動畫面 — me
