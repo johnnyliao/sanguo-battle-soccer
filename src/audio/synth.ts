@@ -253,7 +253,7 @@ export function formantVoice(ac: BaseAudioContext, out: AudioNode, o: VoiceOpts)
   src.stop(end + 0.05);
 }
 
-export type WarVowel = 'a' | 'o' | 'e';
+export type WarVowel = 'a' | 'o' | 'e' | 'u';
 /** The plosive that opens a cry: 'h' breath, 'k' hard click, 'g' throaty. */
 export type WarOnset = 'h' | 'k' | 'g';
 
@@ -295,6 +295,8 @@ export interface WarCryOpts {
   shimmer?: number;
   /** Breathy voice: white noise through the same vowel formants, level relative to peak. 0 = none (default). */
   breath?: number;
+  /** Multiplies every vowel formant frequency (1.2 approximates a female throat). Default 1. */
+  formantScale?: number;
 }
 
 const CRY_ENV: Adsr = { attack: 0.01, decay: 0.08, sustain: 0.9, release: 0.22 };
@@ -318,6 +320,7 @@ const WAR_FORMANTS: Record<WarVowel, readonly number[]> = {
   a: [850, 1250, 2600],
   o: [550, 900, 2400],
   e: [500, 1800, 2700],
+  u: [380, 750, 2400],
 };
 const WAR_FORMANT_GAIN = [1, 0.5, 0.3];
 
@@ -328,6 +331,7 @@ function vowelBanks(
   t0: number,
   switchAt: number,
   vowels: readonly [WarVowel, WarVowel],
+  scale: number,
 ): GainNode {
   const formants = ac.createGain();
   const fades = [
@@ -342,7 +346,7 @@ function vowelBanks(
     WAR_FORMANTS[vowel].forEach((freq, k) => {
       const band = ac.createBiquadFilter();
       band.type = 'bandpass';
-      band.frequency.value = freq;
+      band.frequency.value = freq * scale;
       band.Q.value = 6;
       const bandLevel = ac.createGain();
       bandLevel.gain.value = WAR_FORMANT_GAIN[k];
@@ -446,6 +450,7 @@ export function warCry(ac: BaseAudioContext, out: AudioNode, o: WarCryOpts): voi
   const fall = o.fall ?? 0.3;
   const rise = Math.min(CRY_RISE, o.dur * 0.4);
   const switchAt = o.t0 + o.dur * (o.switchAt ?? 0.4);
+  const scale = o.formantScale ?? 1;
   const onset = CRY_ONSET[o.onset];
   const pitch = { f0: o.f0, fPeak: o.fPeak, fEnd: o.fEnd };
 
@@ -492,7 +497,7 @@ export function warCry(ac: BaseAudioContext, out: AudioNode, o: WarCryOpts): voi
       body = shaper.connect(lp);
     }
 
-    const formants = vowelBanks(ac, body, o.t0, switchAt, o.vowels);
+    const formants = vowelBanks(ac, body, o.t0, switchAt, o.vowels, scale);
     // Amplitude wander (shimmer), multiplied on top of the envelope.
     const gate = ac.createGain();
     envelope(gate.gain, vs, end - vs, 1, env);
@@ -512,7 +517,7 @@ export function warCry(ac: BaseAudioContext, out: AudioNode, o: WarCryOpts): voi
     hiss.loop = true;
     const hissGate = ac.createGain();
     envelope(hissGate.gain, o.t0, end - o.t0, o.peak * o.breath, env);
-    vowelBanks(ac, hiss, o.t0, switchAt, o.vowels).connect(hissGate).connect(mix);
+    vowelBanks(ac, hiss, o.t0, switchAt, o.vowels, scale).connect(hissGate).connect(mix);
     hiss.start(o.t0);
     hiss.stop(end + 0.02);
   }

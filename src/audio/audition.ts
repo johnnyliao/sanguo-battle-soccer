@@ -1,20 +1,33 @@
-// Hidden sound audition page (`?sfx=1`): one button per Shu attack, shout and special stage, plus the generic
-// ZzFX sounds. Plain DOM overlay; not linked from the game. Taps resume the AudioContext (user gesture).
-import { cueBus, SHU_CHARS, SYNTH_RECIPES, type ShuId } from './characterSounds';
+// Hidden sound audition page (`?sfx=1`): one button per attack, shout and special stage of the Shu and Wei
+// characters, plus the generic ZzFX sounds. Plain DOM overlay; not linked from the game. Taps resume the
+// AudioContext (user gesture).
+import { cueBus, SHU_CHARS, SYNTH_RECIPES, WEI_CHARS, type SoundCharId } from './characterSounds';
 import { defaultZzfxPlay } from './AudioPlayer';
 import { SOUNDS } from './sounds';
 import { playRecipe } from './synth';
 
-const NAMES: Record<ShuId, string> = {
+const NAMES: Record<SoundCharId, string> = {
   zhangfei: '張飛',
   guanyu: '關羽',
   zhugeliang: '諸葛亮',
   machao: '馬超',
   zhaoyun: '趙雲',
+  xuchu: '許褚',
+  caocao: '曹操',
+  zhenji: '甄姬',
+  simayi: '司馬懿',
+  zhangliao: '張遼',
 };
 
 /** Special stages, using the same cues the game plays for each special event. */
-const STAGES: Record<ShuId, { label: string; cues: string[] }[]> = {
+interface Stage {
+  label: string;
+  cues: string[];
+  /** A sequence to play instead of the cues (Cao Cao's 16 swings). */
+  run?: () => void;
+}
+
+const STAGES: Record<SoundCharId, Stage[]> = {
   zhangfei: [
     { label: '怒吼', cues: ['zhangfei.shout', 'zhangfei.roar'] },
     { label: '震球', cues: ['zhangfei.roarBall'] },
@@ -38,10 +51,49 @@ const STAGES: Record<ShuId, { label: string; cues: string[] }[]> = {
     { label: '撞擊', cues: ['zhaoyun.hit'] },
     { label: '回氣', cues: ['zhaoyun.lungeHeal'] },
   ],
+  xuchu: [
+    { label: '虎守', cues: ['xuchu.shout', 'xuchu.tigerStart'] },
+    { label: '吞球', cues: ['xuchu.tigerSwallow'] },
+    { label: '吐球', cues: ['xuchu.tigerSpit'] },
+    { label: '震退', cues: ['xuchu.tigerRoar'] },
+  ],
+  caocao: [
+    { label: '七星', cues: ['caocao.shout', 'caocao.slashStart'] },
+    { label: '揮刀×16', cues: [], run: playSlashSequence },
+    { label: '回氣', cues: ['caocao.slashHeal'] },
+  ],
+  zhenji: [
+    { label: '冰雨(4 秒)', cues: ['zhenji.shout', 'zhenji.iceStart'] },
+    { label: '冰裂', cues: ['zhenji.icePulse'] },
+    { label: '碎冰', cues: ['zhenji.iceEnd'] },
+  ],
+  simayi: [
+    { label: '後跳', cues: ['simayi.shout', 'simayi.leapStart'] },
+    { label: '飛行', cues: ['simayi.leapFly'] },
+    { label: '落地', cues: ['simayi.leapLand', 'simayi.hush'] },
+  ],
+  zhangliao: [
+    { label: '遼來了', cues: ['zhangliao.shout', 'zhangliao.fear'] },
+  ],
 };
 
+/** Cao Cao's 霸刀連斬 swing interval (SLASH_INTERVAL, 18 ticks at 60 Hz). */
+const SWING_GAP_MS = 300;
+
+/** Plays the 16 swings of 霸刀連斬 at 0.3 s spacing: a swing and a blade wave each, two cuts and two heals. */
+function playSlashSequence(): void {
+  for (let i = 0; i < 16; i++) {
+    setTimeout(() => {
+      const cues = ['caocao.slashSwing', 'caocao.slashWave'];
+      if (i === 4 || i === 12) cues.push('caocao.slashWaveEnd');
+      if (i === 6 || i === 13) cues.push('caocao.slashHeal');
+      playCues(cues);
+    }, i * SWING_GAP_MS);
+  }
+}
+
 /** Alternative cries for the characters whose current shout is being compared (recipes `<id>.shoutA/B/C`). */
-const ALT_SHOUT_IDS: readonly ShuId[] = ['guanyu', 'machao', 'zhaoyun'];
+const ALT_SHOUT_IDS: readonly SoundCharId[] = ['guanyu', 'machao', 'zhaoyun', ...WEI_CHARS];
 const ALT_SHOUTS: readonly { label: string; stage: string }[] = [
   { label: 'A 低沉吼', stage: 'shoutA' },
   { label: 'B 氣音喊', stage: 'shoutB' },
@@ -71,6 +123,14 @@ function section(title: string): HTMLDivElement {
   return div;
 }
 
+/** A country heading above its character sections. */
+function groupTitle(title: string): HTMLHeadingElement {
+  const h = document.createElement('h2');
+  h.textContent = title;
+  h.style.cssText = 'margin:20px 0 0;font-size:22px;color:#fff;border-bottom:1px solid #6a8a5a;padding-bottom:4px;';
+  return h;
+}
+
 function playCues(names: string[]): void {
   for (const name of names) {
     const recipe = SYNTH_RECIPES[name];
@@ -90,23 +150,30 @@ export function mountAudition(parent: HTMLElement = document.body): HTMLElement 
   title.style.cssText = 'margin:0 0 8px;font-size:22px;';
   root.appendChild(title);
 
-  for (const id of SHU_CHARS) {
-    const sec = section(NAMES[id]);
-    const row = document.createElement('div');
-    row.appendChild(button('普攻', () => playCues([`${id}.attack`])));
-    const alts = ALT_SHOUT_IDS.includes(id);
-    row.appendChild(button(alts ? '呼喊(現行=C)' : '呼喊', () => playCues([`${id}.shout`])));
-    if (alts) {
-      for (const alt of ALT_SHOUTS) {
-        row.appendChild(button(alt.label, () => playCues([`${id}.${alt.stage}`])));
+  const groups: { title: string; ids: readonly SoundCharId[]; wei: boolean }[] = [
+    { title: '蜀國', ids: SHU_CHARS, wei: false },
+    { title: '魏國', ids: WEI_CHARS, wei: true },
+  ];
+  for (const group of groups) {
+    root.appendChild(groupTitle(group.title));
+    for (const id of group.ids) {
+      const sec = section(NAMES[id]);
+      const row = document.createElement('div');
+      row.appendChild(button('普攻', () => playCues([`${id}.attack`])));
+      const alts = group.wei || ALT_SHOUT_IDS.includes(id);
+      row.appendChild(button(group.wei ? '呼喊(預設)' : alts ? '呼喊(現行=C)' : '呼喊', () => playCues([`${id}.shout`])));
+      if (alts) {
+        for (const alt of ALT_SHOUTS) {
+          row.appendChild(button(alt.label, () => playCues([`${id}.${alt.stage}`])));
+        }
       }
+      if (!group.wei) row.appendChild(button('舊呼喊', () => playCues([`${id}.shoutOld`])));
+      for (const stage of STAGES[id]) {
+        row.appendChild(button(stage.label, () => (stage.run ? stage.run() : playCues(stage.cues))));
+      }
+      sec.appendChild(row);
+      root.appendChild(sec);
     }
-    row.appendChild(button('舊呼喊', () => playCues([`${id}.shoutOld`])));
-    for (const stage of STAGES[id]) {
-      row.appendChild(button(stage.label, () => playCues(stage.cues)));
-    }
-    sec.appendChild(row);
-    root.appendChild(sec);
   }
 
   const generic = section('通用音效（ZzFX）');
