@@ -272,20 +272,22 @@ const MINIMAP_SCALE = 0.15;
 const MINIMAP_BOTTOM = 6;
 const MINIMAP_SIDE_CLEAR = 340;
 /**
- * Stamina bar above each own-team player's name (drawn STAMINA_BAR_W px wide; the art is STAMINA_ART_W px wide and
- * STAMINA_ART_H px tall). The fill channel sits at STAMINA_FILL_LEFT with STAMINA_FILL_W px of width in the art, and the
- * bar's centre is STAMINA_BAR_UP px above the name's baseline. Green above 60%, yellow from 30%, red below 30%.
+ * Stamina bar above each own-team player's name (drawn STAMINA_BAR_W px wide, STAMINA_BAR_VSCALE times the height that
+ * ratio gives; the art is STAMINA_ART_W px wide and STAMINA_ART_H px tall). The fill channel sits at STAMINA_FILL_LEFT with
+ * STAMINA_FILL_W px of width in the art, and the bar's bottom edge is STAMINA_BAR_BOTTOM px above the name's baseline
+ * (clear of the human marker). Green above 60%, yellow from 30%, red below 30%.
  */
-const STAMINA_BAR_W = 60;
+const STAMINA_BAR_W = 76;
+const STAMINA_BAR_VSCALE = 1;
 const STAMINA_ART_W = 150;
 const STAMINA_ART_H = 35;
 const STAMINA_SCALE = STAMINA_BAR_W / STAMINA_ART_W;
-const STAMINA_BAR_H = STAMINA_ART_H * STAMINA_SCALE;
+const STAMINA_BAR_H = STAMINA_ART_H * STAMINA_SCALE * STAMINA_BAR_VSCALE;
 const STAMINA_FILL_LEFT = 24;
 const STAMINA_FILL_W = 105;
-const STAMINA_BAR_UP = 24;
+const STAMINA_BAR_BOTTOM = 19;
 /** The labels above a player with a bar (silence, invincible) sit this far above the name's baseline; each stacked label is STAMINA_STACK_STEP higher. */
-const STAMINA_LABEL_UP = STAMINA_BAR_UP + STAMINA_BAR_H / 2 + 3;
+const STAMINA_LABEL_UP = STAMINA_BAR_BOTTOM + STAMINA_BAR_H + 3;
 const STAMINA_STACK_STEP = 13;
 const STAMINA_GREEN_RATIO = 0.6;
 const STAMINA_YELLOW_RATIO = 0.3;
@@ -696,6 +698,7 @@ export class MatchScene extends Phaser.Scene {
     this.touch = new TouchControls(this, this.view);
     this.localInput = new LocalInput(this, this.touch);
     this.events.once('shutdown', () => {
+      this.audio.stop();
       this.localInput.destroy();
       this.touch.destroy();
       this.clearRiders();
@@ -766,7 +769,11 @@ export class MatchScene extends Phaser.Scene {
     step(this.state, inputs);
     const special = this.state.events.some((e) => e.type === 'special' && e.playerIdx === this.humanIdx);
     if (blocked !== null && !special) this.showHint(blocked);
-    this.audio.handleEvents(this.state.events);
+    this.audio.handleEvents(
+      this.state.events,
+      (idx) => this.state.players[idx]?.charId,
+      (riderId) => this.state.riders.find((r) => r.id === riderId)?.ownerIdx,
+    );
     this.updateTrail();
     this.onEvents(this.state.events);
     if (this.preview && this.previewTick > PREVIEW_END_TICK) this.endPreview();
@@ -2015,7 +2022,8 @@ export class MatchScene extends Phaser.Scene {
 
   /** The stamina bar of player idx: the dark track, the three fill strips and the ornate frame on top. */
   private createStaminaBar(idx: number): StaminaBar {
-    const image = (key: string) => this.add.image(0, 0, key).setOrigin(0, 0).setScale(STAMINA_SCALE);
+    const image = (key: string) =>
+      this.add.image(0, 0, key).setOrigin(0, 0).setScale(STAMINA_SCALE, STAMINA_SCALE * STAMINA_BAR_VSCALE);
     const track = image(STAMINA_TEX.track);
     const fills = { green: image(STAMINA_TEX.green), yellow: image(STAMINA_TEX.yellow), red: image(STAMINA_TEX.red) };
     const frame = image(STAMINA_TEX.frame);
@@ -2027,7 +2035,7 @@ export class MatchScene extends Phaser.Scene {
   private updateStaminaBar(stamina: StaminaBar, p: Player, labelY: number): void {
     const ratio = Math.max(0, Math.min(1, p.stamina / p.maxStamina));
     const colour: StaminaColour = ratio > STAMINA_GREEN_RATIO ? 'green' : ratio >= STAMINA_YELLOW_RATIO ? 'yellow' : 'red';
-    stamina.bar.setPosition(-STAMINA_BAR_W / 2, labelY - STAMINA_BAR_UP - STAMINA_BAR_H / 2);
+    stamina.bar.setPosition(-STAMINA_BAR_W / 2, labelY - STAMINA_BAR_BOTTOM - STAMINA_BAR_H);
     for (const c of ['green', 'yellow', 'red'] as const) stamina.fills[c].setVisible(ratio > 0 && c === colour);
     if (ratio <= 0) return;
     // Cut, not squashed: the crop keeps the strip's rounded end at the stamina's edge.

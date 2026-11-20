@@ -144,3 +144,12 @@
 - [x] 3. 切圖、fx、sprites.ts、MatchScene、e2e — worker（me 看截圖）
 - [ ] 4. CLAUDE.md、commit、push、部署、正式網址 e2e — me＋worker
 - 11-20：諸葛亮 e2e 偶發失敗的真因＝擊倒後才截圖、受害者已起身；改成每格記錄是否有人倒地。e2e/sprite-machao.mjs、sprite-zhaoyun.mjs 截圖路徑仍指向舊 session，待改。
+
+---
+# Goal 10（2026-11-20 晚）角色音效（先蜀國 5 人）
+每人：普攻音、大招音（依大招事件分段）、無字吶喊（formant 合成）。Web Audio 程式合成，不用音檔、不加套件。網址 ?sfx=1 試聽頁。非蜀國維持原通用音效。
+
+# Steps 10
+- [x] 1. synth.ts、characterSounds.ts、AudioPlayer 依角色、試聽頁、測試、WAV 檢查 — worker
+- [ ] 2. me 審 → commit、push、部署 → 使用者在 ?sfx=1 試聽 → 調整 → 再套魏、吳
+- 11-20：體力條加粗採 A 版（寬 76、等比例，STAMINA_BAR_W/VSCALE 常數，B 版＝寬 60、垂直 1.5 倍）。
