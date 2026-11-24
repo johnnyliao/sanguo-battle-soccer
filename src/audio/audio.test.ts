@@ -103,10 +103,11 @@ describe('AudioPlayer', () => {
     expect(play).not.toHaveBeenCalled();
   });
 
-  it('plays a repeated hit sound only once per call', () => {
-    const { play, player } = setup();
+  it('plays a repeated punch hit sample only once per call', () => {
+    const { play, samples, player } = setup();
     player.handleEvents([{ type: 'hit', kind: 'punch' }, { type: 'hit', kind: 'punch' }]);
-    expect(play).toHaveBeenCalledTimes(1);
+    expect(samples.play.mock.calls.map((c) => c[0])).toEqual(['hit_punch']);
+    expect(play).not.toHaveBeenCalled();
   });
 
   it('plays nothing when muted', () => {

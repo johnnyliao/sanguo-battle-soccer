@@ -45,18 +45,21 @@ describe('character sound mapping', () => {
     ]);
   });
 
-  it('plays Zhao Yun the special hit only for a special hit', () => {
+  it('plays the heavy hit sample for a Zhao Yun special hit, and the punch sample for a punch', () => {
     expect(soundsForEvent({ type: 'hit', attackerIdx: 4, victimIdx: 1, kind: 'special', damage: 1 }, 'zhaoyun')).toEqual([
-      { name: 'zhaoyun.hit', volume: 1 },
+      { name: 'sfx:hit_heavy', volume: 1 },
     ]);
     expect(soundsForEvent({ type: 'hit', attackerIdx: 4, victimIdx: 1, kind: 'punch', damage: 1 }, 'zhaoyun')).toEqual([
-      { name: 'punch', volume: 1 },
+      { name: 'sfx:hit_punch', volume: 1 },
     ]);
   });
 
-  it('keeps punches and tackles by a Shu attacker generic', () => {
+  it('plays the punch sample for a Shu punch and the heavy hit sample for a tackle', () => {
+    expect(soundsForEvent({ type: 'hit', attackerIdx: 0, victimIdx: 1, kind: 'punch', damage: 1 }, 'zhangfei')).toEqual([
+      { name: 'sfx:hit_punch', volume: 1 },
+    ]);
     expect(soundsForEvent({ type: 'hit', attackerIdx: 0, victimIdx: 1, kind: 'tackle', damage: 1 }, 'zhangfei')).toEqual([
-      { name: 'heavyHit', volume: 1 },
+      { name: 'sfx:hit_heavy', volume: 1 },
     ]);
   });
 
@@ -268,14 +271,18 @@ describe('AudioPlayer character cues', () => {
     expect(synth.mock.calls.filter((c) => c[0] === 'zhenji.icePulse')).toHaveLength(0);
   });
 
-  it('resolves rider events through the owner', () => {
-    const { synth, player } = setup();
+  it('plays the heavy hit sample for a rider hit, and the owner keeps its synth stage', () => {
+    const { synth, samples, player } = setup();
     player.handleEvents(
       [{ type: 'riderHit', riderId: 7, victimIdx: 1, x: 0, y: 0 }],
       charOf,
       (id) => (id === 7 ? 3 : undefined),
     );
-    expect(synth).toHaveBeenCalledWith('machao.riderHit', 0.5);
+    expect(samples.play).toHaveBeenCalledWith('hit_heavy', 0.5);
+    expect(synth).not.toHaveBeenCalled();
+    expect(characterCues({ type: 'riderHit', riderId: 7, victimIdx: 1, x: 0, y: 0 }, 'machao')?.map((c) => c.name)).toEqual([
+      'machao.riderHit',
+    ]);
   });
 
   it('keeps the generic sound for a rider with an unknown owner', () => {

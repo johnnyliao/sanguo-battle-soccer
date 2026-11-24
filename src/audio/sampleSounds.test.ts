@@ -45,15 +45,15 @@ describe('sampleCues kicks, goals and downs', () => {
 });
 
 describe('sampleCues hits and specials', () => {
-  it('keeps tackle, special and punch hits on the existing sounds (no hit sample yet)', () => {
-    expect(sampleCues({ type: 'hit', attackerIdx: 0, victimIdx: 1, kind: 'tackle', damage: 1 }, 'zhangfei')).toBeUndefined();
-    expect(sampleCues({ type: 'hit', attackerIdx: 0, victimIdx: 1, kind: 'special', damage: 1 }, 'zhaoyun')).toBeUndefined();
-    expect(sampleCues({ type: 'hit', attackerIdx: 0, victimIdx: 1, kind: 'punch', damage: 1 }, 'zhangfei')).toBeUndefined();
+  it('plays the heavy hit sample for tackle and special hits, and the punch sample for punches', () => {
+    expect(sampleCues({ type: 'hit', attackerIdx: 0, victimIdx: 1, kind: 'tackle', damage: 1 }, 'zhangfei')).toEqual(cue('hit_heavy'));
+    expect(sampleCues({ type: 'hit', attackerIdx: 0, victimIdx: 1, kind: 'special', damage: 1 }, 'zhaoyun')).toEqual(cue('hit_heavy'));
+    expect(sampleCues({ type: 'hit', attackerIdx: 0, victimIdx: 1, kind: 'punch', damage: 1 }, 'zhangfei')).toEqual(cue('hit_punch'));
   });
 
-  it('keeps rider and ride hits on the existing sounds', () => {
-    expect(sampleCues({ type: 'rideHit', playerIdx: 1, victimIdx: 2, x: 0, y: 0 }, 'guanyu')).toBeUndefined();
-    expect(sampleCues({ type: 'riderHit', riderId: 1, victimIdx: 2, x: 0, y: 0 }, 'machao')).toBeUndefined();
+  it('plays the heavy hit sample for rider and ride hits', () => {
+    expect(sampleCues({ type: 'rideHit', playerIdx: 1, victimIdx: 2, x: 0, y: 0 }, 'guanyu')).toEqual(cue('hit_heavy'));
+    expect(sampleCues({ type: 'riderHit', riderId: 1, victimIdx: 2, x: 0, y: 0 }, 'machao')).toEqual(cue('hit_heavy'));
   });
 
   it('keeps the generic special silent for all 15 characters and undefined for others', () => {
@@ -156,7 +156,7 @@ describe('SAMPLE_SLOTS', () => {
     expect(SAMPLE_SLOTS).toContain('swing_fan');
     expect(SAMPLE_SLOTS).toContain('zhouyu_wind');
     expect(SAMPLE_SLOTS).toContain('zhenji_pulse');
-    expect(SAMPLE_SLOTS).not.toContain('hit_heavy');
-    expect(SAMPLE_SLOTS).not.toContain('hit_punch');
+    expect(SAMPLE_SLOTS).toContain('hit_heavy');
+    expect(SAMPLE_SLOTS).toContain('hit_punch');
   });
 });

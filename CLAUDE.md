@@ -27,7 +27,7 @@
 - AI 只輸出跟真人一樣的「虛擬按鍵」(InputFrame)。連線之後只要換輸入來源。
 - 連線（之後才做）：房主瀏覽器權威 + 公開 MQTT（同 mountain-race：hivemq 8884 / mosquitto 8081，**不要用 emqx**）。1v1～5v5，缺人 AI 補。
 - 畫面 16:9 橫向，邏輯解析度 640×360，等比放大。
-- 音效：通用音 ZzFX 程式產生（踢球、攻擊、倒地、進球、哨音），原型不做 BGM。角色音效（2026-11-20 起，蜀、魏 10 人；吳國仍為通用音效）：src/audio/synth.ts（Web Audio 合成：噪音、濾波、FM、formant 吶喊）＋ characterSounds.ts（蜀、魏每人普攻、大招分段；2026-11-20 使用者要求移除所有吶喊），不用音檔；網址 ?sfx=1 為試聽頁。
+- 音效（2026-11-24 起）：比賽音效改用使用者挑選的 CC0 音檔（來源 ~/150gameeffectsounds，LICENSES.txt 全 CC0、不需標註；public/sfx/*.wav 共 33 個，單聲道 22050Hz、音量拉齊到最響 100ms −14 dBFS；public/sfx/CREDITS.txt）：src/audio/sampleSounds.ts（事件→音檔對應：傳球／射門／倒地／進球、普攻命中 hit_punch、重擊 hit_heavy（鏟球、大招命中、騎車與鐵騎撞人）、揮擊分 swing_heavy／swing_blade／swing_fan、15 名武將大招各段）＋ samplePlayer.ts（Web Audio，比賽開始預載）。沒對應到的事件（哨音、彈跳、撲救、集滿力等）仍用 ZzFX；舊的蜀魏合成音（synth.ts、characterSounds.ts）保留但已被音檔取代。?sfx=pack 為音檔試聽頁（public/sfx/cand，每格 A/B/C＋複製鍵），?sfx=1 為舊合成音試聽頁。挑音效前先用 scratchpad/sfx/describe.mjs 量化描述（Claude 無法聽聲音），避開電子感高的檔。
 - 場地（2026-11-19）：src/render/stadium.ts — 草地 TileSprite、遠景營帳（視差）、遠端兩排正面士兵、近端背面士兵＋拒馬前景、金龍門柱球門（橫樑與繩網程式畫）、8 格轉動的球。素材由 tools/make-stadium-assets.mjs 產生。?nosoldiers=1 關掉士兵。
 - 美術：原型用色塊／簡單人形，頭上顯示名字；已有角色圖（張飛 11-19 重製版、關羽 11-20 第三版步行＋大招騎車，舊圖在 art-src/old）：關羽、張飛、趙雲、諸葛亮、馬超（含鐵騎）、張遼、司馬懿、許褚、曹操、甄姬、孫策、小喬、大喬、孫權、周瑜（public/sprites，原圖在 art-src，用 tools/make-sprite.mjs 切（預設依連通區塊分格，--grid-cut 為舊固定格線）；白色衣甲加 --keep-white（封閉純白口袋另加 --clear-pockets、地面線穿過褲子造成透明縫加 --fill-line-gaps，許褚用了兩者），非 5 排加 --rows N）。特效圖黑底，用 ADD 混合疊加（大喬、孫權、周瑜 fx 另外轉成 alpha＝亮度的透明圖，法陣／戰船／東風陣這類大面積特效用 NORMAL 混合，否則疊在草地上會變黃白）。載入（2026-11-20）：角色圖切成 frame 高約 2.2× displayHeight（make-sprite --scale），fx 120px 格；比賽只載上場兩國角色，選完國家後由 SheetLoadScene 在背景預載，MatchScene 有載入進度條。
 

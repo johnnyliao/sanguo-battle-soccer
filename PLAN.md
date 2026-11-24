@@ -250,7 +250,7 @@
 - 掃描結果（scratchpad/sfx/scan.tsv）：沒有完全無聲的檔；排除 29 個重低音（手機／筆電喇叭聽不到，最可能是使用者說的「沒聲音」）＋3 個極小聲拔刀聲。
 # Steps 18
 - [x] 1. 候選素材＋試聽頁 ?sfx=pack（每格 A/B/C，音量拉齊）— worker；已部署（99 檔 5.6 MB）
-- [~] 2. 使用者挑選 → 接進比賽（取代合成／ZzFX）、刪未選檔 — worker（31 格已接上；hit_punch/hit_heavy 第二輪試聽中，未選前沿用舊音）
+- [x] 2. 使用者挑選 → 接進比賽 — worker（33 格；hit_punch=Break_01、hit_heavy=BlastImpact_03＋impact_punch_heavy_003@0.8）
 - [ ] 3. 文件、commit、部署、正式網址 e2e
 
 - 2026-11-24 使用者第一輪選擇（v2 試聽頁）：
@@ -286,3 +286,4 @@
   - sunquan_volley = A：Laser Rifle 2_s09.wav
   - zhouyu_wind = B：Wind Spell Impact 3_s07.wav
   - hit_punch：重找（三個 impact_punch_medium 都不要）；hit_heavy：A（impact_punch_heavy_000）暫留但要再找更好的。
+- 720b69b 部署後正式網址 e2e：sfx/preview/sprite/mobile/stamina PASS；special 首跑 waitForFunction 逾時一次、重跑 PASS（未查，待觀察）。

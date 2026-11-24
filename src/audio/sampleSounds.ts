@@ -9,12 +9,12 @@ export const SAMPLE_PREFIX = 'sfx:';
  * Slot for a punch hit. Undefined until a punch file exists: punches keep the current generic sound.
  * Set it to a slot name (and produce public/sfx/<slot>.wav) to switch.
  */
-const HIT_PUNCH_SLOT: string | undefined = undefined;
+const HIT_PUNCH_SLOT: string | undefined = 'hit_punch';
 /**
  * Slot for a tackle, special or rider hit. Undefined until a file exists: these keep the current sounds.
  * Set it to a slot name (and produce public/sfx/<slot>.wav) to switch.
  */
-const HIT_HEAVY_SLOT: string | undefined = undefined;
+const HIT_HEAVY_SLOT: string | undefined = 'hit_heavy';
 /** Slot for an ice field pulse with victims. */
 const ICE_PULSE_SLOT = 'zhenji_pulse';
 
