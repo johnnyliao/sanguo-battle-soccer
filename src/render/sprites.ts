@@ -8,7 +8,7 @@ import { getTeam, type Country } from '../data';
  */
 
 /** `rampage` loops while invincible with the ball; `shot` is the special ball's launch pose; `lunge` is the dash pose (Guan Yu's ride loop); `dismount` is Guan Yu's pose as his ride ends; `cast` is the beam channel; `land` is a leap's landing crouch (Simayi only); `slashSwing` is Cao Cao's blade swing, played once per swing and held on its last frame until the next. */
-export type SpriteAnim = 'idle' | 'run' | 'attack' | 'charge' | 'special' | 'cast' | 'rampage' | 'shot' | 'hitstun' | 'down' | 'dive' | 'recover' | 'lunge' | 'dismount' | 'land' | 'slashSwing';
+export type SpriteAnim = 'idle' | 'run' | 'attack' | 'charge' | 'special' | 'cast' | 'rampage' | 'shot' | 'hitstun' | 'down' | 'dive' | 'recover' | 'lunge' | 'dismount' | 'land' | 'slashSwing' | 'sail';
 
 /**
  * Effects played over the character (see MatchScene): a spear thrust or fan slash, the lunge's dragon, an impact burst,
@@ -23,6 +23,8 @@ export type SpriteAnim = 'idle' | 'run' | 'attack' | 'charge' | 'special' | 'cas
  * (punch, and a faint one per wave), the seven stars over his head, the blade wave in flight, the sparks where a wave hits, and
  * the heal ring at his feet. For Zhen Ji's icefield: the icy whip arc (punch), the falling ice rain over the field, the ground ice
  * spikes (and their melt when the field ends), the snowflake burst at her cast, and the shatter on each victim and at the field's end.
+ * For Sun Ce's sail: the water ring at his start (splash), the wake behind the boat while it sails, the water burst with splinters where
+ * the hull hits a victim (splinter), and the dizzy stars over the victim when he lands (dizzy).
  */
 export type FxAnim =
   | 'thrust'
@@ -56,7 +58,11 @@ export type FxAnim =
   | 'rain'
   | 'spikes'
   | 'melt'
-  | 'snow';
+  | 'snow'
+  | 'splash'
+  | 'wake'
+  | 'splinter'
+  | 'dizzy';
 
 export interface SpriteMeta {
   frameWidth: number;
@@ -98,6 +104,8 @@ export interface SpriteConfig {
   shadowScale: number;
   /** Every animation the character uses. `land` is only defined where a leap's landing pose plays (Simayi). */
   anims: Partial<Record<SpriteAnim, SpriteAnimDef>>;
+  /** Optional display scale multiplier per animation, on top of displayHeight and anchored at the feet (Sun Ce's boat frames are drawn small in the uniform sheet). */
+  animScale?: Partial<Record<SpriteAnim, number>>;
   /** Optional effect sheet for this character's thrust, lunge and impact burst. */
   fx?: FxSheet;
 }
@@ -128,6 +136,7 @@ const SIMAYI_META: SpriteMeta = { frameWidth: 133, frameHeight: 123, cols: 4, ro
 const XUCHU_META: SpriteMeta = { frameWidth: 180, frameHeight: 185, cols: 4, rows: 6, anchorX: 74, anchorY: 136 };
 const CAOCAO_META: SpriteMeta = { frameWidth: 149, frameHeight: 127, cols: 4, rows: 6, anchorX: 70, anchorY: 116 };
 const ZHENJI_META: SpriteMeta = { frameWidth: 160, frameHeight: 123, cols: 4, rows: 5, anchorX: 87, anchorY: 121 };
+const SUNCE_META: SpriteMeta = { frameWidth: 142, frameHeight: 128, cols: 4, rows: 5, anchorX: 73, anchorY: 124 };
 
 /** Frame index of a sheet cell (row-major) for a sheet with this meta. */
 const cellAt = (meta: SpriteMeta) => (row: number, col: number): number => row * meta.cols + col;
@@ -142,6 +151,7 @@ const sat = cellAt(SIMAYI_META);
 const xat = cellAt(XUCHU_META);
 const ccat = cellAt(CAOCAO_META);
 const zjat = cellAt(ZHENJI_META);
+const suat = cellAt(SUNCE_META);
 /** The Zhao Yun and Zhuge Liang effect sheets are 4 columns of 181 px frames. */
 const fxat = (row: number, col: number): number => row * 4 + col;
 
@@ -482,6 +492,47 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
         bladeWave: { frames: [fxat(2, 0), fxat(2, 1), fxat(2, 2), fxat(2, 3)], fps: 12, repeat: -1 },
         sparks: { frames: [fxat(3, 0), fxat(3, 1), fxat(3, 2), fxat(3, 3)], fps: 14, repeat: 0 },
         heal: { frames: [fxat(4, 0), fxat(4, 1), fxat(4, 2), fxat(4, 3)], fps: 10, repeat: 0 },
+      },
+    },
+  },
+  sunce: {
+    key: 'sprite-sunce',
+    url: 'sprites/sunce.png',
+    meta: SUNCE_META,
+    displayHeight: 58,
+    shadowScale: 1.1,
+    // The boat frames (row 3) share the sheet's uniform box with the boat, so Sun Ce is about half his on-foot height there.
+    animScale: { special: 1.9, cast: 1.9, rampage: 1.9, lunge: 1.9, sail: 1.9, dismount: 1.9 },
+    anims: {
+      idle: { frames: [suat(0, 0), suat(0, 1), suat(0, 2), suat(0, 3)], fps: 6, repeat: -1 },
+      run: { frames: [suat(1, 0), suat(1, 1), suat(1, 2), suat(1, 3)], fps: 10, repeat: -1 },
+      attack: { frames: [suat(2, 0), suat(2, 1), suat(2, 2), suat(2, 3)], fps: 14, repeat: 0 },
+      charge: { frames: [suat(2, 0)], fps: 1, repeat: -1 },
+      cast: { frames: [suat(3, 1)], fps: 1, repeat: -1 },
+      special: { frames: [suat(3, 0)], fps: 1, repeat: -1 },
+      sail: { frames: [suat(3, 1), suat(3, 2)], fps: 6, repeat: -1 },
+      dismount: { frames: [suat(3, 3)], fps: 1, repeat: -1 },
+      rampage: { frames: [suat(3, 1)], fps: 1, repeat: -1 },
+      lunge: { frames: [suat(3, 1)], fps: 1, repeat: -1 },
+      shot: { frames: [suat(2, 2)], fps: 1, repeat: -1 },
+      dive: { frames: [suat(4, 1)], fps: 1, repeat: -1 },
+      hitstun: { frames: [suat(4, 0)], fps: 1, repeat: -1 },
+      down: { frames: [suat(4, 1), suat(4, 2)], fps: 6, repeat: 0 },
+      recover: { frames: [suat(4, 3)], fps: 1, repeat: -1 },
+    },
+    fx: {
+      key: 'fx-sunce',
+      url: 'sprites/sunce-fx.png',
+      frameWidth: 188,
+      frameHeight: 120,
+      punch: 'smash',
+      punchWidth: 90,
+      anims: {
+        smash: { frames: [fxat(0, 0), fxat(0, 1), fxat(0, 2), fxat(0, 3)], fps: 20, repeat: 0 },
+        splash: { frames: [fxat(1, 0), fxat(1, 1), fxat(1, 2), fxat(1, 3)], fps: 12, repeat: 0 },
+        wake: { frames: [fxat(2, 0), fxat(2, 1), fxat(2, 2), fxat(2, 3)], fps: 10, repeat: -1 },
+        splinter: { frames: [fxat(3, 0), fxat(3, 1), fxat(3, 2), fxat(3, 3)], fps: 14, repeat: 0 },
+        dizzy: { frames: [fxat(4, 0), fxat(4, 1), fxat(4, 2), fxat(4, 3)], fps: 10, repeat: 0 },
       },
     },
   },

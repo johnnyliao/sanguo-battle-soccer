@@ -11,7 +11,7 @@ function ch(
   stats: [number, number, number, number, number],
   specialName: string,
   specialKind: SpecialKind,
-  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger' | 'slash' | 'ride' | 'icefield' = 'rampage',
+  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger' | 'slash' | 'ride' | 'icefield' | 'sail' = 'rampage',
   opts: { noBall?: boolean; bumpPct?: number } = {},
 ): CharacterDef {
   const [power, speed, stamina, technique, defense] = stats;
@@ -41,7 +41,7 @@ export const RAW_CHARACTERS: CharacterDef[] = [
   ch('taishici', '太史慈', 'wu', 'DF', 'M', [8, 6, 8, 5, 7], '神射一箭', 'straight'),
   ch('zhouyu', '周瑜', 'wu', 'MF', 'M', [5, 6, 5, 10, 4], '赤壁東風', 'zigzag'),
   ch('ganning', '甘寧', 'wu', 'MF', 'M', [7, 9, 6, 6, 5], '百騎劫營', 'lob'),
-  ch('sunce', '孫策', 'wu', 'FW', 'M', [9, 8, 7, 6, 1], '小霸王', 'straight'),
+  ch('sunce', '孫策', 'wu', 'FW', 'M', [9, 8, 7, 6, 1], '揚帆起航', 'straight', 'sail', { noBall: true }),
 ];
 
 /**

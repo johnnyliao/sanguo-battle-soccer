@@ -209,6 +209,26 @@ export const ICE_SLOW_MULT = 0.15;
 export const ICE_DOT_INTERVAL = 30;
 /** Share of each pulse victim's maxStamina that a pulse takes (5%). */
 export const ICE_DOT_RATIO = 0.05;
+/** Sun Ce's sail (揚帆起航): how long the boat lasts, in ticks (4 s). */
+export const SAIL_TICKS = 240;
+/** Speed multiplier on his max speed while sailing. */
+export const SAIL_SPEED_MULT = 1.5;
+/** The boat hull is a box centred on the sailor: half-length along x and half-depth along y, in px. */
+export const SAIL_HALF_LEN = 34;
+export const SAIL_HALF_DEPTH = 16;
+/** A sail victim is down and airborne for this many ticks (1 s); he lands on the last of them. */
+export const SAIL_LAUNCH_TICKS = 60;
+/** Share of the rammed opponent's maxStamina the boat crash takes (2026-11-24: 80%). */
+export const SAIL_CRASH_STAMINA_RATIO = 0.8;
+/** Horizontal launch speed of a sail victim in px per second, directly away from the sailor. */
+export const SAIL_LAUNCH_SPEED = 160;
+/**
+ * Upward launch speed of a sail victim in px per second. Players fall at PLAYER_GRAVITY, applied once per tick before z moves,
+ * so after n ticks z = vz * n * DT - g * DT^2 * n(n+1)/2. z returns to 0 exactly at n = SAIL_LAUNCH_TICKS when vz = g * DT * (N+1) / 2.
+ */
+export const SAIL_LAUNCH_VZ = (PLAYER_GRAVITY * DT * (SAIL_LAUNCH_TICKS + 1)) / 2;
+/** A passenger stands this many px behind the sailor (along his facing, reversed), at the same y. */
+export const SAIL_PASSENGER_BEHIND = 18;
 
 export const KICKOFF_TICKS = 60;
 export const GOAL_CELEBRATE_TICKS = 150;

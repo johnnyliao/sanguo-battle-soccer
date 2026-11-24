@@ -84,6 +84,15 @@ import {
   ROAR_RADIUS,
   ROAR_STAMINA,
   ROAR_STUN_TICKS,
+  SAIL_HALF_DEPTH,
+  SAIL_HALF_LEN,
+  SAIL_LAUNCH_SPEED,
+  SAIL_CRASH_STAMINA_RATIO,
+  SAIL_LAUNCH_TICKS,
+  SAIL_LAUNCH_VZ,
+  SAIL_PASSENGER_BEHIND,
+  SAIL_SPEED_MULT,
+  SAIL_TICKS,
   SHOT_BASE_SPEED,
   SHOT_SPEED_PER_CHARGE,
   SHOT_SPEED_PER_POWER,
@@ -172,11 +181,14 @@ const LOB_OVERSHOOT = 10;
 
 /** Runs one tick of the player's current action. Mutates the player and may mutate the ball and events. */
 export function updateAction(state: GameState, p: Player, input: InputFrame): void {
+  // A passenger on a sail is carried by carryPassengers: no input, no timers, no physics.
+  if (p.sailPassengerOf !== -1) return;
   if (p.callPassTicks > 0) p.callPassTicks--;
   applyGravity(p);
   tickRampage(state, p);
   tickTiger(state, p);
   tickSlash(state, p);
+  tickSail(state, p);
   tickSpecialCooldown(state, p);
   if (p.silenceTicks > 0) p.silenceTicks--;
   if (input.l && !p.prevInput.l && p.action !== 'fear' && p.silenceTicks === 0) p.specialBuffer = SPECIAL_BUFFER_TICKS;
@@ -272,7 +284,8 @@ function coast(p: Player, damp: number): boolean {
 }
 
 function maxSpeedOf(state: GameState, p: Player): number {
-  return (PLAYER_BASE_SPEED + p.stats.speed * PLAYER_SPEED_PER_STAT) * iceSlowMult(state, p);
+  const sailMult = p.sailTicks > 0 ? SAIL_SPEED_MULT : 1;
+  return (PLAYER_BASE_SPEED + p.stats.speed * PLAYER_SPEED_PER_STAT) * iceSlowMult(state, p) * sailMult;
 }
 
 /**
@@ -375,9 +388,11 @@ function updateNormal(state: GameState, p: Player, input: InputFrame): void {
   // A rampage without the ball (a no-ball special) makes J do nothing: no punch, tackle or dive.
   if (input.j && !p.prevInput.j && !ownsBall && !rampaging && !silenced) {
     if (dashHeld) {
+      // While sailing the tackle keeps the sail speed: no extra burst on top of it.
+      const tackleMult = p.sailTicks > 0 ? 1 : TACKLE_SPEED_MULT;
       startAttack(state, p, 'tackle', TACKLE_TICKS);
-      p.vx = p.facingX * baseSpeed * TACKLE_SPEED_MULT;
-      p.vy = p.facingY * baseSpeed * TACKLE_SPEED_MULT;
+      p.vx = p.facingX * baseSpeed * tackleMult;
+      p.vy = p.facingY * baseSpeed * tackleMult;
     } else if (p.role === 'GK' && inOwnArea(state, p) && p.z === 0 && p.vz === 0) {
       startDive(state, p, input);
       return;
@@ -390,9 +405,10 @@ function updateNormal(state: GameState, p: Player, input: InputFrame): void {
     return;
   }
 
+  // The sail's speed does not stack with dash: while sailing, dash leaves the speed at the sail speed.
   const maxSpeed = rampaging
     ? baseSpeed * RAMPAGE_SPEED_MULT
-    : dashHeld
+    : dashHeld && p.sailTicks === 0
       ? baseSpeed * DASH_MULT
       : baseSpeed;
   const k = Math.min(1, (PLAYER_ACCEL * DT) / p.mass);
@@ -537,6 +553,7 @@ function trySpecial(state: GameState, p: Player, input: InputFrame): boolean {
   else if (p.specialMode === 'slash') startSlash(state, p);
   else if (p.specialMode === 'ride') startRide(state, p);
   else if (p.specialMode === 'icefield') startIcefield(state, p);
+  else if (p.specialMode === 'sail') startSail(state, p);
   else startRampage(state, p);
   return true;
 }
@@ -1633,6 +1650,152 @@ export function endIcefields(state: GameState): void {
   state.iceFields = [];
 }
 
+/**
+ * Sun Ce's sail (揚帆起航): an instant cast, with or without the ball. He keeps acting normally (moving at SAIL_SPEED_MULT,
+ * dribbling, shooting and passing) and is invincible until the sail ends (see updateSails and endSail).
+ */
+function startSail(state: GameState, p: Player): void {
+  p.stamina -= SPECIAL_STAMINA_COST;
+  p.specialCooldown = SPECIAL_COOLDOWN_TICKS;
+  p.sailTicks = SAIL_TICKS;
+  p.action = 'normal';
+  p.actionTimer = 0;
+  state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
+  state.events.push({ type: 'sailStart', playerIdx: p.idx });
+}
+
+/** Counts the sail down while the phase is play. It ends on its last tick. */
+function tickSail(state: GameState, p: Player): void {
+  if (p.sailTicks === 0 || state.match.phase !== 'play') return;
+  p.sailTicks--;
+  if (p.sailTicks === 0) endSail(state, p);
+}
+
+/** True if v's body touches the sail hull: a box of SAIL_HALF_LEN x SAIL_HALF_DEPTH centred on the sailor, grown by v's radius. */
+function touchesSail(sailor: Player, v: Player): boolean {
+  return Math.abs(v.x - sailor.x) <= SAIL_HALF_LEN + v.radius && Math.abs(v.y - sailor.y) <= SAIL_HALF_DEPTH + v.radius;
+}
+
+/**
+ * Sail contacts, run after the actions. Only in play. A sailor who is down or in hitstun ends his sail (a guard: an invincible
+ * sailor is not normally hit). Otherwise the first opponent that is not invincible, down or recovering and touches the hull is
+ * launched and the sail ends (sailCrash). With no crash and no passenger yet, the first teammate touching the hull boards.
+ */
+export function updateSails(state: GameState): void {
+  if (state.match.phase !== 'play') return;
+  for (const p of state.players) {
+    if (p.sailTicks === 0) continue;
+    if (p.action === 'down' || p.action === 'hitstun') {
+      endSail(state, p);
+      continue;
+    }
+    const victim = state.players.find(
+      (v) =>
+        v.team !== p.team && v.action !== 'down' && v.action !== 'recover' && !isInvincible(v) && touchesSail(p, v),
+    );
+    if (victim !== undefined) {
+      sailCrash(state, p, victim);
+      continue;
+    }
+    if (p.sailPassenger !== -1) continue;
+    const mate = state.players.find(
+      (v) =>
+        v.team === p.team &&
+        v.idx !== p.idx &&
+        v.action !== 'down' &&
+        v.action !== 'recover' &&
+        v.sailPassengerOf === -1 &&
+        touchesSail(p, v),
+    );
+    if (mate !== undefined) boardSail(state, p, mate);
+  }
+}
+
+/**
+ * The hull launches an opponent: he is knocked down for SAIL_LAUNCH_TICKS, flies away from the sailor (SAIL_LAUNCH_SPEED,
+ * SAIL_LAUNCH_VZ up) and loses no stamina. A ball he holds is knocked loose. The sail ends right after.
+ */
+function sailCrash(state: GameState, sailor: Player, v: Player): void {
+  state.events.push({ type: 'sailCrash', playerIdx: sailor.idx, victimIdx: v.idx, x: v.x, y: v.y });
+  reportCastCancel(state, v);
+  v.chargeTicks = 0;
+
+  let dirX = v.x - sailor.x;
+  let dirY = v.y - sailor.y;
+  const len = Math.sqrt(dirX * dirX + dirY * dirY);
+  if (len === 0) {
+    dirX = sailor.facingX;
+    dirY = sailor.facingY;
+  } else {
+    dirX /= len;
+    dirY /= len;
+  }
+  v.vx = dirX * SAIL_LAUNCH_SPEED;
+  v.vy = dirY * SAIL_LAUNCH_SPEED;
+  v.vz = SAIL_LAUNCH_VZ;
+  const damage = SAIL_CRASH_STAMINA_RATIO * v.maxStamina;
+  v.stamina = Math.max(0, v.stamina - damage);
+  // Airborne for the launch; an emptied victim stays down for the longer exhausted time.
+  setDown(v, v.stamina <= 0 ? Math.max(SAIL_LAUNCH_TICKS, DOWN_TICKS_EXHAUSTED) : SAIL_LAUNCH_TICKS);
+
+  state.events.push({ type: 'hit', attackerIdx: sailor.idx, victimIdx: v.idx, kind: 'special', damage });
+  if (state.ball.ownerIdx === v.idx) knockLooseBall(state, sailor, v, dirX, dirY);
+  state.events.push({ type: 'down', playerIdx: v.idx });
+  endSail(state, sailor);
+}
+
+/** A teammate boards the sail: he stops, is placed by carryPassengers, and is invincible until the sail ends. */
+function boardSail(state: GameState, sailor: Player, mate: Player): void {
+  reportCastCancel(state, mate);
+  mate.chargeTicks = 0;
+  if (mate.rampageTicks > 0) endRampage(state, mate);
+  mate.action = 'normal';
+  mate.actionTimer = 0;
+  mate.vx = 0;
+  mate.vy = 0;
+  mate.vz = 0;
+  mate.z = 0;
+  mate.sailPassengerOf = sailor.idx;
+  sailor.sailPassenger = mate.idx;
+  state.events.push({ type: 'sailBoard', playerIdx: sailor.idx, passengerIdx: mate.idx });
+}
+
+/** Each passenger is set just behind his sailor (SAIL_PASSENGER_BEHIND, against the facing) after the tick's pushes. */
+export function carryPassengers(state: GameState): void {
+  for (const mate of state.players) {
+    if (mate.sailPassengerOf === -1) continue;
+    const sailor = state.players[mate.sailPassengerOf];
+    mate.x = sailor.x - sailor.facingX * SAIL_PASSENGER_BEHIND;
+    mate.y = sailor.y;
+    mate.vx = 0;
+    mate.vy = 0;
+    clampPlayerToField(mate);
+  }
+}
+
+/**
+ * Ends a sail for any reason: the sailor is no longer invincible, and his passenger (if any) is released at his position
+ * to normal play. Callers only call this for a sailing player.
+ */
+function endSail(state: GameState, sailor: Player): void {
+  sailor.sailTicks = 0;
+  state.events.push({ type: 'sailEnd', playerIdx: sailor.idx });
+  if (sailor.sailPassenger === -1) return;
+  const mate = state.players[sailor.sailPassenger];
+  sailor.sailPassenger = -1;
+  mate.sailPassengerOf = -1;
+  mate.action = 'normal';
+  mate.actionTimer = 0;
+  state.events.push({ type: 'sailDrop', playerIdx: sailor.idx, passengerIdx: mate.idx });
+}
+
+/** Ends every sail (the phase left play). Silent apart from sailEnd and sailDrop: no crash, no launch. */
+export function endSails(state: GameState): void {
+  for (const p of state.players) {
+    if (p.sailTicks > 0) endSail(state, p);
+  }
+}
+
 /** Clears a rampage and reports it. Callers only call this while the player is rampaging. */
 export function endRampage(state: GameState, p: Player): void {
   p.rampageTicks = 0;
@@ -1890,9 +2053,16 @@ function findVictim(
   return undefined;
 }
 
-/** Invincible players (rampaging, lunging, leaping or riding) cannot be hit, tackled, stolen from, roared at, or pierced by a special. */
+/** Invincible players (rampaging, lunging, leaping, riding, or on or aboard a sail) cannot be hit, tackled, stolen from, roared at, or pierced by a special. */
 export function isInvincible(p: Player): boolean {
-  return p.rampageTicks > 0 || p.action === 'lunge' || p.action === 'leap' || p.action === 'ride';
+  return (
+    p.rampageTicks > 0 ||
+    p.action === 'lunge' ||
+    p.action === 'leap' ||
+    p.action === 'ride' ||
+    p.sailTicks > 0 ||
+    p.sailPassengerOf !== -1
+  );
 }
 
 /**
@@ -1901,8 +2071,9 @@ export function isInvincible(p: Player): boolean {
  */
 export function applyRampageBumps(state: GameState): void {
   for (const r of state.players) {
-    // A leap hits only on landing (see landLeap), and a ride hits only its lane (see rideHitLane), so neither bumps here.
-    if (!isInvincible(r) || r.action === 'leap' || r.action === 'ride') continue;
+    // A leap hits only on landing (see landLeap), a ride hits only its lane (see rideHitLane), and a sail only through
+    // updateSails (a sailor or passenger does not bump), so none of them bump here.
+    if (!isInvincible(r) || r.action === 'leap' || r.action === 'ride' || r.sailTicks > 0 || r.sailPassengerOf !== -1) continue;
     for (const o of state.players) {
       if (o.team === r.team || o.action === 'down' || o.bumpCooldown > 0 || isInvincible(o)) continue;
       const dx = o.x - r.x;

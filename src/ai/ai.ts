@@ -104,6 +104,12 @@ const ICE_OFF_BALL_MIN_OPPONENTS = 2;
 const ICE_OWNER_NEAR_RANGE = 70;
 const ICE_OWNER_RANGE = 110;
 const ICE_OWNER_MIN_OPPONENTS = 2;
+/** Sail (Sun Ce), owner: cast when an opponent is this close (break through), or when facing the goal with no standing opponent SAIL_OPEN_RANGE ahead and the goal within SAIL_OPEN_MAX_GOAL_DIST. */
+const SAIL_ESCAPE_RANGE = 90;
+const SAIL_OPEN_RANGE = 120;
+const SAIL_OPEN_MAX_GOAL_DIST = 600;
+/** Sail, off the ball: cast when an enemy carrier is this close, so the boat sails into him and frees the ball. */
+const SAIL_CARRIER_RANGE = 220;
 
 const PRESSURE_RANGE = 40;
 const PRESSURE_PASS_CHANCE = 0.04;
@@ -172,9 +178,12 @@ function decide(state: GameState, ai: AIState, p: Player): InputFrame {
 }
 
 function activeFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPlayer'][number]): InputFrame {
+  // A passenger on Sun Ce's sail: the sim ignores his input.
+  if (p.sailPassengerOf !== -1) return { ...EMPTY_INPUT };
   const roar = roarFrame(state, p, s);
   if (roar !== null) return roar;
   if (p.action !== 'normal') return { ...EMPTY_INPUT };
+  if (p.sailTicks > 0) return sailFrame(state, p, s);
   if (state.ball.ownerIdx === p.idx) {
     if (p.rampageTicks > 0) return rampageFrame(state, p, s);
     return p.role === 'GK' ? gkOwnerFrame(state, ai, p, s) : ownerFrame(state, ai, p, s);
@@ -355,6 +364,19 @@ function ownerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPla
     return frame(NO_MOVE, { l: true });
   }
 
+  // Sun Ce's sail while carrying: the boat takes the ball along, so cast it to break through or run at goal down an open lane.
+  if (
+    p.specialMode === 'sail' &&
+    !p.prevInput.l &&
+    p.specialCooldown === 0 &&
+    p.stamina >= SHOT_MIN_STAMINA &&
+    sailOwnerWanted(state, p) &&
+    nextRandom(ai) < SHOT_FULL_CHANCE
+  ) {
+    s.intent = 'sail';
+    return frame(NO_MOVE, { l: true });
+  }
+
   const goalDist = Math.abs(goalX - p.x);
   const shotRange = p.role === 'DF' ? SHOT_RANGE_DF : SHOT_RANGE_FWD;
   const inShotRange = goalDist < shotRange;
@@ -471,6 +493,12 @@ function offBallSpecialFrame(
         (enemyCarrier !== null && dist(p.x, p.y, enemyCarrier.x, enemyCarrier.y) <= ICE_CARRIER_RANGE) ||
         opponentsWithin(state, p, ICE_OFF_BALL_RANGE) >= ICE_OFF_BALL_MIN_OPPONENTS;
       break;
+    case 'sail':
+      if (enemyCarrier !== null) {
+        wanted = dist(p.x, p.y, enemyCarrier.x, enemyCarrier.y) <= SAIL_CARRIER_RANGE;
+        steer = steerTo(p, enemyCarrier.x, enemyCarrier.y);
+      }
+      break;
     default:
       return null;
   }
@@ -540,6 +568,46 @@ function rideLaneOpponents(state: GameState, p: Player): Player[] {
     if (along < RIDE_LANE_MIN_AHEAD || along > RIDE_DISTANCE) return false;
     return Math.abs(dx * p.facingY - dy * p.facingX) <= RIDE_LANE_HALF;
   });
+}
+
+/**
+ * Sun Ce's sail, owner: an opponent stands within SAIL_ESCAPE_RANGE (break through), or he faces the opponent goal, the
+ * goal is within SAIL_OPEN_MAX_GOAL_DIST, and no standing opponent is SAIL_OPEN_RANGE ahead of him.
+ */
+function sailOwnerWanted(state: GameState, p: Player): boolean {
+  if (opponentsWithin(state, p, SAIL_ESCAPE_RANGE) >= 1) return true;
+  const goalX = opponentGoalX(state, p.team);
+  return (
+    p.facingX * attackDir(state, p.team) > 0 &&
+    Math.abs(goalX - p.x) < SAIL_OPEN_MAX_GOAL_DIST &&
+    !opponentAhead(state, p, SAIL_OPEN_RANGE, Infinity)
+  );
+}
+
+/**
+ * Sun Ce while the sail runs: no punch, tackle or pass. With the ball he drives at the opponent goal and taps J (a shot)
+ * once in shot range facing it. Without it he steers the boat at the enemy carrier, else the loose ball, else the goal.
+ */
+function sailFrame(state: GameState, p: Player, s: AIState['perPlayer'][number]): InputFrame {
+  const goalX = opponentGoalX(state, p.team);
+  if (state.ball.ownerIdx === p.idx) {
+    const goalDist = Math.abs(goalX - p.x);
+    const shotRange = p.role === 'DF' ? SHOT_RANGE_DF : SHOT_RANGE_FWD;
+    const steer = steerTo(p, goalX, CENTER_Y);
+    if (goalDist < shotRange && p.facingX * attackDir(state, p.team) > 0 && !p.prevInput.j) {
+      s.intent = 'sailShot';
+      return frame(steer, { j: true });
+    }
+    s.intent = 'sailDrive';
+    return frame(steer);
+  }
+  const ball = state.ball;
+  const carrier = ball.ownerIdx === -1 ? null : state.players[ball.ownerIdx];
+  const enemyCarrier = carrier !== null && carrier.team !== p.team ? carrier : null;
+  s.intent = 'sailSteer';
+  if (enemyCarrier !== null) return frame(steerTo(p, enemyCarrier.x, enemyCarrier.y));
+  if (ball.ownerIdx === -1) return frame(steerTo(p, ball.x, ball.y));
+  return frame(steerTo(p, goalX, CENTER_Y));
 }
 
 /**

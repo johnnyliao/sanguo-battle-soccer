@@ -10,6 +10,7 @@ import {
   RIDE_LANE_HALF,
   createInitialState,
   RAMPAGE_TICKS,
+  SAIL_TICKS,
   SILENCE_TICKS,
   SLASH_TICKS,
   SLASH_WAVE_RANGE,
@@ -1029,5 +1030,141 @@ describe('AI Zhang Fei goalkeeper roar (incoming shot)', () => {
       scored = scored || state.events.some((e) => e.type === 'goal');
     }
     expect(scored).toBe(true);
+  });
+});
+
+describe('AI Sun Ce sail (wu FW)', () => {
+  const SUNCE = 4;
+  const TICKS = 400;
+  const MID = FIELD_D / 2;
+
+  /** Wu (idx 0-4) against wei (idx 5-9), everyone parked far away. Sun Ce is wu's forward at idx 4. */
+  function sailState(seed: number): GameState {
+    const state = createInitialState({ seed, teams: [getTeam('wu'), getTeam('wei')], startInPlay: true }, SIZE_PARAMS);
+    state.players.forEach((p, i) => {
+      p.x = 100;
+      p.y = 20 + i * 24;
+    });
+    state.ball.ownerIdx = -1;
+    state.ball.x = 600;
+    state.ball.y = MID;
+    return state;
+  }
+
+  it('the sail is wired to Sun Ce as a no-ball special', () => {
+    const state = sailState(30);
+    expect(state.players[SUNCE].specialMode).toBe('sail');
+    expect(state.players[SUNCE].specialNoBall).toBe(true);
+  });
+
+  it('casts the sail as the owner with an opponent within 90 px, and not with the nearest one at 120 px', () => {
+    const near = sailState(31);
+    place(near, SUNCE, 400, MID);
+    place(near, 5, 480, MID);
+    carry(near, SUNCE);
+    expect(driveOne(near, createAIState(31), SUNCE, TICKS, true).pressedL).toBe(true);
+
+    const far = sailState(31);
+    place(far, SUNCE, 400, MID);
+    place(far, 5, 520, MID);
+    carry(far, SUNCE);
+    expect(driveOne(far, createAIState(31), SUNCE, TICKS, true).pressedL).toBe(false);
+  });
+
+  it('casts the sail as the owner facing the goal down an open lane, and not with an opponent just ahead or far from goal', () => {
+    const open = sailState(32);
+    place(open, SUNCE, 700, MID);
+    carry(open, SUNCE);
+    expect(driveOne(open, createAIState(32), SUNCE, TICKS, true).pressedL).toBe(true);
+
+    const blocked = sailState(32);
+    place(blocked, SUNCE, 700, MID);
+    place(blocked, 6, 800, MID);
+    carry(blocked, SUNCE);
+    expect(driveOne(blocked, createAIState(32), SUNCE, TICKS, true).pressedL).toBe(false);
+
+    const far = sailState(32);
+    place(far, SUNCE, 400, MID);
+    carry(far, SUNCE);
+    expect(driveOne(far, createAIState(32), SUNCE, TICKS, true).pressedL).toBe(false);
+  });
+
+  it('casts the sail off the ball into an enemy carrier within 220 px, and not from 260 px', () => {
+    const near = sailState(33);
+    place(near, SUNCE, 400, MID);
+    place(near, 5, 600, MID);
+    carry(near, 5);
+    expect(driveOne(near, createAIState(33), SUNCE, TICKS, true).pressedL).toBe(true);
+
+    const far = sailState(33);
+    place(far, SUNCE, 400, MID);
+    place(far, 5, 660, MID);
+    carry(far, 5);
+    expect(driveOne(far, createAIState(33), SUNCE, TICKS, true).pressedL).toBe(false);
+  });
+
+  it('while sailing with the ball, drives at the opponent goal and shoots in range without punching', () => {
+    const state = sailState(34);
+    place(state, SUNCE, 400, MID);
+    carry(state, SUNCE);
+    state.players[SUNCE].sailTicks = SAIL_TICKS;
+    const f = computeAIInputs(state, createAIState(34), NO_HUMANS)[SUNCE];
+    expect(f.moveX).toBe(1);
+    expect(f.moveY).toBe(0);
+    expect(f.j).toBe(false);
+    expect(f.l).toBe(false);
+
+    place(state, SUNCE, 1100, MID);
+    carry(state, SUNCE);
+    state.players[SUNCE].sailTicks = SAIL_TICKS;
+    expect(computeAIInputs(state, createAIState(34), NO_HUMANS)[SUNCE].j).toBe(true);
+  });
+
+  it('while sailing without the ball, steers at the enemy carrier and does not punch him', () => {
+    const state = sailState(35);
+    place(state, SUNCE, 400, MID);
+    place(state, 5, 600, 250);
+    carry(state, 5);
+    state.players[SUNCE].sailTicks = SAIL_TICKS;
+    const f = computeAIInputs(state, createAIState(35), NO_HUMANS)[SUNCE];
+    expect(f.moveX).toBe(1);
+    expect(f.moveY).toBe(1);
+    expect(f.j).toBe(false);
+
+    place(state, 5, 415, MID);
+    carry(state, 5);
+    expect(computeAIInputs(state, createAIState(35), NO_HUMANS)[SUNCE].j).toBe(false);
+  });
+
+  it('while sailing without the ball, steers at the loose ball, and at the goal when a teammate has it', () => {
+    const loose = sailState(36);
+    place(loose, SUNCE, 400, MID);
+    loose.ball.x = 300;
+    loose.ball.y = 60;
+    loose.players[SUNCE].sailTicks = SAIL_TICKS;
+    const fl = computeAIInputs(loose, createAIState(36), NO_HUMANS)[SUNCE];
+    expect(fl.moveX).toBe(-1);
+    expect(fl.moveY).toBe(-1);
+
+    const mate = sailState(36);
+    place(mate, SUNCE, 400, MID);
+    carry(mate, 0);
+    mate.players[SUNCE].sailTicks = SAIL_TICKS;
+    const fm = computeAIInputs(mate, createAIState(36), NO_HUMANS)[SUNCE];
+    expect(fm.moveX).toBe(1);
+    expect(fm.moveY).toBe(0);
+    expect(fm.j).toBe(false);
+  });
+
+  it('a passenger on the sail returns an empty frame', () => {
+    const state = sailState(37);
+    place(state, SUNCE, 400, MID);
+    place(state, 3, 380, MID + 20);
+    place(state, 5, 420, MID);
+    state.players[SUNCE].sailTicks = SAIL_TICKS;
+    state.players[SUNCE].sailPassenger = 3;
+    state.players[3].sailPassengerOf = SUNCE;
+    const frames = computeAIInputs(state, createAIState(37), NO_HUMANS);
+    expect(frames[3]).toEqual({ ...EMPTY_INPUT });
   });
 });

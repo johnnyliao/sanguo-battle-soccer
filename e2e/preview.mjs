@@ -7,6 +7,9 @@
 // taken while the ball is held in his mouth, and the spit shot (tiger-xuchu-spit.png) while the fire trail follows the lob.
 // Zhen Ji's icefield: the field is cast at her feet (iceStart); after the first pulse (icePulse) the staged opponents inside it are
 // tinted, and the mid-field shot (test-results/ice-zhenji.png) shows the rain, the spikes and the tinted victims.
+// Sun Ce's sail (wu roster): a teammate is staged 24 px ahead and an opponent 60 px ahead of him before the L press. The teammate
+// boards (sailBoard), the sail loop and the wake show (sail-sunce.png), and the hull hits the opponent (sailCrash): the water burst
+// and the launched victim (sail-sunce-crash.png), then the dizzy stars when he lands.
 // Usage: node e2e/preview.mjs <url>
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
@@ -37,6 +40,7 @@ const CASES = [
   { id: 'simayi', name: '司馬懿', slot: 3, effect: 'leapLand', wei: true },
   { id: 'caocao', name: '曹操', slot: 1, effect: 'slashWave', wei: true },
   { id: 'zhenji', name: '甄姬', slot: 2, effect: 'iceStart', wei: true },
+  { id: 'sunce', name: '孫策', slot: 4, effect: 'sailStart', wu: true },
 ];
 
 const errors = [];
@@ -112,6 +116,22 @@ const stageTigerShot = () => {
   return { shooter: shooter.idx, tigerX: tiger.x };
 };
 
+// Test-only: a teammate 24 px ahead of Sun Ce (he boards the sail) and an opponent 60 px ahead (the hull's reach is about 46 px).
+const stageSail = () => {
+  const s = window.__sg.state();
+  const sailor = s.players[window.__sg.humanIdx];
+  const dir = sailor.facingX < 0 ? -1 : 1;
+  const mate = s.players.find((p) => p.team === sailor.team && p.idx !== sailor.idx && p.role !== 'GK');
+  const foe = s.players.find((p) => p.team !== sailor.team);
+  for (const [p, d] of [[mate, 24], [foe, 60]]) {
+    p.x = sailor.x + dir * d;
+    p.y = sailor.y;
+    p.vx = 0;
+    p.vy = 0;
+  }
+  return { mate: mate.idx, foe: foe.idx };
+};
+
 // Test-only: an opponent 170 px ahead of Guan Yu along his facing, in his lane (the bike hits him).
 const stageRideVictim = () => {
   const s = window.__sg.state();
@@ -158,6 +178,7 @@ try {
   if (!generalOk) throw new Error('general stage did not appear');
 
   let woke = false;
+  let wuUp = false;
   for (const c of CASES) {
     if (c.wei && !woke) {
       // Back to the country stages: own -> wei, then opponent shu, then the wei roster.
@@ -176,6 +197,27 @@ try {
       report('0b team select general (wei vs shu)', weiGeneral);
       if (!weiGeneral) throw new Error('wei general stage did not appear');
       woke = true;
+    }
+
+    if (c.wu && !wuUp) {
+      // Back to the country stages (own cursor to wu, the third country), then the wu roster.
+      await tap(page, 'k');
+      await waitMenu(page, { stage: 'opp' });
+      await tap(page, 'k');
+      await waitMenu(page, { stage: 'own' });
+      await tap(page, 'a');
+      await waitMenu(page, { stage: 'own', cursor: 0 });
+      await tap(page, 'd');
+      await tap(page, 'd');
+      await waitMenu(page, { stage: 'own', cursor: 2 });
+      await tap(page, 'j');
+      await waitMenu(page, { stage: 'opp', own: 'wu' });
+      await tap(page, 'j');
+      const wuGeneral = await waitMenu(page, { stage: 'general', own: 'wu' });
+      await page.waitForTimeout(300);
+      report('0c team select general (wu)', wuGeneral);
+      if (!wuGeneral) throw new Error('wu general stage did not appear');
+      wuUp = true;
     }
 
     const name = `${c.name} (${c.id})`;
@@ -208,6 +250,9 @@ try {
       };
       tick();
     });
+
+    let sailing = null;
+    if (c.effect === 'sailStart') sailing = await page.evaluate(stageSail);
 
     if (c.effect === 'leapLand') {
       // Mid-air (the flight is above 20 px high): the crow trail is on him.
@@ -291,6 +336,43 @@ try {
         () => false,
       );
     // Taken right at the special, before the screenshot delay below.
+    if (c.effect === 'sailStart') {
+      // The teammate boards (passenger on the deck), the sail loop runs, and the wake follows him; shot before the hull reaches the opponent.
+      const boarded = await page
+        .waitForFunction(() => window.__sg.preview().events.includes('sailBoard'), null, { timeout: 3000, polling: 'raf' })
+        .then(() => true, () => false);
+      const looping = await page
+        .waitForFunction(() => window.__sg.scene.playerViews[window.__sg.humanIdx].sprite?.anims.currentAnim?.key === 'sprite-sunce:sail', null, { timeout: 2000, polling: 'raf' })
+        .then(() => true, () => false);
+      await page.waitForTimeout(150);
+      const onDeck = await page.evaluate((m) => window.__sg.state().players[m].sailPassengerOf === window.__sg.humanIdx, sailing.mate);
+      await page.screenshot({ path: shot('sail-sunce.png') });
+      report(`${name} teammate boards the sail (sailBoard)`, boarded && onDeck, `mate ${sailing.mate}`);
+      report(`${name} sail loop plays (sprite-sunce:sail)`, looping);
+      // The staged opponent is 60 px out, past the hull's reach (about 46 px), so he is moved in now: the next tick's contact is the crash.
+      await page.evaluate((v) => {
+        const s = window.__sg.state();
+        const sailor = s.players[window.__sg.humanIdx];
+        const foe = s.players[v];
+        foe.x = sailor.x + (sailor.facingX < 0 ? -1 : 1) * 40;
+        foe.y = sailor.y;
+        foe.vx = 0;
+        foe.vy = 0;
+      }, sailing.foe);
+      // The hull reaches the opponent: the burst and the launched victim (airborne about a second).
+      const crashed = await page
+        .waitForFunction(() => window.__sg.preview().events.includes('sailCrash'), null, { timeout: 4000, polling: 'raf' })
+        .then(() => true, () => false);
+      await page.waitForTimeout(150);
+      const launched = await page.evaluate((v) => window.__sg.state().players[v].z, sailing.foe);
+      await page.screenshot({ path: shot('sail-sunce-crash.png') });
+      report(`${name} hull hits the staged opponent (sailCrash)`, crashed && launched > 0, `victim z ${launched}`);
+      await page.waitForTimeout(1100);
+      const sailFx = await page.evaluate(() => [...window.__sgFxSeen]);
+      const hasFx = ['fx:splash', 'fx:wake', 'fx:splinter', 'fx:dizzy'].every((n) => sailFx.includes(n));
+      report(`${name} splash, wake, splinter and dizzy fx are drawn`, hasFx, `fx seen ${sailFx.join(',')}`);
+    }
+
     if (c.effect === 'slashWave') {
       // Swings come every 0.2 s (12 ticks) from the cast, so 3 land within 40 ticks (the third at 36). The buff timer (300 minus slashTicks)
       // is read as soon as the third swing is seen, which is the sim time since the cast.
@@ -368,7 +450,7 @@ try {
     // Back to team select on its own (about 4.5 s after the L press, or after a goal), on the same row.
     const back = await waitScene(page, 'TeamSelectScene', 12000);
     const menu = back ? await page.evaluate(() => window.__sgMenu()) : null;
-    const restored = Boolean(menu) && menu.stage === 'general' && menu.own === (c.wei ? 'wei' : 'shu');
+    const restored = Boolean(menu) && menu.stage === 'general' && menu.own === (c.wu ? 'wu' : c.wei ? 'wei' : 'shu');
     report(`${name} returns to team select`, back && restored, menu ? `stage ${menu.stage}, cursor ${menu.cursor}` : 'no menu');
     if (!back) throw new Error(`${name}: did not return to team select`);
   }

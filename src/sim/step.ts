@@ -32,9 +32,11 @@ import {
 import {
   applyRampageBumps,
   applySpecialHit,
+  carryPassengers,
   clampPlayerToField,
   clearRiders,
   endIcefields,
+  endSails,
   endSlashWindows,
   endTigerWindows,
   isInvincible,
@@ -43,6 +45,7 @@ import {
   updateBladeWaves,
   updateIcefields,
   updateRiders,
+  updateSails,
 } from './actions';
 import { attackDir, inOwnArea, goalMouth, isInGoalMouth } from './field';
 import { updateMatch } from './match';
@@ -90,18 +93,21 @@ export function step(state: GameState, inputs: InputFrame[]): GameState {
     updateRiders(state);
     updateBladeWaves(state);
     updateIcefields(state);
+    updateSails(state);
     applyRampageBumps(state);
     resolvePlayerCollisions(state.players);
+    carryPassengers(state);
     updatePossession(state);
     updateBall(state);
     updatePickup(state);
     updateMatch(state);
-    // Riders, tiger guards, slash buffs, blade waves and ice fields only live while the phase is play: a goal, half time, kickoff or PK start clears them.
+    // Riders, tiger guards, slash buffs, blade waves, ice fields and sails only live while the phase is play: a goal, half time, kickoff or PK start clears them.
     if (state.match.phase !== 'play') {
       clearRiders(state);
       endTigerWindows(state);
       endSlashWindows(state);
       endIcefields(state);
+      endSails(state);
     }
   }
 
@@ -476,7 +482,7 @@ function clamp(v: number, lo: number, hi: number): number {
  * Goalkeepers in their own area reach further and higher; a diving goalkeeper reaches further still.
  */
 function pickupReach(state: GameState, p: Player): number {
-  if (p.noTouchTicks !== 0) return -1;
+  if (p.noTouchTicks !== 0 || p.sailPassengerOf !== -1) return -1;
   const ball = state.ball;
   const gk = p.role === 'GK';
   const inArea = gk && inOwnArea(state, p);

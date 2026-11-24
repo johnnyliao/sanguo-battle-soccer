@@ -119,6 +119,8 @@ interface FxInstance {
   fearOf: number | null;
   /** Leaping player idx whose flight this effect is (the crow trail), so the landing fades it. */
   leapOf: number | null;
+  /** Sun Ce's sailor idx whose sail this effect is (the wake), so the sail's end fades it. */
+  sailOf: number | null;
   /** Ice field id this effect belongs to (the rain and spikes), so the field's end fades it. */
   iceOf: number | null;
   /** A follower that rises with his height z (a leap's crow trail). */
@@ -149,6 +151,7 @@ interface FxSpawn {
   rideOf?: number;
   fearOf?: number;
   leapOf?: number;
+  sailOf?: number;
   iceOf?: number;
   lifted?: boolean;
   alpha?: number;
@@ -355,6 +358,20 @@ const LEAP_VICTIM_FX_SIZE = 80;
 const LEAP_SHAKE_MS = 120;
 const LEAP_SHAKE_INTENSITY = 0.003;
 const LEAP_LAND_POSE_MS = 400;
+/** Sun Ce's sail: the splash ring at his start (its width), the wake behind the boat (its width, its offset behind him), the splinter burst where the hull hits (its width), the dizzy stars over the victim (its width, its lift over his head, how long they hold after his landing), the boarding and dismount pose times, and a passenger's lift and depth on the deck. */
+const SAIL_SPLASH_FX_W = 140;
+const SAIL_WAKE_FX_W = 120;
+const SAIL_WAKE_BACK = 40;
+const SAIL_SPLINTER_FX_W = 120;
+const SAIL_DIZZY_FX_W = 90;
+const SAIL_DIZZY_LIFT = 60;
+const SAIL_DIZZY_HOLD_MS = 900;
+/** Delay from the hull's hit to the victim's landing (his launch lasts about a second). */
+const SAIL_LAND_MS = 1000;
+const SAIL_BOARD_POSE_MS = 250;
+const SAIL_DISMOUNT_POSE_MS = 200;
+const SAIL_DECK_LIFT = 10;
+const SAIL_DECK_DEPTH = 0.3;
 /** Silence label above a silenced player's name. */
 const SILENCE_COLOR = '#7cff6b';
 /** Zhang Liao's fear: the ghost burst over him (its width), the chains ring under each feared player (its width), and the '!' icon over his head (its width, gap above his sprite). */
@@ -893,7 +910,7 @@ export class MatchScene extends Phaser.Scene {
         if (this.preview) this.time.delayedCall(PREVIEW_GOAL_END_MS, () => this.endPreview());
       } else if (e.type === 'special') {
         // A lunge shows its dash pose for the whole dash, a beam its channel pose (spriteAnimFor), and a ride its mount pose (rideStart), not the activation pose.
-        if (players[e.playerIdx].specialMode !== 'lunge' && players[e.playerIdx].specialMode !== 'beam' && players[e.playerIdx].specialMode !== 'leap' && players[e.playerIdx].specialMode !== 'ride') {
+        if (players[e.playerIdx].specialMode !== 'lunge' && players[e.playerIdx].specialMode !== 'beam' && players[e.playerIdx].specialMode !== 'leap' && players[e.playerIdx].specialMode !== 'ride' && players[e.playerIdx].specialMode !== 'sail') {
           this.playPose(e.playerIdx, 'special', SPECIAL_POSE_MS);
         }
       } else if (e.type === 'specialShot') {
@@ -967,6 +984,12 @@ export class MatchScene extends Phaser.Scene {
         this.cameras.main.shake(LEAP_SHAKE_MS, LEAP_SHAKE_INTENSITY);
         this.leapLandFx(e);
         this.playPose(e.playerIdx, 'land', LEAP_LAND_POSE_MS);
+      } else if (e.type === 'sailStart') {
+        this.sailStartFx(e.playerIdx);
+      } else if (e.type === 'sailCrash') {
+        this.sailCrashFx(e);
+      } else if (e.type === 'sailEnd') {
+        this.sailEndFx(e.playerIdx);
       } else if (e.type === 'summonStart') {
         this.cameras.main.shake(SUMMON_SHAKE_MS, SUMMON_SHAKE_INTENSITY);
         this.summonFx(e.playerIdx);
@@ -1113,6 +1136,7 @@ export class MatchScene extends Phaser.Scene {
       rideOf: s.rideOf ?? null,
       fearOf: s.fearOf ?? null,
       leapOf: s.leapOf ?? null,
+      sailOf: s.sailOf ?? null,
       iceOf: s.iceOf ?? null,
       lifted: s.lifted ?? false,
       alpha: s.alpha ?? 1,
@@ -1443,6 +1467,76 @@ export class MatchScene extends Phaser.Scene {
         depth: v.y + 0.5,
       });
     }
+  }
+
+  /** Sun Ce's sail starts: the boarding pose, the water ring at his feet, and the wake behind the boat, following him until the sail ends. */
+  private sailStartFx(idx: number): void {
+    this.playPose(idx, 'special', SAIL_BOARD_POSE_MS);
+    const owner = this.fxOwner(idx);
+    if (!owner) return;
+    const p = this.state.players[idx];
+    const feet = worldToScreen(p.x, p.y, 0);
+    this.playFx(owner.fx, 'splash', {
+      x: feet.sx,
+      y: feet.sy,
+      w: SAIL_SPLASH_FX_W,
+      h: (SAIL_SPLASH_FX_W * owner.fx.frameHeight) / owner.fx.frameWidth,
+      depth: p.y - 0.5,
+    });
+    const forever = Number.POSITIVE_INFINITY;
+    this.playFx(owner.fx, 'wake', {
+      x: feet.sx - SAIL_WAKE_BACK,
+      y: feet.sy,
+      w: SAIL_WAKE_FX_W,
+      h: (SAIL_WAKE_FX_W * owner.fx.frameHeight) / owner.fx.frameWidth,
+      depth: p.y - 0.5,
+      follow: idx,
+      offX: -SAIL_WAKE_BACK,
+      mirror: true,
+      depthOff: -0.5,
+      holdMs: forever,
+      endMs: forever,
+      sailOf: idx,
+    });
+  }
+
+  /** The sail's end: the wake fades and the sailor plays the dismount pose. */
+  private sailEndFx(idx: number): void {
+    const now = this.time.now;
+    for (const f of this.fx) {
+      if (f.sailOf !== idx) continue;
+      f.holdMs = now - f.startMs;
+      f.endMs = f.holdMs + FX_FADE_MS;
+    }
+    this.playPose(idx, 'dismount', SAIL_DISMOUNT_POSE_MS);
+  }
+
+  /** The hull hits a victim: the water burst with splinters where he is, and the dizzy stars over him once he lands. */
+  private sailCrashFx(e: Extract<SimEvent, { type: 'sailCrash' }>): void {
+    const owner = this.fxOwner(e.playerIdx);
+    if (!owner) return;
+    const pt = worldToScreen(e.x, e.y, HIT_FX_LIFT);
+    this.playFx(owner.fx, 'splinter', {
+      x: pt.sx,
+      y: pt.sy,
+      w: SAIL_SPLINTER_FX_W,
+      h: (SAIL_SPLINTER_FX_W * owner.fx.frameHeight) / owner.fx.frameWidth,
+      depth: e.y + 0.5,
+    });
+    this.time.delayedCall(SAIL_LAND_MS, () => {
+      this.playFx(owner.fx, 'dizzy', {
+        x: pt.sx,
+        y: pt.sy,
+        w: SAIL_DIZZY_FX_W,
+        h: (SAIL_DIZZY_FX_W * owner.fx.frameHeight) / owner.fx.frameWidth,
+        depth: e.y + 0.5,
+        follow: e.victimIdx,
+        offY: -SAIL_DIZZY_LIFT,
+        lifted: true,
+        holdMs: SAIL_DIZZY_HOLD_MS,
+        endMs: SAIL_DIZZY_HOLD_MS + FX_FADE_MS,
+      });
+    });
   }
 
   /** Zhang Liao's fear cast: the ghost burst over him, not following him. */
@@ -2123,6 +2217,9 @@ export class MatchScene extends Phaser.Scene {
       default:
         break;
     }
+    // A passenger stands on the sailor's boat with the idle pose; a sailor keeps the boat's sail loop over the run and idle.
+    if (p.sailPassengerOf >= 0) return 'idle';
+    if (p.sailTicks > 0) return 'sail';
     if (p.slashTicks > 0) return 'slashSwing';
     if (p.rampageTicks > 0) return 'rampage';
     if (p.chargeTicks > 0) return 'charge';
@@ -2144,10 +2241,12 @@ export class MatchScene extends Phaser.Scene {
   private drawSpritePlayer(sprite: Phaser.GameObjects.Sprite, cfg: SpriteConfig, p: Player, time: number, hitFlicker: boolean): number {
     const anim = this.spriteAnimFor(p);
     const key = spriteAnimKey(cfg, anim);
+    // A passenger stands on the deck: lifted above the sailor's boat base.
+    const lift = p.sailPassengerOf >= 0 ? p.z + SAIL_DECK_LIFT : p.z;
     if (sprite.anims.currentAnim?.key !== key) sprite.play(key);
 
     const { meta } = cfg;
-    const scale = cfg.displayHeight / meta.frameHeight;
+    const scale = (cfg.displayHeight / meta.frameHeight) * (cfg.animScale?.[anim] ?? 1);
     const flip = p.facingX < 0;
     const ax = meta.anchorX / meta.frameWidth;
     const ay = meta.anchorY / meta.frameHeight;
@@ -2158,14 +2257,17 @@ export class MatchScene extends Phaser.Scene {
       .setOrigin(flip ? 1 - ax : ax, ay)
       .setFlipX(flip)
       .setScale(scale)
-      .setPosition(0, -p.z)
+      .setPosition(0, -lift)
       .setAlpha(alpha);
-    return -p.z - meta.anchorY * scale;
+    // Labels sit at the on-foot frame top: an enlarged anim (Sun Ce's boat frames) must not push them off screen.
+    return -lift - meta.anchorY * (cfg.displayHeight / meta.frameHeight);
   }
 
   private drawPlayer(view: PlayerView, p: Player, time: number): void {
     const { sx, sy } = worldToScreen(p.x, p.y, 0);
-    view.container.setPosition(sx, sy).setDepth(p.y);
+    // A passenger draws just above his sailor (the boat is the sailor's sprite).
+    const onDeck = p.sailPassengerOf >= 0;
+    view.container.setPosition(sx, sy).setDepth(onDeck ? p.y + SAIL_DECK_DEPTH : p.y);
 
     const g = view.gfx;
     g.clear();
@@ -2173,17 +2275,19 @@ export class MatchScene extends Phaser.Scene {
     g.setAlpha(hitFlicker ? 0.35 : 1);
 
     const r = p.radius;
-    const lift = p.z;
+    const lift = p.sailPassengerOf >= 0 ? p.z + SAIL_DECK_LIFT : p.z;
     const teamColor = this.teamColors[p.team];
     const bodyColor = p.role === 'GK' ? mix(teamColor, GK_TINT, 0.5) : teamColor;
     const outline = darken(bodyColor, 0.5);
     const facingX = p.facingX >= 0 ? 1 : -1;
     const facingY = p.facingY;
 
-    // Shadow on the ground (sprites set their own width, e.g. wider under the bike).
+    // Shadow on the ground (sprites set their own width, e.g. wider under the bike). A passenger has none: the boat's is enough.
     const shadowScale = view.sprite !== null && view.spriteCfg !== null ? view.spriteCfg.shadowScale : 1;
-    g.fillStyle(0x000000, 0.3);
-    g.fillEllipse(0, 0, r * 2.4 * shadowScale, r * 1.2);
+    if (!onDeck) {
+      g.fillStyle(0x000000, 0.3);
+      g.fillEllipse(0, 0, r * 2.4 * shadowScale, r * 1.2);
+    }
 
     // Charge ring.
     if (p.chargeTicks > 0) {
@@ -2262,20 +2366,31 @@ export class MatchScene extends Phaser.Scene {
 
     // Name label above the top of the figure; human marker above the name.
     const labelY = topY - 2;
-    view.label.setPosition(0, labelY);
+    // A passenger on the deck hides his name and stamina bar, so they do not overlap the sailor's labels.
+    const aboard = p.sailPassengerOf >= 0;
+    view.label.setPosition(0, labelY).setVisible(!aboard);
     // The stamina bar sits above the name; the silence and invincible labels stack above it (or just above the name without a bar).
     const stackY = labelY - (view.stamina ? STAMINA_LABEL_UP : 22);
     const silenced = p.silenceTicks > 0;
     view.silence.setVisible(silenced);
     if (silenced) view.silence.setPosition(0, stackY);
-    const invincible = p.idx === this.humanIdx && isInvincible(p);
+    // The invincible tag shows the sail's remaining time for the sailor; a passenger shows none.
+    const invincible = p.idx === this.humanIdx && isInvincible(p) && !aboard;
     view.tag.setVisible(invincible);
     if (invincible) {
-      const ticks = p.action === 'lunge' || p.action === 'leap' || p.action === 'ride' ? p.actionTimer : p.rampageTicks;
+      const ticks =
+        p.action === 'lunge' || p.action === 'leap' || p.action === 'ride'
+          ? p.actionTimer
+          : p.sailTicks > 0
+            ? p.sailTicks
+            : p.rampageTicks;
       view.tag.setPosition(0, stackY - (silenced ? STAMINA_STACK_STEP : 0)).setText(`無敵 ${(ticks / TICK_HZ).toFixed(1)}`);
     }
-    if (view.stamina) this.updateStaminaBar(view.stamina, p, labelY);
-    if (p.idx === this.humanIdx) {
+    if (view.stamina) {
+      this.updateStaminaBar(view.stamina, p, labelY);
+      view.stamina.bar.setVisible(!aboard);
+    }
+    if (p.idx === this.humanIdx && !aboard) {
       const tipY = labelY - 13;
       g.fillStyle(HUMAN_MARK, 1);
       g.fillTriangle(0, tipY, -3, tipY - 5, 3, tipY - 5);

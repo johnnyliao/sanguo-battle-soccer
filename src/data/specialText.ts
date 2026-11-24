@@ -37,6 +37,8 @@ export function specialDescription(def: CharacterDef): { condition: string; effe
       return { condition: '持球或不持球', effect: '5秒每0.2秒揮刀，刀氣命中扣5%、回補自己5%' };
     case 'ride':
       return { condition: '持球或不持球', effect: '騎車衝刺，撞開路上敵人扣 20%' };
+    case 'sail':
+      return { condition: '持球或不持球', effect: '上船滑行4秒移速+50%，撞敵擊飛1秒扣80%；可載隊友' };
     case 'icefield':
       return { condition: '持球或不持球', effect: '原地冰雨4秒(半徑110)，內敵緩速85%、每0.5秒扣5%' };
   }
