@@ -1,5 +1,15 @@
 import type { SpecialKind } from '../data/types';
 import {
+  ARROWSHIP_BALL_DAMP,
+  ARROWSHIP_BLOCK_MAX_Z,
+  ARROWSHIP_FORWARD,
+  ARROWSHIP_HALF_SPAN,
+  ARROWSHIP_KNOCK_SPEED,
+  ARROWSHIP_STAMINA_RATIO,
+  ARROWSHIP_STUN_TICKS,
+  ARROWSHIP_TICKS,
+  ARROWSHIP_VOLLEY_HALF_W,
+  ARROWSHIP_VOLLEY_LEN,
   BALL_RADIUS,
   BEAM_CAST_TICKS,
   BEAM_SPEED,
@@ -11,6 +21,7 @@ import {
   DASH_STAMINA_COST,
   DOWN_TICKS_EXHAUSTED,
   DOWN_TICKS_KNOCKED,
+  DRIBBLE_OFFSET,
   DT,
   FEAR_RADIUS,
   FEAR_STAMINA_RATIO,
@@ -145,9 +156,10 @@ import {
   TIGER_ROAR_STAMINA_RATIO,
   TIGER_STUN_TICKS,
 } from './constants';
-import { attackDir, goalMouth, inOwnArea, opponentGoalX } from './field';
+import { attackDir, goalMouth, inOwnArea, opponentGoalX, ownGoalX } from './field';
 import { rngInt, rngNext } from './rng';
 import {
+  type ArrowShip,
   type AttackKind,
   type BladeWave,
   type Gust,
@@ -587,6 +599,7 @@ function trySpecial(state: GameState, p: Player, input: InputFrame): boolean {
   else if (p.specialMode === 'sail') startSail(state, p);
   else if (p.specialMode === 'gust') startGust(state, p);
   else if (p.specialMode === 'portal') startPortal(state, p);
+  else if (p.specialMode === 'arrowship') startArrowship(state, p);
   else startRampage(state, p);
   return true;
 }
@@ -1886,6 +1899,154 @@ export function endPortals(state: GameState): void {
 }
 
 /**
+ * Sun Quan's 受箭回舟 (arrowship): an instant cast, with or without the ball. The ship is raised at his own goal wherever he
+ * stands, and lasts ARROWSHIP_TICKS. He keeps acting normally and is invincible while it is up (see isInvincible).
+ */
+function startArrowship(state: GameState, p: Player): void {
+  p.stamina -= SPECIAL_STAMINA_COST;
+  p.specialCooldown = SPECIAL_COOLDOWN_TICKS;
+  p.chargeTicks = 0;
+  p.arrowshipUp = true;
+  const shipId = state.nextArrowShipId++;
+  const dir = attackDir(state, p.team);
+  const x = ownGoalX(state, p.team) + dir * ARROWSHIP_FORWARD;
+  const y = FIELD_D / 2;
+  state.arrowships.push({ id: shipId, ownerIdx: p.idx, team: p.team, x, y, dir, ticks: 0, arrows: 0 });
+  p.action = 'normal';
+  p.actionTimer = 0;
+  state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
+  state.events.push({ type: 'arrowshipStart', playerIdx: p.idx, shipId, x, y, dir, halfSpan: ARROWSHIP_HALF_SPAN });
+}
+
+/** One tick for every ship in play: counts it up and fires the volley once ARROWSHIP_TICKS have passed. Runs before the ball moves. */
+export function updateArrowships(state: GameState): void {
+  if (state.match.phase !== 'play') return;
+  for (const s of state.arrowships) {
+    s.ticks++;
+    if (s.ticks >= ARROWSHIP_TICKS) arrowshipVolley(state, s);
+  }
+}
+
+/** The volley: every standing, non-invincible opponent in the area from the ship line forward takes its share and is knocked back. */
+function arrowshipVolley(state: GameState, s: ArrowShip): void {
+  const victims = state.players.filter((v) => v.team !== s.team && v.action !== 'down' && !isInvincible(v) && inVolley(s, v));
+  state.events.push({
+    type: 'arrowshipVolley',
+    shipId: s.id,
+    x: s.x,
+    y: s.y,
+    dir: s.dir,
+    len: ARROWSHIP_VOLLEY_LEN,
+    halfW: ARROWSHIP_VOLLEY_HALF_W,
+    arrows: s.arrows,
+    victimIdxs: victims.map((v) => v.idx),
+  });
+  for (const v of victims) arrowshipKnock(state, s, v);
+  endShip(state, s);
+}
+
+/** True if the player stands in the volley area: from the ship line forward ARROWSHIP_VOLLEY_LEN, within ARROWSHIP_VOLLEY_HALF_W of the centre y. */
+function inVolley(s: ArrowShip, v: Player): boolean {
+  const forward = s.dir * (v.x - s.x);
+  return forward >= 0 && forward <= ARROWSHIP_VOLLEY_LEN && Math.abs(v.y - s.y) <= ARROWSHIP_VOLLEY_HALF_W;
+}
+
+/** One volley victim: knocked away along the field direction, stunned like a roar victim, loses stamina; drops the ball if holding it. */
+function arrowshipKnock(state: GameState, s: ArrowShip, v: Player): void {
+  reportCastCancel(state, v);
+  v.vx = s.dir * ARROWSHIP_KNOCK_SPEED;
+  v.vy = 0;
+  v.vz = ROAR_VZ;
+  v.chargeTicks = 0;
+  const cost = ARROWSHIP_STAMINA_RATIO * v.maxStamina;
+  v.stamina = Math.max(0, v.stamina - cost);
+
+  let down = false;
+  if (v.stamina <= 0) {
+    setDown(v, DOWN_TICKS_EXHAUSTED);
+    down = true;
+  } else {
+    v.action = 'hitstun';
+    v.actionTimer = ARROWSHIP_STUN_TICKS;
+  }
+
+  state.events.push({ type: 'hit', attackerIdx: s.ownerIdx, victimIdx: v.idx, kind: 'special', damage: cost });
+  if (down) state.events.push({ type: 'down', playerIdx: v.idx });
+
+  if (state.ball.ownerIdx === v.idx) knockLooseBall(state, state.players[s.ownerIdx], v, s.dir, 0);
+}
+
+/** Removes one ship and lowers its caster's invincibility. */
+function endShip(state: GameState, s: ArrowShip): void {
+  state.players[s.ownerIdx].arrowshipUp = false;
+  state.arrowships = state.arrowships.filter((o) => o !== s);
+  state.events.push({ type: 'arrowshipEnd', shipId: s.id });
+}
+
+/**
+ * An attack that would have hit a victim behind a raised ship: the ship counts an arrow and the attack does nothing else.
+ * Does nothing for a victim whose ship is down.
+ */
+function arrowshipBlockAttack(state: GameState, victim: Player): void {
+  if (!victim.arrowshipUp) return;
+  const s = state.arrowships.find((o) => o.ownerIdx === victim.idx);
+  if (!s) return;
+  s.arrows++;
+  state.events.push({ type: 'arrowshipBlock', shipId: s.id, arrows: s.arrows, kind: 'attack', x: victim.x, y: victim.y });
+}
+
+/**
+ * Enemies cannot cross a ship line within its span: each enemy whose centre is inside the span is held on the field side,
+ * DRIBBLE_OFFSET beyond its body so a carried ball stays on the field side too. Runs every tick after the player collisions.
+ */
+export function clampArrowshipBarrier(state: GameState): void {
+  for (const s of state.arrowships) {
+    for (const v of state.players) {
+      if (v.team === s.team || Math.abs(v.y - s.y) > ARROWSHIP_HALF_SPAN) continue;
+      const minForward = v.radius + DRIBBLE_OFFSET;
+      if (s.dir * (v.x - s.x) >= minForward) continue;
+      v.x = s.x + s.dir * minForward;
+      if (v.vx * s.dir < 0) v.vx = 0;
+    }
+  }
+}
+
+/**
+ * A ball whose path this tick crossed a ship line (from prevX on the field side to the goal side), inside the span and at or
+ * below ARROWSHIP_BLOCK_MAX_Z, is stopped just on the field side. Its goal-ward velocity is reversed and damped, the other
+ * components are damped, and it becomes a loose ball (a special shot or tiger ball ends). Any owner state and team counts.
+ * A ball held in Xu Chu's mouth does not move and is skipped. Runs after updateBall.
+ */
+export function blockArrowshipBall(state: GameState, prevX: number): void {
+  const b = state.ball;
+  if (b.tiger?.phase === 'hold' || b.z > ARROWSHIP_BLOCK_MAX_Z) return;
+  for (const s of state.arrowships) {
+    if (Math.abs(b.y - s.y) > ARROWSHIP_HALF_SPAN) continue;
+    const wasField = s.dir * (prevX - s.x) >= 0;
+    const nowGoal = s.dir * (b.x - s.x) < 0;
+    if (!wasField || !nowGoal) continue;
+    b.x = s.x + s.dir * (BALL_RADIUS + 1);
+    b.vx = s.dir * Math.abs(b.vx) * ARROWSHIP_BALL_DAMP;
+    b.vy *= ARROWSHIP_BALL_DAMP;
+    b.vz *= ARROWSHIP_BALL_DAMP;
+    b.ownerIdx = -1;
+    if (b.special !== null) {
+      b.special = null;
+      state.events.push({ type: 'specialEnd' });
+    }
+    b.tiger = null;
+    s.arrows++;
+    state.events.push({ type: 'arrowshipBlock', shipId: s.id, arrows: s.arrows, kind: 'ball', x: s.x, y: b.y });
+    return;
+  }
+}
+
+/** Clears every ship (the phase left play). */
+export function endArrowships(state: GameState): void {
+  for (const s of [...state.arrowships]) endShip(state, s);
+}
+
+/**
  * Sun Ce's sail (揚帆起航): an instant cast, with or without the ball. He keeps acting normally (moving at SAIL_SPEED_MULT,
  * dribbling, shooting and passing) and is invincible until the sail ends (see updateSails and endSail).
  */
@@ -2243,7 +2404,10 @@ export function applySpecialHit(
   dirY: number,
   cost: number = SPECIAL_HIT_STAMINA,
 ): void {
-  if (isInvincible(victim)) return;
+  if (isInvincible(victim)) {
+    arrowshipBlockAttack(state, victim);
+    return;
+  }
   reportCastCancel(state, victim);
   victim.stamina = Math.max(0, victim.stamina - cost);
   victim.chargeTicks = 0;
@@ -2288,10 +2452,11 @@ function findVictim(
   return undefined;
 }
 
-/** Invincible players (rampaging, lunging, leaping, riding, or on or aboard a sail) cannot be hit, tackled, stolen from, roared at, or pierced by a special. */
+/** Invincible players (rampaging, lunging, leaping, riding, under Sun Quan's arrowship, or on or aboard a sail) cannot be hit, tackled, stolen from, roared at, or pierced by a special. */
 export function isInvincible(p: Player): boolean {
   return (
     p.rampageTicks > 0 ||
+    p.arrowshipUp ||
     p.action === 'lunge' ||
     p.action === 'leap' ||
     p.action === 'ride' ||
@@ -2308,7 +2473,7 @@ export function applyRampageBumps(state: GameState): void {
   for (const r of state.players) {
     // A leap hits only on landing (see landLeap), a ride hits only its lane (see rideHitLane), and a sail only through
     // updateSails (a sailor or passenger does not bump), so none of them bump here.
-    if (!isInvincible(r) || r.action === 'leap' || r.action === 'ride' || r.sailTicks > 0 || r.sailPassengerOf !== -1) continue;
+    if (!isInvincible(r) || r.action === 'leap' || r.action === 'ride' || r.sailTicks > 0 || r.sailPassengerOf !== -1 || r.arrowshipUp) continue;
     for (const o of state.players) {
       if (o.team === r.team || o.action === 'down' || o.bumpCooldown > 0 || isInvincible(o)) continue;
       const dx = o.x - r.x;
@@ -2358,8 +2523,11 @@ function lungeHeal(state: GameState, p: Player): void {
  * this) cannot cancel an attack that has not landed yet.
  */
 function applyHit(state: GameState, attacker: Player, victim: Player, kind: AttackKind): void {
-  // An invincible victim (rampaging or lunging): the attack is spent and nothing else changes.
-  if (isInvincible(victim)) return;
+  // An invincible victim (rampaging or lunging): the attack is spent and nothing else changes. A raised arrowship counts it.
+  if (isInvincible(victim)) {
+    arrowshipBlockAttack(state, victim);
+    return;
+  }
   reportCastCancel(state, victim);
   victim.chargeTicks = 0;
 

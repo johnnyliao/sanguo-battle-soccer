@@ -76,7 +76,7 @@ export interface Player {
   /** Ticks during which this player cannot be bumped by a rampaging opponent again. */
   bumpCooldown: number;
   /** What the special button (L) does: a rampage, a roar (shockwave) for Zhang Fei, a lunge (long dash) for Zhao Yun, a beam (channel, then strikes one opponent) for Zhuge Liang, a summon (cavalry riders) for Ma Chao, a fear (opponents stand still) for Zhang Liao, or a tiger guard (swallows a shot, spits it at opponents) for Xu Chu. */
-  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger' | 'slash' | 'ride' | 'icefield' | 'sail' | 'gust' | 'portal';
+  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger' | 'slash' | 'ride' | 'icefield' | 'sail' | 'gust' | 'portal' | 'arrowship';
   /** Ticks until the special can be used again. Set when a rampage starts or a roar fires. */
   specialCooldown: number;
   /** Ticks left silenced (a leap landing): only movement works, no J, K or L. 0 = not silenced. */
@@ -87,6 +87,8 @@ export interface Player {
   slashTicks: number;
   /** Idxs of the opponents this ride dash has already hit (each victim at most once per dash). */
   rideHits: number[];
+  /** True while Sun Quan's arrowship (受箭回舟) is up: he is invincible and his ship blocks shots. */
+  arrowshipUp: boolean;
   /** Ticks left on Sun Ce's sail (揚帆起航). 0 = not sailing. */
   sailTicks: number;
   /** Idx of the teammate aboard this sail, or -1. Only a sailing player has one. */
@@ -202,6 +204,23 @@ export interface Portal {
   y: number;
   ticks: number;
   summoned: boolean;
+}
+
+/**
+ * A ship from Sun Quan's 受箭回舟. It stands at his own goal (line x, goal centre y) and does not follow him. dir is the field
+ * direction from the ship line (+1 or -1). ticks counts the ticks since the cast; the volley fires at ARROWSHIP_TICKS.
+ * arrows counts the shots and attacks it blocked. Exists only while the phase is 'play'.
+ */
+export interface ArrowShip {
+  id: number;
+  /** Idx of the caster (Sun Quan). */
+  ownerIdx: number;
+  team: 0 | 1;
+  x: number;
+  y: number;
+  dir: 1 | -1;
+  ticks: number;
+  arrows: number;
 }
 
 /**
@@ -344,6 +363,14 @@ export type SimEvent =
   | { type: 'portalArrive'; playerIdx: number; x: number; y: number }
   /** A portal ends (timer, or the phase left play). */
   | { type: 'portalEnd'; portalId: number }
+  /** Sun Quan's ship is raised at (x, y) (his own goal, ship line x), facing dir, covering halfSpan either side of y. */
+  | { type: 'arrowshipStart'; playerIdx: number; shipId: number; x: number; y: number; dir: 1 | -1; halfSpan: number }
+  /** The ship blocks a shot ('ball') or an attack ('attack') at (x, y); arrows is its count after the block. */
+  | { type: 'arrowshipBlock'; shipId: number; arrows: number; kind: 'ball' | 'attack'; x: number; y: number }
+  /** The volley fires from the ship at (x, y): victimIdxs are the opponents it hit (area len x 2 * halfW). */
+  | { type: 'arrowshipVolley'; shipId: number; x: number; y: number; dir: 1 | -1; len: number; halfW: number; arrows: number; victimIdxs: number[] }
+  /** The ship is gone (volley fired, or the phase left play). */
+  | { type: 'arrowshipEnd'; shipId: number }
   | { type: 'whistle'; reason: 'kickoff' | 'half' | 'full' }
   | { type: 'goal'; team: 0 | 1; scorerIdx: number }
   | { type: 'matchEnd'; score: [number, number] }
@@ -419,6 +446,10 @@ export interface GameState {
   gusts: Gust[];
   /** Id given to the next gust. */
   nextGustId: number;
+  /** Ships from Sun Quan's 受箭回舟. Empty outside play. */
+  arrowships: ArrowShip[];
+  /** Id given to the next arrowship. */
+  nextArrowShipId: number;
   /** Portals from Daqiao's 時空之門. Empty outside play. */
   portals: Portal[];
   /** Id given to the next portal. */

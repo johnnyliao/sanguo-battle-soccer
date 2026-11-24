@@ -134,9 +134,9 @@ function placeVictims(state: GameState): void {
 }
 
 describe('roster', () => {
-  it('wu is GK huanggai, DF daqiao, MF zhouyu, MF xiaoqiao, FW sunce', () => {
+  it('wu is GK sunquan, DF daqiao, MF zhouyu, MF xiaoqiao, FW sunce', () => {
     const wu = getTeam('wu');
-    expect(wu.map((d) => d.id)).toEqual(['huanggai', 'daqiao', 'zhouyu', 'xiaoqiao', 'sunce']);
+    expect(wu.map((d) => d.id)).toEqual(['sunquan', 'daqiao', 'zhouyu', 'xiaoqiao', 'sunce']);
     expect(wu.map((d) => d.role)).toEqual(ROLES);
   });
 

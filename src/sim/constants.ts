@@ -264,6 +264,26 @@ export const PORTAL_DOT_RATIO = 0.05;
 /** Summoned teammates stand evenly spaced on a ring of this radius around Daqiao, in px (50 px). */
 export const PORTAL_RING_RADIUS = 50;
 
+/** Sun Quan's 受箭回舟 (arrowship): the block window and the volley tick, 2 s (the volley fires on tick 120). */
+export const ARROWSHIP_TICKS = 120;
+/** The ship line sits this many px in front of his own goal line, toward the field. */
+export const ARROWSHIP_FORWARD = 30;
+/** The ship covers the goal centre y plus or minus this many px. Players and ground-level shots cannot pass it there. */
+export const ARROWSHIP_HALF_SPAN = 60;
+/** A ball is blocked only at or below this height (px). Above it the ball flies over the ship: goal height plus 24. */
+export const ARROWSHIP_BLOCK_MAX_Z = GOAL_H + 24;
+/** A blocked ball keeps this share of its velocity: the goal-ward component is reversed, the others are damped. */
+export const ARROWSHIP_BALL_DAMP = 0.4;
+/** The volley area runs from the ship line forward this many px along the field direction. */
+export const ARROWSHIP_VOLLEY_LEN = 300;
+/** The volley area is this many px either side of the goal centre y. */
+export const ARROWSHIP_VOLLEY_HALF_W = 120;
+/** Share of each volley victim's maxStamina that the volley takes (30%). */
+export const ARROWSHIP_STAMINA_RATIO = 0.3;
+/** Volley knockback speed (px per second, away from the ship along the field direction) and stun (same as the roar). */
+export const ARROWSHIP_KNOCK_SPEED = 280;
+export const ARROWSHIP_STUN_TICKS = 60;
+
 export const KICKOFF_TICKS = 60;
 export const GOAL_CELEBRATE_TICKS = 150;
 export const HALFTIME_TICKS = 120;

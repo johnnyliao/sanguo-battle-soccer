@@ -43,6 +43,8 @@ export function specialDescription(def: CharacterDef): { condition: string; effe
       return { condition: '持球或不持球', effect: '最近敵人腳下0.5秒後櫻花龍捲，周圍敵擊飛1秒扣50%' };
     case 'portal':
       return { condition: '持球或不持球', effect: '開法陣0.5秒後召喚隊友到身邊；陣內敵緩速70%持續扣血' };
+    case 'arrowship':
+      return { condition: '持球或不持球', effect: '門前戰船擋射門與攻擊2秒，之後萬箭射回擊退扣30%' };
     case 'icefield':
       return { condition: '持球或不持球', effect: '原地冰雨4秒(半徑110)，內敵緩速85%、每0.5秒扣5%' };
   }

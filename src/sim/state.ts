@@ -30,6 +30,8 @@ export function createInitialState(
     nextGustId: 1,
     portals: [],
     nextPortalId: 1,
+    arrowships: [],
+    nextArrowShipId: 1,
     ball: {
       x: FIELD_W / 2,
       y: FIELD_D / 2,
@@ -98,6 +100,7 @@ export function createInitialState(
         tigerTicks: 0,
         slashTicks: 0,
         rideHits: [],
+        arrowshipUp: false,
         sailTicks: 0,
         sailPassenger: -1,
         sailPassengerOf: -1,

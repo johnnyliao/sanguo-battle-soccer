@@ -24,7 +24,7 @@ export interface CharacterDef {
   special: {
     name: string;
     kind: SpecialKind;
-    mode?: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger' | 'slash' | 'ride' | 'icefield' | 'sail' | 'gust' | 'portal';
+    mode?: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger' | 'slash' | 'ride' | 'icefield' | 'sail' | 'gust' | 'portal' | 'arrowship';
     noBall?: boolean;
     bumpPct?: number;
   };

@@ -31,6 +31,9 @@ import {
 } from './constants';
 import {
   applyRampageBumps,
+  blockArrowshipBall,
+  clampArrowshipBarrier,
+  endArrowships,
   applySpecialHit,
   carryPassengers,
   clampPlayerToField,
@@ -44,6 +47,7 @@ import {
   isInvincible,
   tigerBallHit,
   updateAction,
+  updateArrowships,
   updateBladeWaves,
   updateGusts,
   updateIcefields,
@@ -92,6 +96,7 @@ export function step(state: GameState, inputs: InputFrame[]): GameState {
   } else {
     // Gusts erupt before the actions, so a victim's own tick already sees the launch.
     updateGusts(state);
+    const ballPrevX = state.ball.x;
     for (let i = 0; i < state.players.length; i++) {
       updateAction(state, state.players[i], frames[i]);
     }
@@ -100,15 +105,18 @@ export function step(state: GameState, inputs: InputFrame[]): GameState {
     updateBladeWaves(state);
     updateIcefields(state);
     updatePortals(state);
+    updateArrowships(state);
     updateSails(state);
     applyRampageBumps(state);
     resolvePlayerCollisions(state.players);
+    clampArrowshipBarrier(state);
     carryPassengers(state);
     updatePossession(state);
     updateBall(state);
+    blockArrowshipBall(state, ballPrevX);
     updatePickup(state);
     updateMatch(state);
-    // Riders, tiger guards, slash buffs, blade waves, ice fields and sails only live while the phase is play: a goal, half time, kickoff or PK start clears them.
+    // Riders, tiger guards, slash buffs, blade waves, ice fields, sails and arrowships only live while the phase is play: a goal, half time, kickoff or PK start clears them.
     if (state.match.phase !== 'play') {
       clearRiders(state);
       endTigerWindows(state);
@@ -116,6 +124,7 @@ export function step(state: GameState, inputs: InputFrame[]): GameState {
       endIcefields(state);
       endGusts(state);
       endPortals(state);
+      endArrowships(state);
       endSails(state);
     }
   }

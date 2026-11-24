@@ -94,6 +94,13 @@ const TIGER_AI_CHANCE = 0.1;
 const TIGER_CARRIER_RANGE = 260;
 /** Tiger, off the ball: a moving loose ball last touched by an opponent, heading at his goal, this close (in x) to the goal line. */
 const TIGER_SHOT_RANGE = 350;
+/** Arrowship (Sun Quan), off the ball: per-tick chance once a threat holds (the block window is short, like the tiger's). */
+const ARROWSHIP_AI_CHANCE = 0.1;
+/** Arrowship, off the ball: a loose ball last touched by an opponent, heading at his goal this fast (|vx|) and this close (in x) to the goal line. */
+const ARROWSHIP_SHOT_MIN_VX = 200;
+const ARROWSHIP_SHOT_RANGE = 250;
+/** Arrowship, off the ball: an opponent carrier this close to his own goal centre. */
+const ARROWSHIP_CARRIER_RANGE = 200;
 /** Slash (Cao Cao), cast: an opponent this close, or an opponent carrier within SLASH_CARRIER_RANGE. */
 const SLASH_CAST_RANGE = 140;
 const SLASH_CARRIER_RANGE = 200;
@@ -467,6 +474,13 @@ function offBallSpecialFrame(
     s.intent = 'tiger';
     return { ...normal, l: true };
   }
+  // Sun Quan's arrowship: the same shape as the tiger guard, on the goalkeeper's normal frame with L added on top.
+  if (p.specialMode === 'arrowship') {
+    if (!arrowshipWanted(state, p) || nextRandom(ai) >= ARROWSHIP_AI_CHANCE) return null;
+    const normal = freeFrame(state, ai, p, s);
+    s.intent = 'arrowship';
+    return { ...normal, l: true };
+  }
   const carrier = state.ball.ownerIdx === -1 ? null : state.players[state.ball.ownerIdx];
   const enemyCarrier = carrier !== null && carrier.team !== p.team ? carrier : null;
   let wanted = false;
@@ -560,6 +574,24 @@ function tigerThreat(state: GameState, p: Player): boolean {
   if (ball.lastTouchIdx === -1 || state.players[ball.lastTouchIdx].team === p.team) return false;
   const towardGoal = goalX === 0 ? ball.vx < 0 : ball.vx > 0;
   return towardGoal && Math.abs(ball.x - goalX) < TIGER_SHOT_RANGE;
+}
+
+/**
+ * Sun Quan's arrowship is worth casting: no ship up yet, and either a loose ball last touched by an opponent heads at his
+ * goal at ARROWSHIP_SHOT_MIN_VX or faster from within ARROWSHIP_SHOT_RANGE of the goal line, or an opponent carrier
+ * stands within ARROWSHIP_CARRIER_RANGE of his own goal centre.
+ */
+function arrowshipWanted(state: GameState, p: Player): boolean {
+  if (p.arrowshipUp) return false;
+  const goalX = ownGoalX(state, p.team);
+  const ball = state.ball;
+  if (ball.ownerIdx !== -1) {
+    const carrier = state.players[ball.ownerIdx];
+    return carrier.team !== p.team && dist(carrier.x, carrier.y, goalX, CENTER_Y) <= ARROWSHIP_CARRIER_RANGE;
+  }
+  if (ball.lastTouchIdx === -1 || state.players[ball.lastTouchIdx].team === p.team) return false;
+  const towardGoal = goalX === 0 ? ball.vx < 0 : ball.vx > 0;
+  return towardGoal && Math.abs(ball.vx) >= ARROWSHIP_SHOT_MIN_VX && Math.abs(ball.x - goalX) <= ARROWSHIP_SHOT_RANGE;
 }
 
 /** Where a leap from p lands if cast now: LEAP_LAND along his facing (the sim normalises facing on the cast). */

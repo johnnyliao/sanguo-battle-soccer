@@ -1307,3 +1307,98 @@ describe('AI Da Qiao portal (wu DF)', () => {
     expect(driveOne(state, createAIState(86), DAQIAO, TICKS, true).pressedL).toBe(true);
   });
 });
+
+describe('AI Sun Quan arrowship (wu GK)', () => {
+  const SUNQUAN = 0;
+  const WEI_CARRIER = 5;
+  const TICKS_CHECK = 200;
+  const MID = FIELD_D / 2;
+
+  /** Wu (idx 0-4) against wei (idx 5-9). Sun Quan is wu's GK at idx 0, 60 px in from his own goal line. */
+  function arrowshipState(seed: number): { state: GameState; goalX: number; inward: number } {
+    const state = createInitialState({ seed, teams: [getTeam('wu'), getTeam('wei')], startInPlay: true }, SIZE_PARAMS);
+    state.players.forEach((p, i) => {
+      p.x = 100;
+      p.y = 20 + i * 24;
+    });
+    state.ball.ownerIdx = -1;
+    state.ball.x = 300;
+    state.ball.y = MID;
+    const goalX = ownGoalX(state, 0);
+    const inward = goalX === 0 ? 1 : -1;
+    expect(state.players[SUNQUAN].specialMode).toBe('arrowship');
+    place(state, SUNQUAN, goalX + inward * 60, MID, inward);
+    return { state, goalX, inward };
+  }
+
+  /** Loose ball `dist` px in from the goal line, moving toward (or away from) Sun Quan's goal, last touched by `touchIdx`. */
+  function looseBall(state: GameState, goalX: number, inward: number, dist: number, toward: boolean, touchIdx: number): void {
+    const dir = goalX === 0 ? -1 : 1;
+    state.ball.x = goalX + inward * dist;
+    state.ball.y = MID;
+    state.ball.vx = (toward ? dir : -dir) * 600;
+    state.ball.vy = 0;
+    state.ball.ownerIdx = -1;
+    state.ball.lastTouchIdx = touchIdx;
+  }
+
+  /** True if Sun Quan presses L on any of `ticks` frames. Nothing is stepped, so the state stays exactly as set up. */
+  function pressesL(state: GameState, seed: number, ticks = TICKS_CHECK): boolean {
+    const ai = createAIState(seed);
+    for (let t = 0; t < ticks; t++) {
+      if (computeAIInputs(state, ai, NO_HUMANS)[SUNQUAN].l) return true;
+    }
+    return false;
+  }
+
+  it('the arrowship is wired to Sun Quan as a no-ball special', () => {
+    const { state } = arrowshipState(90);
+    expect(state.players[SUNQUAN].specialNoBall).toBe(true);
+  });
+
+  it('casts against an incoming opponent shot within 250 px of his goal line', () => {
+    const { state, goalX, inward } = arrowshipState(91);
+    looseBall(state, goalX, inward, 200, true, WEI_CARRIER);
+    expect(pressesL(state, 91)).toBe(true);
+  });
+
+  it('casts when an enemy carrier stands 150 px from his goal centre', () => {
+    const { state, goalX, inward } = arrowshipState(92);
+    place(state, WEI_CARRIER, goalX + inward * 150, MID);
+    carry(state, WEI_CARRIER);
+    expect(pressesL(state, 92)).toBe(true);
+  });
+
+  it('does not cast when play is far away', () => {
+    const { state, goalX, inward } = arrowshipState(93);
+    place(state, WEI_CARRIER, goalX + inward * 400, MID);
+    carry(state, WEI_CARRIER);
+    expect(pressesL(state, 93)).toBe(false);
+    const far = arrowshipState(94);
+    looseBall(far.state, far.goalX, far.inward, 400, true, WEI_CARRIER);
+    expect(pressesL(far.state, 94)).toBe(false);
+  });
+
+  it('does not cast on cooldown', () => {
+    const { state, goalX, inward } = arrowshipState(95);
+    looseBall(state, goalX, inward, 200, true, WEI_CARRIER);
+    state.players[SUNQUAN].specialCooldown = SPECIAL_COOLDOWN_TICKS;
+    expect(pressesL(state, 95)).toBe(false);
+  });
+
+  it('does not cast while a ship is already up', () => {
+    const { state, goalX, inward } = arrowshipState(96);
+    looseBall(state, goalX, inward, 200, true, WEI_CARRIER);
+    state.players[SUNQUAN].arrowshipUp = true;
+    expect(pressesL(state, 96)).toBe(false);
+  });
+
+  it('does not cast for a loose ball moving away from his goal or last touched by a teammate', () => {
+    const away = arrowshipState(97);
+    looseBall(away.state, away.goalX, away.inward, 200, false, WEI_CARRIER);
+    expect(pressesL(away.state, 97)).toBe(false);
+    const teammate = arrowshipState(98);
+    looseBall(teammate.state, teammate.goalX, teammate.inward, 200, true, 1);
+    expect(pressesL(teammate.state, 98)).toBe(false);
+  });
+});
