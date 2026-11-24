@@ -1,4 +1,5 @@
 import { characterCues } from './characterSounds';
+import { sampleCues } from './sampleSounds';
 // ZzFX parameter arrays. Index 0 is the ZzFX volume; AudioPlayer scales it by
 // the player volume and the per-sound volume returned from soundsForEvent.
 export const SOUNDS: Record<string, number[]> = {
@@ -26,9 +27,12 @@ export interface SoundCue {
   volume: number;
 }
 
-// Maps one simulation event to the sounds it should trigger. charId (the event's character, when known)
-// selects the synthesized Shu sounds; other characters and unmapped events use the generic table.
+// Maps one simulation event to the sounds it should trigger. Sample cues (sampleSounds.ts) come first; then
+// charId (the event's character, when known) selects the synthesized Shu and Wei sounds; other characters
+// and unmapped events use the generic table.
 export function soundsForEvent(e: SimEvent, charId?: string): SoundCue[] {
+  const samples = sampleCues(e, charId);
+  if (samples) return samples;
   const own = charId === undefined ? undefined : characterCues(e, charId);
   if (own) return own;
   switch (e.type) {

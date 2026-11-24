@@ -28,7 +28,7 @@ let shared: AudioContext | null = null;
 const voices = new Set<Voice>();
 const noiseCache = new WeakMap<BaseAudioContext, AudioBuffer>();
 
-function sharedContext(): AudioContext | null {
+export function sharedContext(): AudioContext | null {
   if (shared) return shared;
   const g = globalThis as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext };
   const Ctor = g.AudioContext ?? g.webkitAudioContext;

@@ -811,6 +811,7 @@ export class MatchScene extends Phaser.Scene {
 
   create(): void {
     if (this.waitForBackgroundSheets()) return;
+    this.audio.preloadSamples();
     this.baseH = this.sys.game.device.input.touch ? MATCH_BASE_H_TOUCH : BASE_H;
     this.view = applyView(this, (v) => this.layoutHud(v), this.baseH);
     this.state = createInitialState(

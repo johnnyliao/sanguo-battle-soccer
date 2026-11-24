@@ -1,5 +1,7 @@
 import { SOUNDS, soundsForEvent, type SimEvent, type SoundCue } from './sounds';
 import { SYNTH_RECIPES } from './characterSounds';
+import { SAMPLE_PREFIX } from './sampleSounds';
+import { WebSamplePlayer, type SamplePlayer } from './samplePlayer';
 import { playRecipe, stopAllVoices } from './synth';
 
 export type PlayFn = (params: number[]) => void;
@@ -12,6 +14,9 @@ export type RiderOwnerOf = (riderId: number) => number | undefined;
 
 /** Minimum gap between two heal shimmers: Cao Cao's blade waves can heal several times a second. */
 export const HEAL_GAP_MS = 250;
+
+/** Minimum gap between two plays of the same sample cue. */
+export const SAMPLE_GAP_MS = 50;
 
 /** Minimum gap between two plays of the same cue (0 = no limit). */
 function minGapMs(name: string): number {
@@ -66,6 +71,7 @@ export class AudioPlayer {
   private readonly play: PlayFn;
   private readonly synth: SynthFn;
   private readonly now: () => number;
+  private readonly samples: SamplePlayer;
   private readonly lastPlayed = new Map<string, number>();
   /** Caster player index of each live ice field, keyed by field id. */
   private readonly fieldOwners = new Map<number, number>();
@@ -74,10 +80,17 @@ export class AudioPlayer {
     play: PlayFn = defaultZzfxPlay,
     synth: SynthFn = defaultSynthPlay,
     now: () => number = () => performance.now(),
+    samples: SamplePlayer = new WebSamplePlayer(),
   ) {
     this.play = play;
     this.synth = synth;
     this.now = now;
+    this.samples = samples;
+  }
+
+  /** Starts loading the sample files in the background (call when a match starts). */
+  preloadSamples(): void {
+    this.samples.preload();
   }
 
   /**
@@ -97,6 +110,10 @@ export class AudioPlayer {
       for (const cue of soundsForEvent(event, charId)) {
         if (seen.has(cue.name)) continue;
         seen.add(cue.name);
+        if (cue.name.startsWith(SAMPLE_PREFIX)) {
+          this.playSample(cue);
+          continue;
+        }
         if (SYNTH_RECIPES[cue.name]) {
           this.playSynth(cue);
           continue;
@@ -113,6 +130,15 @@ export class AudioPlayer {
   /** Cuts off the synthesized sounds still playing (a hoof loop, a long engine). */
   stop(): void {
     stopAllVoices();
+    this.samples.stop();
+  }
+
+  private playSample(cue: SoundCue): void {
+    const t = this.now();
+    const last = this.lastPlayed.get(cue.name);
+    if (last !== undefined && t - last < SAMPLE_GAP_MS) return;
+    this.lastPlayed.set(cue.name, t);
+    this.samples.play(cue.name.slice(SAMPLE_PREFIX.length), this.volume * cue.volume);
   }
 
   private playSynth(cue: SoundCue): void {

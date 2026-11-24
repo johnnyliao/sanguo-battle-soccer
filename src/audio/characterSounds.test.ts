@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AudioPlayer, HEAL_GAP_MS } from './AudioPlayer';
-import { SHU_CHARS, SYNTH_RECIPES, WEI_CHARS } from './characterSounds';
+import { AudioPlayer, SAMPLE_GAP_MS } from './AudioPlayer';
+import { characterCues, SHU_CHARS, SYNTH_RECIPES, WEI_CHARS } from './characterSounds';
 import { SOUNDS, soundsForEvent } from './sounds';
 
 const CHARS = ['zhangfei', 'guanyu', 'zhugeliang', 'machao', 'zhaoyun', 'xuchu', 'zhenji'];
@@ -9,40 +9,39 @@ const charOf = (idx: number) => CHARS[idx];
 function setup(clock = { t: 0 }) {
   const play = vi.fn<(params: number[]) => void>();
   const synth = vi.fn<(name: string, volume: number) => void>();
-  const player = new AudioPlayer(play, synth, () => clock.t);
-  return { play, synth, player, clock };
+  const samples = { preload: vi.fn(), play: vi.fn<(slot: string, gain: number) => void>(), stop: vi.fn() };
+  const player = new AudioPlayer(play, synth, () => clock.t, samples);
+  return { play, synth, samples, player, clock };
 }
 
 describe('character sound mapping', () => {
-  it('plays the Shu attack cue for a Shu attacker', () => {
+  it('plays the sample swing for a Shu attacker', () => {
     expect(soundsForEvent({ type: 'attack', playerIdx: 0, kind: 'punch' }, 'zhangfei')).toEqual([
-      { name: 'zhangfei.attack', volume: 1 },
+      { name: 'sfx:swing_heavy', volume: 1 },
     ]);
   });
 
-  it('keeps the generic whoosh for a Wu attacker', () => {
-    expect(soundsForEvent({ type: 'attack', playerIdx: 0, kind: 'punch' }, 'sunce')).toEqual([
+  it('keeps the generic whoosh for an unknown attacker', () => {
+    expect(soundsForEvent({ type: 'attack', playerIdx: 0, kind: 'punch' }, 'nobody')).toEqual([
       { name: 'whoosh', volume: 1 },
     ]);
     expect(soundsForEvent({ type: 'attack', playerIdx: 0, kind: 'punch' })).toEqual([{ name: 'whoosh', volume: 1 }]);
   });
 
-  it('keeps a Shu special silent, not the generic special', () => {
+  it('keeps a Shu special silent, and an unknown character special generic', () => {
     expect(soundsForEvent({ type: 'special', playerIdx: 1, kind: 'lob', name: 'x' }, 'guanyu')).toEqual([]);
-    expect(soundsForEvent({ type: 'special', playerIdx: 0, kind: 'pierce', name: 'x' }, 'sunce')).toEqual([
+    expect(soundsForEvent({ type: 'special', playerIdx: 0, kind: 'pierce', name: 'x' }, 'nobody')).toEqual([
       { name: 'special', volume: 1 },
     ]);
   });
 
-  it('plays the horn cast for Ma Chao', () => {
-    expect(soundsForEvent({ type: 'special', playerIdx: 3, kind: 'straight', name: 'x' }, 'machao')).toEqual([
-      { name: 'machao.cast', volume: 1 },
-    ]);
+  it('keeps Ma Chao special silent (the summon has its own sample)', () => {
+    expect(soundsForEvent({ type: 'special', playerIdx: 3, kind: 'straight', name: 'x' }, 'machao')).toEqual([]);
   });
 
-  it('plays the engine cue for a Guan Yu ride start', () => {
+  it('plays the sample ride for a Guan Yu ride start', () => {
     expect(soundsForEvent({ type: 'rideStart', playerIdx: 1, dirX: 1, dirY: 0 }, 'guanyu')).toEqual([
-      { name: 'guanyu.rideStart', volume: 1 },
+      { name: 'sfx:guanyu_ride', volume: 1 },
     ]);
   });
 
@@ -82,7 +81,7 @@ describe('character sound mapping', () => {
     let mapped = 0;
     for (const charId of shu) {
       for (const ev of events) {
-        for (const cue of soundsForEvent(ev, charId)) {
+        for (const cue of characterCues(ev, charId) ?? []) {
           if (!cue.name.startsWith(`${charId}.`)) continue;
           mapped++;
           expect(SYNTH_RECIPES[cue.name], cue.name).toBeTypeOf('function');
@@ -95,8 +94,9 @@ describe('character sound mapping', () => {
 
 describe('Wei character sound mapping', () => {
   const WEI = ['xuchu', 'caocao', 'zhenji', 'simayi', 'zhangliao'] as const;
+  // The synth stages themselves (characterCues); soundsForEvent now prefers the sample cues first.
   const names = (charId: string, e: Parameters<typeof soundsForEvent>[0]) =>
-    soundsForEvent(e, charId).map((c) => c.name);
+    (characterCues(e, charId) ?? []).map((c) => c.name);
 
   it('plays each Wei attack cue for its attacker', () => {
     for (const charId of WEI) {
@@ -117,7 +117,6 @@ describe('Wei character sound mapping', () => {
     }
     expect(Object.keys(SYNTH_RECIPES).filter((k) => /shout/i.test(k))).toEqual([]);
   });
-
 
   it('maps each Xu Chu tiger event to its stage', () => {
     const playerIdx = 0;
@@ -147,11 +146,11 @@ describe('Wei character sound mapping', () => {
   });
 
   it('maps Zhen Ji ice pulses only with victims', () => {
-    expect(soundsForEvent({ type: 'icePulse', fieldId: 1, victimIdxs: [3] }, 'zhenji')).toEqual([
+    expect(characterCues({ type: 'icePulse', fieldId: 1, victimIdxs: [3] }, 'zhenji')).toEqual([
       { name: 'zhenji.icePulse', volume: 1 },
     ]);
     expect(soundsForEvent({ type: 'icePulse', fieldId: 1, victimIdxs: [] }, 'zhenji')).toEqual([]);
-    expect(soundsForEvent({ type: 'iceEnd', fieldId: 1 }, 'zhenji')).toEqual([{ name: 'zhenji.iceEnd', volume: 1 }]);
+    expect(characterCues({ type: 'iceEnd', fieldId: 1 }, 'zhenji')).toEqual([{ name: 'zhenji.iceEnd', volume: 1 }]);
   });
 
   it('maps each Sima Yi leap event, adding the hush only when the landing hit victims', () => {
@@ -204,7 +203,7 @@ describe('Wei character sound mapping', () => {
     let mapped = 0;
     for (const charId of WEI) {
       for (const ev of events) {
-        for (const cue of soundsForEvent(ev, charId)) {
+        for (const cue of characterCues(ev, charId) ?? []) {
           mapped++;
           expect(SYNTH_RECIPES[cue.name], cue.name).toBeTypeOf('function');
         }
@@ -215,10 +214,11 @@ describe('Wei character sound mapping', () => {
 });
 
 describe('AudioPlayer character cues', () => {
-  it('routes Shu cues to the synth and never to ZzFX', () => {
-    const { play, synth, player } = setup();
+  it('routes Shu attacks to the sample player and never to ZzFX or the synth', () => {
+    const { play, synth, samples, player } = setup();
     player.handleEvents([{ type: 'attack', playerIdx: 0, kind: 'punch' }], charOf);
-    expect(synth).toHaveBeenCalledWith('zhangfei.attack', 0.5);
+    expect(samples.play).toHaveBeenCalledWith('swing_heavy', 0.5);
+    expect(synth).not.toHaveBeenCalled();
     expect(play).not.toHaveBeenCalled();
   });
 
@@ -229,34 +229,34 @@ describe('AudioPlayer character cues', () => {
     expect(play.mock.calls[0][0].slice(1)).toEqual(SOUNDS.whoosh.slice(1));
   });
 
-  it('throttles Cao Cao heal shimmers to one per 250 ms', () => {
-    const { synth, player, clock } = setup();
-    const heal = { type: 'slashHeal', playerIdx: 1, amount: 1 };
+  it('keeps Cao Cao heal shimmers silent (no sample, no synth)', () => {
+    const { synth, samples, player } = setup();
+    player.handleEvents([{ type: 'slashHeal', playerIdx: 1, amount: 1 }], (idx) => (idx === 1 ? 'caocao' : undefined));
+    expect(synth).not.toHaveBeenCalled();
+    expect(samples.play).not.toHaveBeenCalled();
+  });
+
+  it('plays Cao Cao attacks as blade swing samples, with the 50 ms gap between repeats', () => {
+    const { samples, player, clock } = setup();
+    const swing = { type: 'attack', playerIdx: 1, kind: 'punch' } as const;
     const caoCao = (idx: number) => (idx === 1 ? 'caocao' : undefined);
-    player.handleEvents([heal], caoCao);
-    clock.t = HEAL_GAP_MS - 1;
-    player.handleEvents([heal], caoCao);
-    expect(synth.mock.calls.filter((c) => c[0] === 'caocao.slashHeal')).toHaveLength(1);
-    clock.t = HEAL_GAP_MS;
-    player.handleEvents([heal], caoCao);
-    expect(synth.mock.calls.filter((c) => c[0] === 'caocao.slashHeal')).toHaveLength(2);
+    player.handleEvents([swing], caoCao);
+    clock.t = SAMPLE_GAP_MS - 1;
+    player.handleEvents([swing], caoCao);
+    expect(samples.play.mock.calls.map((c) => c[0])).toEqual(['swing_blade']);
+    clock.t = SAMPLE_GAP_MS;
+    player.handleEvents([swing], caoCao);
+    expect(samples.play.mock.calls.map((c) => c[0])).toEqual(['swing_blade', 'swing_blade']);
   });
 
-  it('plays Cao Cao swings without a throttle', () => {
-    const { synth, player } = setup();
-    const swing = { type: 'slashSwing', playerIdx: 1, dirX: 1, dirY: 0 };
-    player.handleEvents([swing], (idx) => (idx === 1 ? 'caocao' : undefined));
-    player.handleEvents([swing], (idx) => (idx === 1 ? 'caocao' : undefined));
-    expect(synth.mock.calls.filter((c) => c[0] === 'caocao.slashSwing')).toHaveLength(2);
-  });
-
-  it('plays ice pulses and ends through the field caster', () => {
-    const { synth, player } = setup();
+  it('plays ice fields and pulses as samples, and ends silently, through the field caster', () => {
+    const { synth, samples, player } = setup();
     const owner = (idx: number) => charOf(idx);
     player.handleEvents([{ type: 'iceStart', playerIdx: 6, fieldId: 4, x: 0, y: 0, radius: 110 }], owner);
     player.handleEvents([{ type: 'icePulse', fieldId: 4, victimIdxs: [1] }], owner);
     player.handleEvents([{ type: 'iceEnd', fieldId: 4 }], owner);
-    expect(synth.mock.calls.map((c) => c[0])).toEqual(['zhenji.iceStart', 'zhenji.icePulse', 'zhenji.iceEnd']);
+    expect(samples.play.mock.calls.map((c) => c[0])).toEqual(['zhenji_ice', 'zhenji_pulse']);
+    expect(synth).not.toHaveBeenCalled();
   });
 
   it('keeps a pulse of an unknown or ended field silent', () => {

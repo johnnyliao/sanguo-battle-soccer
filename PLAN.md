@@ -250,5 +250,39 @@
 - 掃描結果（scratchpad/sfx/scan.tsv）：沒有完全無聲的檔；排除 29 個重低音（手機／筆電喇叭聽不到，最可能是使用者說的「沒聲音」）＋3 個極小聲拔刀聲。
 # Steps 18
 - [x] 1. 候選素材＋試聽頁 ?sfx=pack（每格 A/B/C，音量拉齊）— worker；已部署（99 檔 5.6 MB）
-- [ ] 2. 使用者挑選 → 接進比賽（取代合成／ZzFX）、刪未選檔 — worker
+- [~] 2. 使用者挑選 → 接進比賽（取代合成／ZzFX）、刪未選檔 — worker（31 格已接上；hit_punch/hit_heavy 第二輪試聽中，未選前沿用舊音）
 - [ ] 3. 文件、commit、部署、正式網址 e2e
+
+- 2026-11-24 使用者第一輪選擇（v2 試聽頁）：
+  - kick_pass = B：SmallImpact_02_s01.wav
+  - kick_shot = A：Impact_01_s01.wav
+  - down = C：Break_02_s01.wav
+  - goal = C：Retro Explosion Short 01_s05.wav
+  - swing_heavy = C：ShootShort_s01.wav
+  - swing_blade = A：knife_slice_48kHz_16bit_0.51s_9438a1db_s03.wav
+  - swing_fan = C：Healing Spell Impact 9_s08.wav
+  - zhangfei_roar = B：explosion_crunch_002_48kHz_16bit_1.26s_e0852ce0_s04.wav
+  - guanyu_ride = A：Retro Explosion Swoshes 04_s05.wav
+  - zhugeliang_charge = B：Healing Spell Impact 6_s08.wav
+  - zhugeliang_hit = C：Healing Spell Impact 12_s08.wav
+  - machao_cavalry = C：explosion_crunch_002_48kHz_16bit_1.26s_e0852ce0_s04.wav
+  - zhaoyun_lunge = A：ZapLauncher_01_s01.wav
+  - xuchu_guard = B：Earth Spell Impact 2_s07.wav
+  - xuchu_swallow = A：EnergyZap_s01.wav
+  - xuchu_spit = B：Shoot_04_s01.wav
+  - caocao_wave = C：Shoot_03_s01.wav
+  - zhenji_ice = B：Ice Spell Impact 2_s06.wav
+  - zhenji_pulse = B：BreakGlass_01_s01.wav
+  - simayi_leap = B：Retro Charge Off 11_s05.wav
+  - simayi_land = A：EMP_02_s01.wav
+  - zhangliao_fear = B：explosion_crunch_002_48kHz_16bit_1.26s_e0852ce0_s04.wav
+  - sunce_sail = A：Water Spell Impact 2_s06.wav
+  - sunce_crash = B：BlastImpact_03_s01.wav
+  - xiaoqiao_gust = B：Wind Spell Impact 1_s07.wav
+  - daqiao_portal = A：Healing Spell Impact 6_s08.wav
+  - daqiao_summon = A：Healing Spell Impact 4_s08.wav
+  - sunquan_ship = B：Water Spell Impact 2_s06.wav
+  - sunquan_block = A：Impact_02_s01.wav
+  - sunquan_volley = A：Laser Rifle 2_s09.wav
+  - zhouyu_wind = B：Wind Spell Impact 3_s07.wav
+  - hit_punch：重找（三個 impact_punch_medium 都不要）；hit_heavy：A（impact_punch_heavy_000）暫留但要再找更好的。
