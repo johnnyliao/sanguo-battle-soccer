@@ -7,12 +7,15 @@ export interface PackCandidate {
   file: string;
   source: string;
   dur: number;
+  desc: string;
+  electronic: number;
 }
 
 export interface PackSlot {
   slot: string;
   label: string;
   group: string;
+  intent: string;
   candidates: PackCandidate[];
 }
 
@@ -22,18 +25,25 @@ export function parsePackManifest(data: unknown): PackSlot[] {
   return data.map((raw, i): PackSlot => {
     if (typeof raw !== 'object' || raw === null) throw new Error(`slot ${i} is not an object`);
     const r = raw as Record<string, unknown>;
-    if (typeof r.slot !== 'string' || typeof r.label !== 'string' || typeof r.group !== 'string') {
-      throw new Error(`slot ${i} is missing slot/label/group`);
+    if (typeof r.slot !== 'string' || typeof r.label !== 'string' || typeof r.group !== 'string' || typeof r.intent !== 'string') {
+      throw new Error(`slot ${i} is missing slot/label/group/intent`);
     }
     if (!Array.isArray(r.candidates)) throw new Error(`slot ${r.slot} has no candidates`);
     const candidates = r.candidates.map((c: unknown): PackCandidate => {
       const k = c as Record<string, unknown>;
-      if (typeof k?.key !== 'string' || typeof k.file !== 'string' || typeof k.source !== 'string' || typeof k.dur !== 'number') {
+      if (
+        typeof k?.key !== 'string' ||
+        typeof k.file !== 'string' ||
+        typeof k.source !== 'string' ||
+        typeof k.dur !== 'number' ||
+        typeof k.desc !== 'string' ||
+        typeof k.electronic !== 'number'
+      ) {
         throw new Error(`slot ${r.slot} has a malformed candidate`);
       }
-      return { key: k.key, file: k.file, source: k.source, dur: k.dur };
+      return { key: k.key, file: k.file, source: k.source, dur: k.dur, desc: k.desc, electronic: k.electronic };
     });
-    return { slot: r.slot, label: r.label, group: r.group, candidates };
+    return { slot: r.slot, label: r.label, group: r.group, intent: r.intent, candidates };
   });
 }
 
@@ -148,6 +158,11 @@ function slotRow(slot: PackSlot, status: HTMLElement): HTMLDivElement {
   head.appendChild(id);
   row.appendChild(head);
 
+  const intent = document.createElement('div');
+  intent.textContent = `想要：${slot.intent}`;
+  intent.style.cssText = 'font-size:15px;color:#cfe8b8;margin-top:2px;';
+  row.appendChild(intent);
+
   const buttons = document.createElement('div');
   buttons.style.cssText = 'display:flex;gap:8px;margin:6px 0;';
   for (const c of slot.candidates) {
@@ -157,9 +172,13 @@ function slotRow(slot: PackSlot, status: HTMLElement): HTMLDivElement {
 
   for (const c of slot.candidates) {
     const info = document.createElement('div');
-    info.textContent = `${c.key}: ${c.source}  ${c.dur.toFixed(2)} s`;
-    info.style.cssText = 'font-size:12px;color:#888;word-break:break-all;margin-top:2px;';
+    info.textContent = `${c.key}：${c.desc}（電子感 ${c.electronic}）`;
+    info.style.cssText = 'font-size:13px;color:#ddd;margin-top:2px;';
     row.appendChild(info);
+    const src = document.createElement('div');
+    src.textContent = `${c.source}  ${c.dur.toFixed(2)} s`;
+    src.style.cssText = 'font-size:11px;color:#777;word-break:break-all;margin-bottom:4px;';
+    row.appendChild(src);
   }
   return row;
 }
@@ -179,7 +198,7 @@ export function mountPackAudition(parent: HTMLElement = document.body): HTMLElem
 
   const note = document.createElement('p');
   note.textContent =
-    '每格聽 A/B/C，告訴我每格要哪個（例如 kick_pass B）。全部都不好也可以說「重找」。';
+    '這版依聲音分析重挑，避開電子／雷射／8-bit 聲。每格聽 A/B/C，回我代號＋選擇（例如 kick_pass B），都不好就寫「重找」，也可以描述你想要的聲音。';
   note.style.cssText = 'margin:0 0 8px;font-size:15px;line-height:1.5;color:#ccc;';
   root.appendChild(note);
 
