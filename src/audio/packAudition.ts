@@ -137,6 +137,33 @@ function button(label: string, onTap: () => void): HTMLButtonElement {
   return b;
 }
 
+/** Picks made with the copy buttons, slot id → "slot X（label）" line, in page order. */
+const picks = new Map<string, string>();
+let picksBar: HTMLButtonElement | null = null;
+
+/** Copies text to the clipboard; falls back to a hidden textarea where the Clipboard API is missing or refused. */
+function copyText(text: string): void {
+  const fallback = (): void => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand('copy');
+    } catch {
+      // Nothing more to try.
+    }
+    ta.remove();
+  };
+  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).catch(fallback);
+  else fallback();
+}
+
+function updatePicksBar(total: number): void {
+  if (picksBar) picksBar.textContent = `複製全部已選（${picks.size}/${total}）`;
+}
+
 /** A country heading above its character sections. */
 function groupTitle(title: string): HTMLHeadingElement {
   const h = document.createElement('h2');
@@ -145,7 +172,7 @@ function groupTitle(title: string): HTMLHeadingElement {
   return h;
 }
 
-function slotRow(slot: PackSlot, status: HTMLElement): HTMLDivElement {
+function slotRow(slot: PackSlot, status: HTMLElement, total: number): HTMLDivElement {
   const row = document.createElement('div');
   row.style.cssText = 'margin:12px 0;padding-bottom:10px;border-bottom:1px solid #2a2a2a;';
 
@@ -165,8 +192,27 @@ function slotRow(slot: PackSlot, status: HTMLElement): HTMLDivElement {
 
   const buttons = document.createElement('div');
   buttons.style.cssText = 'display:flex;gap:8px;margin:6px 0;';
+  const copyButtons: HTMLButtonElement[] = [];
   for (const c of slot.candidates) {
-    buttons.appendChild(button(c.key, () => void playCandidate(c.file, status)));
+    const col = document.createElement('div');
+    col.style.cssText = 'flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:4px;';
+    col.appendChild(button(c.key, () => void playCandidate(c.file, status)));
+    const line = `${slot.slot} ${c.key}（${slot.label}）`;
+    const copy = button(`複製 ${c.key}`, () => {
+      copyText(line);
+      picks.set(slot.slot, line);
+      for (const b of copyButtons) b.style.background = '#2d3b2d';
+      copy.style.background = '#8a6a1a';
+      copy.textContent = `已複製 ${c.key}`;
+      for (const b of copyButtons) if (b !== copy) b.textContent = b.dataset.label ?? '';
+      updatePicksBar(total);
+    });
+    copy.dataset.label = `複製 ${c.key}`;
+    copy.style.fontSize = '15px';
+    copy.style.minHeight = '40px';
+    copyButtons.push(copy);
+    col.appendChild(copy);
+    buttons.appendChild(col);
   }
   row.appendChild(buttons);
 
@@ -198,7 +244,7 @@ export function mountPackAudition(parent: HTMLElement = document.body): HTMLElem
 
   const note = document.createElement('p');
   note.textContent =
-    '這版依聲音分析重挑，避開電子／雷射／8-bit 聲。每格聽 A/B/C，回我代號＋選擇（例如 kick_pass B），都不好就寫「重找」，也可以描述你想要的聲音。';
+    '這版依聲音分析重挑，避開電子／雷射／8-bit 聲。按 A/B/C 試聽，按「複製」就把那格的選擇複製起來，直接貼給我。每格都選完可以按最下面「複製全部已選」一次貼。都不好就寫「重找」或描述你想要的聲音。';
   note.style.cssText = 'margin:0 0 8px;font-size:15px;line-height:1.5;color:#ccc;';
   root.appendChild(note);
 
@@ -214,10 +260,20 @@ export function mountPackAudition(parent: HTMLElement = document.body): HTMLElem
       return res.json() as Promise<unknown>;
     })
     .then((data) => {
-      for (const group of groupPackSlots(parsePackManifest(data))) {
+      const slots = parsePackManifest(data);
+      for (const group of groupPackSlots(slots)) {
         root.appendChild(groupTitle(group.group));
-        for (const slot of group.slots) root.appendChild(slotRow(slot, status));
+        for (const slot of group.slots) root.appendChild(slotRow(slot, status, slots.length));
       }
+      const order = slots.map((s) => s.slot);
+      picksBar = button('', () => {
+        const lines = order.filter((id) => picks.has(id)).map((id) => picks.get(id) as string);
+        if (lines.length > 0) copyText(lines.join('\n'));
+      });
+      picksBar.style.cssText +=
+        'position:sticky;bottom:0;width:100%;flex:none;margin-top:16px;font-size:18px;background:#5a3d0a;border-color:#d0a040;';
+      updatePicksBar(slots.length);
+      root.appendChild(picksBar);
     })
     .catch((err: unknown) => {
       status.textContent = `無法載入候選清單：${err instanceof Error ? err.message : String(err)}`;
