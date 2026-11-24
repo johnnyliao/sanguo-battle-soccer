@@ -123,6 +123,8 @@ interface FxInstance {
   sailOf: number | null;
   /** Ice field id this effect belongs to (the rain and spikes), so the field's end fades it. */
   iceOf: number | null;
+  /** Gust id this effect belongs to (the mark circle), so the gust's eruption or end fades it. */
+  gustOf: number | null;
   /** A follower that rises with his height z (a leap's crow trail). */
   lifted: boolean;
   /** Draw alpha while held. */
@@ -153,6 +155,7 @@ interface FxSpawn {
   leapOf?: number;
   sailOf?: number;
   iceOf?: number;
+  gustOf?: number;
   lifted?: boolean;
   alpha?: number;
   mirror?: boolean;
@@ -390,6 +393,13 @@ const ICE_MELT_MS = 250;
 const ICE_VICTIM_FX_SIZE = 50;
 const ICE_END_FX_SIZE = 150;
 const ICE_SLOW_TINT = 0xa8d8ff;
+/** Xiao Qiao's gust: the petal ring at her feet at her cast (its width), the cherry-blossom circle on the ground at the mark (depth under the players), the tornado at the eruption (its height, its depth above the players, the share of its height its base sits under the ground point), and the flower burst on each victim (its width). */
+const GUST_PETAL_FX_SIZE = 110;
+const GUST_MARK_DEPTH = -20;
+const GUST_TORNADO_FX_H = 130;
+const GUST_TORNADO_DEPTH = FIELD_D + 50;
+const GUST_TORNADO_BASE = 0.33;
+const GUST_VICTIM_FX_SIZE = 70;
 /** Lunge start: a small shake. The dragon holds for the dash, then fades for LUNGE_FADE_MS. */
 const LUNGE_SHAKE_MS = 120;
 const LUNGE_SHAKE_INTENSITY = 0.002;
@@ -589,6 +599,8 @@ export class MatchScene extends Phaser.Scene {
   private fearShown = new Set<number>();
   /** Zhen Ji's ice fields in play, by field id: her idx, the field's centre, and its ground spikes (for the melt at the end). */
   private iceFieldFx = new Map<number, { caster: number; x: number; y: number; spikes: FxInstance | null }>();
+  /** Xiao Qiao's gust id -> the caster idx, from its mark (the eruption event does not name him). */
+  private gustCasters = new Map<number, number>();
   /** Xu Chu's tiger guard effects: the fire ring round him, the maw over him while a shot is held, and the trail of the spat ball. */
   private tigerRing = new Map<number, FxInstance>();
   private tigerMaw = new Map<number, FxInstance>();
@@ -747,6 +759,7 @@ export class MatchScene extends Phaser.Scene {
     this.fearCaster.clear();
     this.fearShown.clear();
     this.iceFieldFx.clear();
+    this.gustCasters.clear();
     this.tigerRing.clear();
     this.tigerMaw.clear();
     this.tigerTrail = null;
@@ -968,6 +981,13 @@ export class MatchScene extends Phaser.Scene {
         this.icePulseFx(e.fieldId, e.victimIdxs);
       } else if (e.type === 'iceEnd') {
         this.iceEndFx(e.fieldId);
+      } else if (e.type === 'gustMark') {
+        this.gustMarkFx(e);
+      } else if (e.type === 'gustBlow') {
+        this.gustBlowFx(e);
+      } else if (e.type === 'gustEnd') {
+        this.fadeGustMark(e.gustId);
+        this.gustCasters.delete(e.gustId);
       } else if (e.type === 'attack') {
         if (e.kind === 'punch') this.punchFx(e.playerIdx);
       } else if (e.type === 'lungeStart') {
@@ -1138,6 +1158,7 @@ export class MatchScene extends Phaser.Scene {
       leapOf: s.leapOf ?? null,
       sailOf: s.sailOf ?? null,
       iceOf: s.iceOf ?? null,
+      gustOf: s.gustOf ?? null,
       lifted: s.lifted ?? false,
       alpha: s.alpha ?? 1,
       mirror: s.mirror ?? false,
@@ -1682,6 +1703,82 @@ export class MatchScene extends Phaser.Scene {
       f.endMs = f.holdMs + FX_FADE_MS;
     }
     this.groundFx(field.caster, 'shatter', field.x, field.y, ICE_END_FX_SIZE);
+  }
+
+  /**
+   * Xiao Qiao's gust cast: the petal ring at her feet, and the cherry-blossom circle on the ground at the mark (its width is the
+   * gust radius, squashed like the ice field). The circle plays in, then holds on its last frame until the eruption.
+   */
+  private gustMarkFx(e: Extract<SimEvent, { type: 'gustMark' }>): void {
+    const owner = this.fxOwner(e.playerIdx);
+    if (!owner) return;
+    this.gustCasters.set(e.gustId, e.playerIdx);
+    const caster = this.state.players[e.playerIdx];
+    this.groundFx(e.playerIdx, 'petals', caster.x, caster.y, GUST_PETAL_FX_SIZE);
+    const ground = worldToScreen(e.x, e.y, 0);
+    const w = 2 * e.radius;
+    const forever = Number.POSITIVE_INFINITY;
+    const mark = this.playFx(owner.fx, 'mark', {
+      x: ground.sx,
+      y: ground.sy,
+      w,
+      h: w * DEPTH_SCALE,
+      depth: GUST_MARK_DEPTH,
+      holdMs: forever,
+      endMs: forever,
+      gustOf: e.gustId,
+    });
+    if (mark) {
+      mark.sprite.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
+        mark.sprite.play(fxAnimKey(owner.fx, 'markHold'));
+      });
+    }
+  }
+
+  /**
+   * The gust erupts: the mark fades, the cherry-blossom tornado rises from the point (drawn above the players), and each
+   * launched victim gets the flower burst that rides with him through his flight.
+   */
+  private gustBlowFx(e: Extract<SimEvent, { type: 'gustBlow' }>): void {
+    const casterIdx = this.gustCasters.get(e.gustId);
+    this.fadeGustMark(e.gustId);
+    this.gustCasters.delete(e.gustId);
+    if (casterIdx === undefined) return;
+    const owner = this.fxOwner(casterIdx);
+    if (!owner) return;
+    const ground = worldToScreen(e.x, e.y, 0);
+    const h = GUST_TORNADO_FX_H;
+    this.playFx(owner.fx, 'gust', {
+      x: ground.sx,
+      y: ground.sy - h * GUST_TORNADO_BASE,
+      w: h,
+      h,
+      depth: GUST_TORNADO_DEPTH,
+    });
+    for (const v of e.victimIdxs) {
+      const victim = this.state.players[v];
+      const feet = worldToScreen(victim.x, victim.y, 0);
+      this.playFx(owner.fx, 'impact', {
+        x: feet.sx,
+        y: feet.sy - victim.z - owner.cfg.displayHeight / 2,
+        w: GUST_VICTIM_FX_SIZE,
+        h: (GUST_VICTIM_FX_SIZE * owner.fx.frameHeight) / owner.fx.frameWidth,
+        depth: victim.y + 0.5,
+        follow: v,
+        offY: -owner.cfg.displayHeight / 2,
+        lifted: true,
+      });
+    }
+  }
+
+  /** Fades the gust's mark circle (the eruption or the gust's end). */
+  private fadeGustMark(gustId: number): void {
+    const now = this.time.now;
+    for (const f of this.fx) {
+      if (f.gustOf !== gustId) continue;
+      f.holdMs = now - f.startMs;
+      f.endMs = f.holdMs + FX_FADE_MS;
+    }
   }
 
   /** An opponent standing within ICE_RADIUS of a live ice field is tinted light blue (the slow); the tint clears when he leaves it or the field ends. */

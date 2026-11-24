@@ -5,6 +5,8 @@ import {
   FIELD_W,
   GK_AREA_DEPTH,
   GOAL_HALF_W,
+  GUST_RADIUS,
+  GUST_TARGET_RANGE,
   LEAP_BACK_DISTANCE,
   LEAP_FLY_DISTANCE,
   LEAP_RADIUS,
@@ -377,6 +379,19 @@ function ownerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPla
     return frame(NO_MOVE, { l: true });
   }
 
+  // Xiao Qiao's gust while carrying: the gust point stays put, so cast it on the opponent in front when a pair stands there.
+  if (
+    p.specialMode === 'gust' &&
+    !p.prevInput.l &&
+    p.specialCooldown === 0 &&
+    p.stamina >= SHOT_MIN_STAMINA &&
+    gustWanted(state, p) &&
+    nextRandom(ai) < SHOT_FULL_CHANCE
+  ) {
+    s.intent = 'gust';
+    return frame(NO_MOVE, { l: true });
+  }
+
   const goalDist = Math.abs(goalX - p.x);
   const shotRange = p.role === 'DF' ? SHOT_RANGE_DF : SHOT_RANGE_FWD;
   const inShotRange = goalDist < shotRange;
@@ -499,6 +514,9 @@ function offBallSpecialFrame(
         steer = steerTo(p, enemyCarrier.x, enemyCarrier.y);
       }
       break;
+    case 'gust':
+      wanted = gustWanted(state, p);
+      break;
     default:
       return null;
   }
@@ -608,6 +626,41 @@ function sailFrame(state: GameState, p: Player, s: AIState['perPlayer'][number])
   if (enemyCarrier !== null) return frame(steerTo(p, enemyCarrier.x, enemyCarrier.y));
   if (ball.ownerIdx === -1) return frame(steerTo(p, ball.x, ball.y));
   return frame(steerTo(p, goalX, CENTER_Y));
+}
+
+/**
+ * The gust target as the sim picks it: the nearest standing opponent on p's facing side within GUST_TARGET_RANGE (ties go
+ * to the lowest idx), or null when none is in reach.
+ */
+function gustTarget(state: GameState, p: Player): Player | null {
+  const side = p.facingX !== 0 ? sign(p.facingX) : attackDir(state, p.team);
+  let best: Player | null = null;
+  let bestDist = Infinity;
+  for (const t of state.players) {
+    if (t.team === p.team || t.action === 'down' || t.action === 'recover') continue;
+    if ((t.x - p.x) * side <= 0) continue;
+    const d = dist(t.x, t.y, p.x, p.y);
+    if (d <= GUST_TARGET_RANGE && d < bestDist) {
+      best = t;
+      bestDist = d;
+    }
+  }
+  return best;
+}
+
+/**
+ * Xiao Qiao's gust is worth casting at its target: the target is the enemy carrier, or another standing opponent stands
+ * within GUST_RADIUS of him (at least two victims). Off the ball and as the owner alike.
+ */
+function gustWanted(state: GameState, p: Player): boolean {
+  const target = gustTarget(state, p);
+  if (target === null) return false;
+  if (target.idx === state.ball.ownerIdx) return true;
+  for (const t of state.players) {
+    if (t === target || t.team === p.team || t.action === 'down' || t.action === 'recover') continue;
+    if (dist(t.x, t.y, target.x, target.y) <= GUST_RADIUS) return true;
+  }
+  return false;
 }
 
 /**

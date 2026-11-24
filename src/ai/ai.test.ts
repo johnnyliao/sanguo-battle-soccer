@@ -1168,3 +1168,72 @@ describe('AI Sun Ce sail (wu FW)', () => {
     expect(frames[3]).toEqual({ ...EMPTY_INPUT });
   });
 });
+
+describe('AI Xiao Qiao gust (wu MF)', () => {
+  const XIAOQIAO = 3;
+  const TICKS = 400;
+  const MID = FIELD_D / 2;
+
+  /** Wu (idx 0-4) against wei (idx 5-9), everyone parked far away. Xiao Qiao is wu's MF at idx 3, at x 500 facing the wei side. */
+  function gustState(seed: number): GameState {
+    const state = createInitialState({ seed, teams: [getTeam('wu'), getTeam('wei')], startInPlay: true }, SIZE_PARAMS);
+    state.players.forEach((p, i) => {
+      p.x = 100;
+      p.y = 20 + i * 24;
+    });
+    state.ball.ownerIdx = -1;
+    state.ball.x = 600;
+    state.ball.y = MID;
+    place(state, XIAOQIAO, 500, MID);
+    return state;
+  }
+
+  it('the gust is wired to Xiao Qiao as a no-ball special', () => {
+    const state = gustState(70);
+    expect(state.players[XIAOQIAO].specialMode).toBe('gust');
+    expect(state.players[XIAOQIAO].specialNoBall).toBe(true);
+  });
+
+  it('casts when the enemy carrier is 200 px ahead', () => {
+    const state = gustState(71);
+    place(state, 5, 700, MID);
+    carry(state, 5);
+    expect(driveOne(state, createAIState(71), XIAOQIAO, TICKS, true).pressedL).toBe(true);
+  });
+
+  it('casts when two opponents stand together 250 px ahead', () => {
+    const state = gustState(72);
+    place(state, 5, 750, MID);
+    place(state, 6, 750, MID + 40);
+    expect(driveOne(state, createAIState(72), XIAOQIAO, TICKS, true).pressedL).toBe(true);
+  });
+
+  it('does not cast when a lone non-carrier is ahead', () => {
+    const state = gustState(73);
+    place(state, 5, 750, MID);
+    expect(driveOne(state, createAIState(73), XIAOQIAO, TICKS, true).pressedL).toBe(false);
+  });
+
+  it('does not cast when the carrier is behind her', () => {
+    const state = gustState(74);
+    place(state, 5, 300, MID);
+    carry(state, 5);
+    expect(driveOne(state, createAIState(74), XIAOQIAO, TICKS, true).pressedL).toBe(false);
+  });
+
+  it('does not cast while on cooldown', () => {
+    const state = gustState(75);
+    place(state, 5, 700, MID);
+    carry(state, 5);
+    state.players[XIAOQIAO].specialCooldown = SPECIAL_COOLDOWN_TICKS;
+    expect(driveOne(state, createAIState(75), XIAOQIAO, TICKS, true).pressedL).toBe(false);
+  });
+
+  it('as the owner casts when two opponents stand together 250 px ahead', () => {
+    const state = gustState(76);
+    place(state, 5, 750, MID);
+    place(state, 6, 750, MID + 40);
+    carry(state, XIAOQIAO);
+    expect(driveOne(state, createAIState(76), XIAOQIAO, TICKS, true).pressedL).toBe(true);
+  });
+});

@@ -25,6 +25,9 @@ export type SpriteAnim = 'idle' | 'run' | 'attack' | 'charge' | 'special' | 'cas
  * spikes (and their melt when the field ends), the snowflake burst at her cast, and the shatter on each victim and at the field's end.
  * For Sun Ce's sail: the water ring at his start (splash), the wake behind the boat while it sails, the water burst with splinters where
  * the hull hits a victim (splinter), and the dizzy stars over the victim when he lands (dizzy).
+ * For Xiao Qiao's gust: the pink fan slash (punch), the cherry-blossom circle on the ground where the gust will rise (mark, then
+ * markHold until it erupts), the petal ring at her feet at her cast (petals), the cherry-blossom tornado at the eruption (gust), and
+ * the flower burst on each victim (impact).
  */
 export type FxAnim =
   | 'thrust'
@@ -62,7 +65,11 @@ export type FxAnim =
   | 'splash'
   | 'wake'
   | 'splinter'
-  | 'dizzy';
+  | 'dizzy'
+  | 'mark'
+  | 'markHold'
+  | 'gust'
+  | 'petals';
 
 export interface SpriteMeta {
   frameWidth: number;
@@ -137,6 +144,7 @@ const XUCHU_META: SpriteMeta = { frameWidth: 180, frameHeight: 185, cols: 4, row
 const CAOCAO_META: SpriteMeta = { frameWidth: 149, frameHeight: 127, cols: 4, rows: 6, anchorX: 70, anchorY: 116 };
 const ZHENJI_META: SpriteMeta = { frameWidth: 160, frameHeight: 123, cols: 4, rows: 5, anchorX: 87, anchorY: 121 };
 const SUNCE_META: SpriteMeta = { frameWidth: 142, frameHeight: 128, cols: 4, rows: 5, anchorX: 73, anchorY: 124 };
+const XIAOQIAO_META: SpriteMeta = { frameWidth: 135, frameHeight: 123, cols: 4, rows: 5, anchorX: 63, anchorY: 121 };
 
 /** Frame index of a sheet cell (row-major) for a sheet with this meta. */
 const cellAt = (meta: SpriteMeta) => (row: number, col: number): number => row * meta.cols + col;
@@ -152,6 +160,7 @@ const xat = cellAt(XUCHU_META);
 const ccat = cellAt(CAOCAO_META);
 const zjat = cellAt(ZHENJI_META);
 const suat = cellAt(SUNCE_META);
+const xqat = cellAt(XIAOQIAO_META);
 /** The Zhao Yun and Zhuge Liang effect sheets are 4 columns of 181 px frames. */
 const fxat = (row: number, col: number): number => row * 4 + col;
 
@@ -571,6 +580,44 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
         melt: { frames: [fxat(2, 3)], fps: 1, repeat: -1 },
         snow: { frames: [fxat(3, 0), fxat(3, 1), fxat(3, 2), fxat(3, 3)], fps: 12, repeat: 0 },
         shatter: { frames: [fxat(4, 0), fxat(4, 1), fxat(4, 2), fxat(4, 3)], fps: 14, repeat: 0 },
+      },
+    },
+  },
+  xiaoqiao: {
+    key: 'sprite-xiaoqiao',
+    url: 'sprites/xiaoqiao.png',
+    meta: XIAOQIAO_META,
+    displayHeight: 56,
+    shadowScale: 1.0,
+    anims: {
+      idle: { frames: [xqat(0, 0), xqat(0, 1), xqat(0, 2), xqat(0, 3)], fps: 6, repeat: -1 },
+      run: { frames: [xqat(1, 0), xqat(1, 1), xqat(1, 2), xqat(1, 3)], fps: 10, repeat: -1 },
+      attack: { frames: [xqat(2, 0), xqat(2, 1), xqat(2, 2), xqat(2, 3)], fps: 14, repeat: 0 },
+      charge: { frames: [xqat(2, 0)], fps: 1, repeat: -1 },
+      cast: { frames: [xqat(3, 1)], fps: 1, repeat: -1 },
+      special: { frames: [xqat(3, 0), xqat(3, 1), xqat(3, 2)], fps: 8, repeat: 0 },
+      rampage: { frames: [xqat(3, 0)], fps: 1, repeat: -1 },
+      lunge: { frames: [xqat(3, 0)], fps: 1, repeat: -1 },
+      shot: { frames: [xqat(2, 2)], fps: 1, repeat: -1 },
+      dive: { frames: [xqat(4, 1)], fps: 1, repeat: -1 },
+      hitstun: { frames: [xqat(4, 0)], fps: 1, repeat: -1 },
+      down: { frames: [xqat(4, 1), xqat(4, 2)], fps: 6, repeat: 0 },
+      recover: { frames: [xqat(4, 3)], fps: 1, repeat: -1 },
+    },
+    fx: {
+      key: 'fx-xiaoqiao',
+      url: 'sprites/xiaoqiao-fx.png',
+      frameWidth: 120,
+      frameHeight: 120,
+      punch: 'slash',
+      punchWidth: 90,
+      anims: {
+        slash: { frames: [fxat(0, 0), fxat(0, 1), fxat(0, 2), fxat(0, 3)], fps: 20, repeat: 0 },
+        mark: { frames: [fxat(1, 0), fxat(1, 1), fxat(1, 2)], fps: 10, repeat: 0 },
+        markHold: { frames: [fxat(1, 3)], fps: 1, repeat: -1 },
+        gust: { frames: [fxat(2, 0), fxat(2, 1), fxat(2, 2), fxat(2, 3)], fps: 7, repeat: 0 },
+        petals: { frames: [fxat(3, 0), fxat(3, 1), fxat(3, 2), fxat(3, 3)], fps: 12, repeat: 0 },
+        impact: { frames: [fxat(4, 0), fxat(4, 1), fxat(4, 2), fxat(4, 3)], fps: 14, repeat: 0 },
       },
     },
   },

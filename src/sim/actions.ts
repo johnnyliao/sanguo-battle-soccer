@@ -77,6 +77,14 @@ import {
   RIDE_PUSH_SIDE,
   RIDE_SPEED,
   RIDE_TICKS,
+  GUST_DELAY_TICKS,
+  GUST_FALLBACK_DIST,
+  GUST_LAUNCH_TICKS,
+  GUST_LAUNCH_VZ,
+  GUST_PUSH_SPEED,
+  GUST_RADIUS,
+  GUST_STAMINA_RATIO,
+  GUST_TARGET_RANGE,
   ROAR_BALL_SPEED,
   ROAR_BALL_VZ,
   ROAR_FORWARD,
@@ -135,6 +143,7 @@ import { rngInt, rngNext } from './rng';
 import {
   type AttackKind,
   type BladeWave,
+  type Gust,
   type GameState,
   type IceField,
   type InputFrame,
@@ -554,6 +563,7 @@ function trySpecial(state: GameState, p: Player, input: InputFrame): boolean {
   else if (p.specialMode === 'ride') startRide(state, p);
   else if (p.specialMode === 'icefield') startIcefield(state, p);
   else if (p.specialMode === 'sail') startSail(state, p);
+  else if (p.specialMode === 'gust') startGust(state, p);
   else startRampage(state, p);
   return true;
 }
@@ -1651,6 +1661,113 @@ export function endIcefields(state: GameState): void {
 }
 
 /**
+ * Xiao Qiao's 吹飛 (櫻花龍捲): an instant cast, with or without the ball. The gust point is fixed at the cast: the nearest
+ * standing opponent on her facing side within GUST_TARGET_RANGE (his position now, not following him). With none in reach it
+ * is GUST_FALLBACK_DIST straight ahead, clamped to the field. She keeps acting normally.
+ */
+function startGust(state: GameState, p: Player): void {
+  p.stamina -= SPECIAL_STAMINA_COST;
+  p.specialCooldown = SPECIAL_COOLDOWN_TICKS;
+  const attack = attackDir(state, p.team);
+  const side = p.facingX !== 0 ? Math.sign(p.facingX) : attack;
+  let target: Player | null = null;
+  let bestDist = Infinity;
+  for (const v of state.players) {
+    if (v.team === p.team || v.action === 'down' || v.action === 'recover') continue;
+    if ((v.x - p.x) * side <= 0) continue;
+    const d = distance(p.x, p.y, v.x, v.y);
+    if (d <= GUST_TARGET_RANGE && d < bestDist) {
+      target = v;
+      bestDist = d;
+    }
+  }
+
+  let x: number;
+  let y: number;
+  if (target !== null) {
+    x = target.x;
+    y = target.y;
+  } else {
+    const len = Math.sqrt(p.facingX * p.facingX + p.facingY * p.facingY);
+    const ux = len === 0 ? attack : p.facingX / len;
+    const uy = len === 0 ? 0 : p.facingY / len;
+    x = Math.min(FIELD_W, Math.max(0, p.x + ux * GUST_FALLBACK_DIST));
+    y = Math.min(FIELD_D, Math.max(0, p.y + uy * GUST_FALLBACK_DIST));
+  }
+
+  const gustId = state.nextGustId++;
+  state.gusts.push({ id: gustId, ownerIdx: p.idx, team: p.team, x, y, ticks: 0 });
+  state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
+  state.events.push({ type: 'gustMark', playerIdx: p.idx, gustId, x, y, radius: GUST_RADIUS });
+}
+
+/**
+ * One tick for every pending gust in play: counts it up, and erupts it once GUST_DELAY_TICKS have passed since the cast.
+ * Runs before the actions, so the eruption is the first thing a victim's tick sees.
+ */
+export function updateGusts(state: GameState): void {
+  if (state.match.phase !== 'play') return;
+  for (const g of state.gusts) g.ticks++;
+  const ready = state.gusts.filter((g) => g.ticks >= GUST_DELAY_TICKS);
+  if (ready.length === 0) return;
+  state.gusts = state.gusts.filter((g) => g.ticks < GUST_DELAY_TICKS);
+  for (const g of ready) gustBlow(state, g);
+}
+
+/**
+ * The gust erupts: every standing, non-invincible opponent within GUST_RADIUS of its point is launched. Victims are handled
+ * in index order, so the events are deterministic.
+ */
+function gustBlow(state: GameState, g: Gust): void {
+  const caster = state.players[g.ownerIdx];
+  const victimIdxs: number[] = [];
+  for (const v of state.players) {
+    if (v.team === g.team || v.action === 'down' || v.action === 'recover' || isInvincible(v)) continue;
+    if (distance(g.x, g.y, v.x, v.y) > GUST_RADIUS) continue;
+    launchGustVictim(state, g, caster, v);
+    victimIdxs.push(v.idx);
+  }
+  state.events.push({ type: 'gustBlow', gustId: g.id, x: g.x, y: g.y, victimIdxs });
+}
+
+/**
+ * A gust victim loses GUST_STAMINA_RATIO of his maxStamina, is pushed away from the gust point and launched: he is airborne
+ * for LAUNCH_AIR_TICKS, then lies down until GUST_LAUNCH_TICKS. An emptied victim stays down for the longer exhausted
+ * time. A ball he holds is knocked loose by the caster.
+ */
+function launchGustVictim(state: GameState, g: Gust, caster: Player, v: Player): void {
+  reportCastCancel(state, v);
+  v.chargeTicks = 0;
+
+  let dirX = v.x - g.x;
+  let dirY = v.y - g.y;
+  const len = Math.sqrt(dirX * dirX + dirY * dirY);
+  if (len === 0) {
+    dirX = attackDir(state, g.team);
+    dirY = 0;
+  } else {
+    dirX /= len;
+    dirY /= len;
+  }
+  v.vx = dirX * GUST_PUSH_SPEED;
+  v.vy = dirY * GUST_PUSH_SPEED;
+  v.vz = GUST_LAUNCH_VZ;
+  const damage = GUST_STAMINA_RATIO * v.maxStamina;
+  v.stamina = Math.max(0, v.stamina - damage);
+  setDown(v, v.stamina <= 0 ? Math.max(GUST_LAUNCH_TICKS, DOWN_TICKS_EXHAUSTED) : GUST_LAUNCH_TICKS);
+
+  state.events.push({ type: 'hit', attackerIdx: g.ownerIdx, victimIdx: v.idx, kind: 'special', damage });
+  if (state.ball.ownerIdx === v.idx) knockLooseBall(state, caster, v, dirX, dirY);
+  state.events.push({ type: 'down', playerIdx: v.idx });
+}
+
+/** Clears every pending gust without an eruption (the phase left play). */
+export function endGusts(state: GameState): void {
+  for (const g of state.gusts) state.events.push({ type: 'gustEnd', gustId: g.id });
+  state.gusts = [];
+}
+
+/**
  * Sun Ce's sail (揚帆起航): an instant cast, with or without the ball. He keeps acting normally (moving at SAIL_SPEED_MULT,
  * dribbling, shooting and passing) and is invincible until the sail ends (see updateSails and endSail).
  */
@@ -1735,7 +1852,7 @@ function sailCrash(state: GameState, sailor: Player, v: Player): void {
   v.vz = SAIL_LAUNCH_VZ;
   const damage = SAIL_CRASH_STAMINA_RATIO * v.maxStamina;
   v.stamina = Math.max(0, v.stamina - damage);
-  // Airborne for the launch; an emptied victim stays down for the longer exhausted time.
+  // Airborne for LAUNCH_AIR_TICKS, down for the whole time; an emptied victim stays down for the longer exhausted time.
   setDown(v, v.stamina <= 0 ? Math.max(SAIL_LAUNCH_TICKS, DOWN_TICKS_EXHAUSTED) : SAIL_LAUNCH_TICKS);
 
   state.events.push({ type: 'hit', attackerIdx: sailor.idx, victimIdx: v.idx, kind: 'special', damage });

@@ -6,6 +6,7 @@ import {
   EMPTY_INPUT,
   FIELD_D,
   FIELD_W,
+  LAUNCH_AIR_TICKS,
   PLAYER_BASE_SPEED,
   PLAYER_GRAVITY,
   PLAYER_SPEED_PER_STAT,
@@ -277,7 +278,7 @@ describe.each([
       expect(victim.vy).toBeCloseTo(0, 6);
     });
 
-    it('the victim is airborne mid-way and lands on tick SAIL_LAUNCH_TICKS', () => {
+    it('the victim is airborne until LAUNCH_AIR_TICKS, peaks below 50 px, and stays down until SAIL_LAUNCH_TICKS', () => {
       const state = castSail(s);
       const victimIdx = foeBase(s);
       place(state, s, victimIdx, 40, 0);
@@ -285,30 +286,39 @@ describe.each([
       run(state, 1); // contact tick
 
       let peak = 0;
-      for (let t = 1; t < SAIL_LAUNCH_TICKS; t++) {
+      for (let t = 1; t < LAUNCH_AIR_TICKS; t++) {
         run(state, 1);
         expect(victim.action).toBe('down');
         expect(victim.z).toBeGreaterThan(0);
         peak = Math.max(peak, victim.z);
       }
       expect(peak).toBeGreaterThan(0);
+      expect(peak).toBeLessThan(50);
       run(state, 1);
       expect(victim.z).toBeCloseTo(0, 9);
       expect(victim.vz).toBe(0);
+      expect(victim.action).toBe('down');
+      for (let t = LAUNCH_AIR_TICKS + 1; t < SAIL_LAUNCH_TICKS; t++) {
+        run(state, 1);
+        expect(victim.z).toBe(0);
+        expect(victim.action).toBe('down');
+      }
+      run(state, 1);
+      expect(victim.z).toBe(0);
       expect(victim.action).toBe('normal');
     });
 
-    it('launch vz is set so that z returns to 0 exactly at SAIL_LAUNCH_TICKS, using player gravity', () => {
+    it('launch vz is set so that z returns to 0 exactly at LAUNCH_AIR_TICKS, using player gravity', () => {
       // Analytic check of the discrete integration done in applyGravity.
       let vz = SAIL_LAUNCH_VZ;
       let z = 0;
-      for (let n = 1; n <= SAIL_LAUNCH_TICKS; n++) {
+      for (let n = 1; n <= LAUNCH_AIR_TICKS; n++) {
         vz -= PLAYER_GRAVITY * DT;
         z += vz * DT;
-        if (n < SAIL_LAUNCH_TICKS) expect(z).toBeGreaterThan(0);
+        if (n < LAUNCH_AIR_TICKS) expect(z).toBeGreaterThan(0);
       }
       expect(z).toBeCloseTo(0, 9);
-      expect(SAIL_LAUNCH_VZ).toBeCloseTo((PLAYER_GRAVITY * 30.5) / 60, 9);
+      expect(SAIL_LAUNCH_VZ).toBeCloseTo((PLAYER_GRAVITY * 18.5) / 60, 9);
     });
 
     it('a ball holder who is hit drops the ball as a loose ball', () => {

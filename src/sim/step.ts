@@ -35,6 +35,7 @@ import {
   carryPassengers,
   clampPlayerToField,
   clearRiders,
+  endGusts,
   endIcefields,
   endSails,
   endSlashWindows,
@@ -43,6 +44,7 @@ import {
   tigerBallHit,
   updateAction,
   updateBladeWaves,
+  updateGusts,
   updateIcefields,
   updateRiders,
   updateSails,
@@ -86,6 +88,8 @@ export function step(state: GameState, inputs: InputFrame[]): GameState {
   if (pk) {
     updatePk(state, frames);
   } else {
+    // Gusts erupt before the actions, so a victim's own tick already sees the launch.
+    updateGusts(state);
     for (let i = 0; i < state.players.length; i++) {
       updateAction(state, state.players[i], frames[i]);
     }
@@ -107,6 +111,7 @@ export function step(state: GameState, inputs: InputFrame[]): GameState {
       endTigerWindows(state);
       endSlashWindows(state);
       endIcefields(state);
+      endGusts(state);
       endSails(state);
     }
   }

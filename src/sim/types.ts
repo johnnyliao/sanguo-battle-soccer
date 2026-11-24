@@ -76,7 +76,7 @@ export interface Player {
   /** Ticks during which this player cannot be bumped by a rampaging opponent again. */
   bumpCooldown: number;
   /** What the special button (L) does: a rampage, a roar (shockwave) for Zhang Fei, a lunge (long dash) for Zhao Yun, a beam (channel, then strikes one opponent) for Zhuge Liang, a summon (cavalry riders) for Ma Chao, a fear (opponents stand still) for Zhang Liao, or a tiger guard (swallows a shot, spits it at opponents) for Xu Chu. */
-  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger' | 'slash' | 'ride' | 'icefield' | 'sail';
+  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger' | 'slash' | 'ride' | 'icefield' | 'sail' | 'gust';
   /** Ticks until the special can be used again. Set when a rampage starts or a roar fires. */
   specialCooldown: number;
   /** Ticks left silenced (a leap landing): only movement works, no J, K or L. 0 = not silenced. */
@@ -168,6 +168,20 @@ export interface Ball {
 export interface IceField {
   id: number;
   /** Idx of the caster (Zhen Ji). */
+  ownerIdx: number;
+  team: 0 | 1;
+  x: number;
+  y: number;
+  ticks: number;
+}
+
+/**
+ * A gust from Xiao Qiao's 吹飛 (櫻花龍捲). It is fixed at the point (x, y) chosen at the cast and does not follow any target.
+ * ticks counts the ticks since the cast; it erupts once GUST_DELAY_TICKS have passed. Exists only while the phase is 'play'.
+ */
+export interface Gust {
+  id: number;
+  /** Idx of the caster (Xiao Qiao). */
   ownerIdx: number;
   team: 0 | 1;
   x: number;
@@ -301,6 +315,12 @@ export type SimEvent =
   | { type: 'icePulse'; fieldId: number; victimIdxs: number[] }
   /** An ice field ends (timer, or the phase left play). */
   | { type: 'iceEnd'; fieldId: number }
+  /** Xiao Qiao's gust is set at (x, y) with this radius; it erupts after GUST_DELAY_TICKS. */
+  | { type: 'gustMark'; playerIdx: number; gustId: number; x: number; y: number; radius: number }
+  /** A gust erupts at (x, y): victimIdxs are the opponents it launched. */
+  | { type: 'gustBlow'; gustId: number; x: number; y: number; victimIdxs: number[] }
+  /** A gust ends without erupting (the phase left play). */
+  | { type: 'gustEnd'; gustId: number }
   | { type: 'whistle'; reason: 'kickoff' | 'half' | 'full' }
   | { type: 'goal'; team: 0 | 1; scorerIdx: number }
   | { type: 'matchEnd'; score: [number, number] }
@@ -372,6 +392,10 @@ export interface GameState {
   iceFields: IceField[];
   /** Id given to the next ice field. */
   nextIceId: number;
+  /** Gusts from Xiao Qiao's 吹飛. Empty outside play. */
+  gusts: Gust[];
+  /** Id given to the next gust. */
+  nextGustId: number;
   ball: Ball;
   match: MatchState;
   /** Cleared at the start of every step. */

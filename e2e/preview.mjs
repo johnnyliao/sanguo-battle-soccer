@@ -10,6 +10,8 @@
 // Sun Ce's sail (wu roster): a teammate is staged 24 px ahead and an opponent 60 px ahead of him before the L press. The teammate
 // boards (sailBoard), the sail loop and the wake show (sail-sunce.png), and the hull hits the opponent (sailCrash): the water burst
 // and the launched victim (sail-sunce-crash.png), then the dizzy stars when he lands.
+// Xiao Qiao's gust (wu roster): two opponents are staged 150 px and 190 px ahead of her. The mark circle on the ground is shot
+// (gust-xiaoqiao-mark.png) while the gust is live, then the eruption: the tornado and the launched victims (gust-xiaoqiao-blow.png).
 // Usage: node e2e/preview.mjs <url>
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
@@ -41,6 +43,7 @@ const CASES = [
   { id: 'caocao', name: '曹操', slot: 1, effect: 'slashWave', wei: true },
   { id: 'zhenji', name: '甄姬', slot: 2, effect: 'iceStart', wei: true },
   { id: 'sunce', name: '孫策', slot: 4, effect: 'sailStart', wu: true },
+  { id: 'xiaoqiao', name: '小喬', slot: 3, effect: 'gustMark', wu: true },
 ];
 
 const errors = [];
@@ -130,6 +133,21 @@ const stageSail = () => {
     p.vy = 0;
   }
   return { mate: mate.idx, foe: foe.idx };
+};
+
+// Test-only: two opponents for Xiao Qiao's gust, 150 px and 190 px ahead of her (the nearer one is the gust point, both are inside its reach).
+const stageGust = () => {
+  const s = window.__sg.state();
+  const caster = s.players[window.__sg.humanIdx];
+  const dir = caster.facingX < 0 ? -1 : 1;
+  const foes = s.players.filter((p) => p.team !== caster.team && p.role !== 'GK');
+  for (const [p, d] of [[foes[0], 150], [foes[1], 190]]) {
+    p.x = caster.x + dir * d;
+    p.y = caster.y;
+    p.vx = 0;
+    p.vy = 0;
+  }
+  return { near: foes[0].idx, far: foes[1].idx };
 };
 
 // Test-only: an opponent 170 px ahead of Guan Yu along his facing, in his lane (the bike hits him).
@@ -253,6 +271,8 @@ try {
 
     let sailing = null;
     if (c.effect === 'sailStart') sailing = await page.evaluate(stageSail);
+    let gust = null;
+    if (c.effect === 'gustMark') gust = await page.evaluate(stageGust);
 
     if (c.effect === 'leapLand') {
       // Mid-air (the flight is above 20 px high): the crow trail is on him.
@@ -386,6 +406,28 @@ try {
       const swings = await page.evaluate(() => window.__sg.preview().events.filter((t) => t === 'slashSwing').length);
       report(`${name} swings (slashSwing) at least 3 times within ~40 ticks of the special`, swung && elapsed <= 40, `swings ${swings}, ${elapsed} ticks after the cast`);
     }
+    if (c.effect === 'gustMark') {
+      // The mark is live from gustMark until the eruption (30 ticks, 0.5 s): shot right away, then the eruption is awaited.
+      const live = await page.evaluate(() => window.__sg.state().gusts.length > 0);
+      await page.screenshot({ path: shot('gust-xiaoqiao-mark.png'), scale: 'css' });
+      report(`${name} marks the ground (gustMark, gust live)`, live && gust !== null, `staged ${gust?.near}, ${gust?.far}`);
+      // The tornado is spawned on the eruption tick and lasts about 0.6 s, and the launch peaks about 116 px up, so the shot is
+      // taken as soon as the tornado is in the scene (the victims are still low in the air).
+      const blown = await page
+        .waitForFunction(() => window.__sg.scene.children.list.some((o) => o.name === 'fx:gust'), null, { timeout: 4000, polling: 'raf' })
+        .then(() => true, () => false);
+      const launched = await page.evaluate(() => {
+        const s = window.__sg.state();
+        const me = s.players[window.__sg.humanIdx];
+        return s.players.filter((p) => p.team !== me.team && p.z > 0).length;
+      });
+      await page.screenshot({ path: shot('gust-xiaoqiao-blow.png'), scale: 'css' });
+      report(`${name} erupts and launches victims (gustBlow)`, blown && launched >= 1, `launched ${launched}`);
+      const gustFx = await page.evaluate(() => [...window.__sgFxSeen]);
+      const hasGustFx = ['fx:mark', 'fx:petals', 'fx:gust', 'fx:impact'].every((n) => gustFx.includes(n));
+      report(`${name} mark, petal, tornado and burst fx are drawn`, hasGustFx, `fx seen ${gustFx.join(',')}`);
+    }
+
     // Silence lasts 2 s, so the victims are counted at the landing itself, not after the 250 ms wait below.
     const silencedAtLand =
       c.effect === 'leapLand'

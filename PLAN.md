@@ -190,6 +190,19 @@
 - [x] 1. sim：mode 'sail'＋測試 — worker
 - [x] 2. AI — worker（與 3 平行）
 - [x] 3. 切圖、fx、sprites.ts、MatchScene（乘客上船繪製）、e2e — worker（me 看截圖）
-- [ ] 4. 音效（普攻鎚、上船、航行浪聲、撞擊）— worker
-- [ ] 5. CLAUDE.md、commit、部署、正式網址 e2e — me＋worker
+- [x] 5. CLAUDE.md、commit、部署、正式網址 e2e — me＋worker
 - [-] 4. 音效：使用者 11-24 喊停（要改用網路素材包整合）。孫策合成音效半成品備份在 scratchpad/sunce-sounds-wip.patch，src/audio 已還原。
+
+---
+# Goal 14（2026-11-24）小喬「吹飛」
+吳國陣容：黃蓋 GK／太史慈 DF／周瑜 MF／小喬 MF／孫策 FW（甘寧下場，列入未入選）。小喬（S，3/6/5/9/5）大招：瞄準面向方向最近敵人（≤300px，沒有則前方 150px）腳下放櫻花陣，0.5 秒後原地櫻花龍捲風，半徑 90px 內敵人擊飛 1 秒、扣 50%、持球者掉球；施放點固定；持球不持球皆可。音效暫不做。
+
+# Constraints
+- 圖：art-src/xiaoqiao-sheet.png（1122×1402，5×4：待機、走、扇攻擊、施法（甩扇、舉扇、揮扇、收）、受擊/倒地/起身）；art-src/xiaoqiao-fx.png（1122×1402，5×4：櫻花扇弧、櫻花陣、櫻花龍捲、落地花圈、花爆）。
+
+# Steps 14
+- [x] 1. data＋sim：陣容、mode 'gust'＋測試 — worker
+- [x] 2. AI — worker（與 3 平行）
+- [x] 3. 切圖、fx、sprites、MatchScene、e2e — worker（me 看截圖）
+- [ ] 4. CLAUDE.md、commit、部署、正式網址 e2e — me＋worker
+- 11-24：擊飛（孫策撞船、小喬吹飛）改為空中 0.6 秒（LAUNCH_AIR_TICKS 36，最高約 40px）＋落地躺 0.4 秒，總 1 秒；原本 1 秒全在空中會飛到約 116px 出畫面。

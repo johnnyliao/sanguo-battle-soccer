@@ -216,7 +216,9 @@ export const SAIL_SPEED_MULT = 1.5;
 /** The boat hull is a box centred on the sailor: half-length along x and half-depth along y, in px. */
 export const SAIL_HALF_LEN = 34;
 export const SAIL_HALF_DEPTH = 16;
-/** A sail victim is down and airborne for this many ticks (1 s); he lands on the last of them. */
+/** A launch victim (sail or gust) is airborne for this many ticks (0.6 s, peak ≈ 40 px); he lands on the last of them. */
+export const LAUNCH_AIR_TICKS = 36;
+/** A sail victim is down for this many ticks (1 s): airborne for LAUNCH_AIR_TICKS, then lies on the ground. */
 export const SAIL_LAUNCH_TICKS = 60;
 /** Share of the rammed opponent's maxStamina the boat crash takes (2026-11-24: 80%). */
 export const SAIL_CRASH_STAMINA_RATIO = 0.8;
@@ -224,11 +226,28 @@ export const SAIL_CRASH_STAMINA_RATIO = 0.8;
 export const SAIL_LAUNCH_SPEED = 160;
 /**
  * Upward launch speed of a sail victim in px per second. Players fall at PLAYER_GRAVITY, applied once per tick before z moves,
- * so after n ticks z = vz * n * DT - g * DT^2 * n(n+1)/2. z returns to 0 exactly at n = SAIL_LAUNCH_TICKS when vz = g * DT * (N+1) / 2.
+ * so after n ticks z = vz * n * DT - g * DT^2 * n(n+1)/2. z returns to 0 exactly at n = LAUNCH_AIR_TICKS when vz = g * DT * (N+1) / 2.
  */
-export const SAIL_LAUNCH_VZ = (PLAYER_GRAVITY * DT * (SAIL_LAUNCH_TICKS + 1)) / 2;
+export const SAIL_LAUNCH_VZ = (PLAYER_GRAVITY * DT * (LAUNCH_AIR_TICKS + 1)) / 2;
 /** A passenger stands this many px behind the sailor (along his facing, reversed), at the same y. */
 export const SAIL_PASSENGER_BEHIND = 18;
+
+/** Xiao Qiao's 吹飛 (櫻花龍捲): a cast with no target in reach sets the gust this far straight ahead along her facing (150 px). */
+export const GUST_FALLBACK_DIST = 150;
+/** The gust point is the nearest opponent on her facing side within this many px (300 px). */
+export const GUST_TARGET_RANGE = 300;
+/** Delay from the cast to the eruption: 30 ticks (0.5 s). */
+export const GUST_DELAY_TICKS = 30;
+/** Opponents whose centre is within this many px of the gust point are launched. */
+export const GUST_RADIUS = 90;
+/** Share of each launched opponent's maxStamina that the gust takes (50%). */
+export const GUST_STAMINA_RATIO = 0.5;
+/** A gust victim is down for this many ticks (1 s): airborne for LAUNCH_AIR_TICKS, then lies on the ground. */
+export const GUST_LAUNCH_TICKS = 60;
+/** Horizontal push speed of a gust victim in px per second, directly away from the gust point. */
+export const GUST_PUSH_SPEED = 80;
+/** Upward launch speed of a gust victim: same arc as SAIL_LAUNCH_VZ, so he lands exactly on the last airborne tick. */
+export const GUST_LAUNCH_VZ = (PLAYER_GRAVITY * DT * (LAUNCH_AIR_TICKS + 1)) / 2;
 
 export const KICKOFF_TICKS = 60;
 export const GOAL_CELEBRATE_TICKS = 150;
