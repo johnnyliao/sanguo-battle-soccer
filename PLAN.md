@@ -230,7 +230,7 @@
 - [x] 1. data＋sim：陣容、mode 'arrowship'＋測試 — worker（579 tests；球 z≤60 才擋；擋攻擊掛在 applyHit/applySpecialHit）
 - [x] 2. AI — worker（與 3 平行）（敵方射門 |vx|≥200 且離門 250px 內，或敵持球者離門中心 200px 內；586 tests）
 - [x] 3. 切圖、fx、sprites、MatchScene、e2e — worker（me 看截圖；戰船改 NORMAL 混合、放大 230px 並往場內偏；預覽改在門前）
-- [ ] 4. CLAUDE.md、commit、部署、正式網址 e2e — me＋worker（與周瑜一起）
+- [x] 4. CLAUDE.md、commit、部署、正式網址 e2e — me＋worker（與周瑜一起；f55e2e1，index-DgV2ZIE1.js，正式網址 8 支全 PASS）
 
 # Goal 17（2026-11-24）周瑜「赤壁東風」（中場；使用者要求沿用舊名，效果換新）
 周瑜原本只有舊的持球必殺（赤壁東風蛇行球）、沒有角色圖。新大招：以施放位置為中心半徑 150px 東風陣（固定原地 3 秒）；施放瞬間範圍內敵人被吹到範圍外（擊退＋短暫硬直，持球者掉球）；之後 3 秒範圍內敵人速度剩 15%（緩速 85%，與冰雨／法陣取最慢）、每秒扣 10%（第 1、2、3 秒各一次，最多 30%）。持球不持球皆可。數值不變（5/6/5/10/4）。
@@ -240,10 +240,15 @@
 - [x] 1. sim：mode 'eastwind'＋測試 — worker（608 tests；靠邊者沿 170px 圈滑到場內）
 - [x] 2. AI — worker（敵持球者 150px 內或 ≥2 敵；614 tests）
 - [x] 3. 切圖、fx、render、e2e — worker（me 看截圖；拿掉過時的「需持球」e2e）
-- [ ] 4. 文件、commit、部署（孫權＋周瑜一起）、正式網址 e2e
+- [x] 4. 文件、commit、部署（孫權＋周瑜一起）、正式網址 e2e（f55e2e1，8 支全 PASS）
 
 # Goal 18（2026-11-24）音效包整合（孫權、周瑜上線後）
 - 來源：/home/safe3admin/150gameeffectsounds/（150 個 WAV，56 MB；LICENSES.txt：全部 CC0 1.0，不需標註；來源 CoMiGo、Kenney、Kronbits、lentikula）。分類：01 近戰（拳擊打擊、刀出鞘、刀切）、02 遠程（射擊、雷射）、03 爆炸破壞、04 魔法（火、冰、水、風、雷、土、植物、治療衝擊、充能）。
 - 使用者要求：我自己配，先做試聽頁給他聽，確認後才接進比賽。舊 Sun Ce 合成音效 WIP 在 scratchpad/sunce-sounds-wip.patch（可能不再需要）。
 - 做法草案：挑選的檔案轉 ogg/mp3（mono、短、裁靜音）放 public/sfx；15 名武將普攻、大招（分段：施放／命中／結束）＋通用（踢球、倒地、進球）對應表；?sfx=1 試聽頁改為播放檔案。
 - 使用者提醒：有些檔案試聽聽不到聲音。挑選前先逐檔量峰值／RMS（含只有極低頻或極短的檔），過濾掉近乎無聲的，再挑。
+- 掃描結果（scratchpad/sfx/scan.tsv）：沒有完全無聲的檔；排除 29 個重低音（手機／筆電喇叭聽不到，最可能是使用者說的「沒聲音」）＋3 個極小聲拔刀聲。
+# Steps 18
+- [ ] 1. 候選素材＋試聽頁 ?sfx=pack（每格 A/B/C，音量拉齊）— worker；部署讓使用者試聽
+- [ ] 2. 使用者挑選 → 接進比賽（取代合成／ZzFX）、刪未選檔 — worker
+- [ ] 3. 文件、commit、部署、正式網址 e2e

@@ -5,6 +5,7 @@ import { TeamSelectScene } from './render/TeamSelectScene';
 import { TitleScene } from './render/TitleScene';
 import { SheetLoadScene } from './render/SheetLoadScene';
 import { mountAudition } from './audio/audition';
+import { mountPackAudition } from './audio/packAudition';
 
 // `?quick` skips the menus and starts a default match directly (used by e2e/smoke.mjs).
 // Phaser auto-starts the first scene in the list, so MatchScene is moved to the front in that case.
@@ -55,3 +56,5 @@ window.addEventListener('orientationchange', fitToWindow);
 
 // `?sfx=1` opens the hidden sound audition overlay (see audio/audition.ts).
 if (new URLSearchParams(window.location.search).get('sfx') === '1') mountAudition();
+// `?sfx=pack` opens the candidate-sound listening page (see audio/packAudition.ts).
+if (new URLSearchParams(window.location.search).get('sfx') === 'pack') mountPackAudition();
