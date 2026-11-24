@@ -244,7 +244,7 @@ export function mountPackAudition(parent: HTMLElement = document.body): HTMLElem
 
   const note = document.createElement('p');
   note.textContent =
-    '這版依聲音分析重挑，避開電子／雷射／8-bit 聲。按 A/B/C 試聽，按「複製」就把那格的選擇複製起來，直接貼給我。每格都選完可以按最下面「複製全部已選」一次貼。都不好就寫「重找」或描述你想要的聲音。';
+    '第二輪：普攻命中、重擊兩格全部重找。C 和部分選項是兩個聲音疊在一起，比較有打擊感。按 A/B/C 聽，按複製貼給我。';
   note.style.cssText = 'margin:0 0 8px;font-size:15px;line-height:1.5;color:#ccc;';
   root.appendChild(note);
 
