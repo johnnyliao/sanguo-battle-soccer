@@ -264,6 +264,23 @@ export const PORTAL_DOT_RATIO = 0.05;
 /** Summoned teammates stand evenly spaced on a ring of this radius around Daqiao, in px (50 px). */
 export const PORTAL_RING_RADIUS = 50;
 
+/** Zhou Yu's 赤壁東風 (eastwind): radius around the cast point in px. The field stays where it was cast. */
+export const EASTWIND_RADIUS = 150;
+/** How long the eastwind lasts: 3 s. */
+export const EASTWIND_TICKS = 180;
+/** Opponents blown out at the cast end up this many px outside EASTWIND_RADIUS, on the pitch (see eastwindPitchAngle). */
+export const EASTWIND_PUSH_MARGIN = 20;
+/** Outward speed of a blown-out opponent in px per second, directly away from the cast point. */
+export const EASTWIND_KNOCK_SPEED = 200;
+/** Stun of a blown-out opponent: 30 ticks (0.5 s), half the roar's stun. */
+export const EASTWIND_STUN_TICKS = 30;
+/** Opponents whose centre is inside the eastwind move at this share of their normal max speed (15%). */
+export const EASTWIND_SLOW_MULT = 0.15;
+/** Every this many ticks after the cast the eastwind pulses (1 s): 180 / 60 = 3 pulses. */
+export const EASTWIND_DOT_INTERVAL = 60;
+/** Share of each pulse victim's maxStamina that a pulse takes (10%). */
+export const EASTWIND_DOT_RATIO = 0.1;
+
 /** Sun Quan's 受箭回舟 (arrowship): the block window and the volley tick, 2 s (the volley fires on tick 120). */
 export const ARROWSHIP_TICKS = 120;
 /** The ship line sits this many px in front of his own goal line, toward the field. */

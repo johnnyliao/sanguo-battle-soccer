@@ -4,12 +4,14 @@ import { AudioPlayer } from '../audio';
 import { COUNTRY_INFO, getTeam, SIZE_PARAMS, type Country, type SpecialKind } from '../data';
 import { LocalInput, TouchControls } from '../input';
 import {
+  ARROWSHIP_TICKS,
   BALL_RADIUS,
   BEAM_CAST_TICKS,
   CHARGE_FULL,
   DRIBBLE_OFFSET,
   FIELD_D,
   FIELD_W,
+  EASTWIND_RADIUS,
   EMPTY_INPUT,
   GOAL_HALF_W,
   ICE_RADIUS,
@@ -20,9 +22,11 @@ import {
   SPECIAL_COOLDOWN_TICKS,
   SPECIAL_STAMINA_COST,
   TICK_HZ,
+  attackDir,
   autoPkOrders,
   createInitialState,
   isInvincible,
+  ownGoalX,
   pkMeterValue,
   step,
   submitPkOrder,
@@ -134,6 +138,16 @@ interface FxInstance {
   mirror: boolean;
   /** Depth relative to the followed player's y (0.5 in front of him, negative behind him). */
   depthOff: number;
+}
+
+/** Sun Quan's ship on the field: its owner idx, its sheet, the ship effect (held until the end), its arrow count, and whether it has risen and fired. */
+interface ArrowshipView {
+  owner: number;
+  sheet: FxSheet;
+  ship: FxInstance;
+  arrows: number;
+  risen: boolean;
+  volleyed: boolean;
 }
 
 /** Where and how playFx places one effect (screen px). holdMs and endMs default to the animation's length. */
@@ -416,6 +430,30 @@ const PORTAL_RING_W_FRAC = 0.85;
 const PORTAL_RING_H_FRAC = 0.5;
 /** The circle is drawn with normal blend over the grass at the field's full size, so its purple and gold stay visible (additive blend washed it out to yellow-white). */
 const PORTAL_FIELD_ALPHA = 0.9;
+/** Zhou Yu's eastwind: the tornado at the cast point (its height, the share of its height its base sits under the ground point, its depth above the players), the burst ring and the wind field on the ground (the ring's width is the field's diameter, squashed like the portal circle, with its own depth and alpha), and the slow debuff on each opponent inside (its width, its depth relative to his feet). */
+const EASTWIND_TORNADO_FX_H = 120;
+const EASTWIND_TORNADO_BASE = 0.3;
+const EASTWIND_TORNADO_DEPTH = FIELD_D + 50;
+const EASTWIND_FIELD_DEPTH = -20;
+const EASTWIND_FIELD_ALPHA = 0.9;
+const EASTWIND_RING_W_FRAC = 0.85;
+const EASTWIND_RING_H_FRAC = 0.5;
+const EASTWIND_SLOW_FX_W = 90;
+const EASTWIND_SLOW_DEPTH_OFF = -0.5;
+/** Sun Quan's arrowship: the ship's width on screen (its height follows the frame), how far its base sinks below the ship's centre (fraction of its height), the emerge before the stage frame shows, the block flash and the victim impact widths, the arrows flying across the volley (their height, count, stagger and flight time), and how long the volley frames hold before the ship fades. */
+const ARROWSHIP_FX_W = 230;
+/** The ship sprite is shifted this share of its width toward the field, so it is not half hidden behind the goal at the screen edge. */
+const ARROWSHIP_FORWARD_SHIFT = 0.3;
+const ARROWSHIP_SINK = 0.4;
+const ARROWSHIP_EMERGE_MS = 500;
+const ARROWSHIP_BLOCK_FX_W = 60;
+const ARROWSHIP_IMPACT_FX_W = 90;
+const ARROWSHIP_ARROW_FX_W = 90;
+const ARROWSHIP_ARROW_Z = 30;
+const ARROWSHIP_ARROW_COUNT = 5;
+const ARROWSHIP_ARROW_STAGGER_MS = 80;
+const ARROWSHIP_ARROW_FLY_MS = 500;
+const ARROWSHIP_VOLLEY_HOLD_MS = 400;
 /** Lunge start: a small shake. The dragon holds for the dash, then fades for LUNGE_FADE_MS. */
 const LUNGE_SHAKE_MS = 120;
 const LUNGE_SHAKE_INTENSITY = 0.002;
@@ -492,6 +530,16 @@ const PREVIEW_DEFENDERS: [number, number][] = [
   [55, -40],
   [55, 40],
   [110, 0],
+];
+/** Sun Quan's arrowship preview: his distance in front of his own goal line and y offset from the centre line; the opponent forward's distance from the goal line; and the two opponents in the volley area, as (distance from the goal line, y offset). */
+const PREVIEW_ARROW_GK_DX = 48;
+const PREVIEW_ARROW_GK_DY = 45;
+const PREVIEW_ARROW_FWD_DX = 180;
+/** The ball's distance in front of that forward: past his pickup reach, so he does not take it back. */
+const PREVIEW_ARROW_BALL_DX = 48;
+const PREVIEW_ARROW_VICTIMS: [number, number][] = [
+  [150, 80],
+  [230, -80],
 ];
 const PREVIEW_BACK_W = 64;
 const PREVIEW_BACK_H = 22;
@@ -623,6 +671,12 @@ export class MatchScene extends Phaser.Scene {
   private portalChains = new Map<string, FxInstance>();
   /** Caster idx of the portal being summoned, set by portalSummon (the arrivals that follow in the same batch use it). */
   private portalSummonCaster = -1;
+  /** Zhou Yu's eastwind id -> its wind field on the ground (faded when the eastwind ends). */
+  private eastwindFields = new Map<number, FxInstance>();
+  /** `${eastwind id}:${opponent idx}` -> the slow debuff on an opponent standing inside that eastwind. */
+  private eastwindSlows = new Map<string, FxInstance>();
+  /** Sun Quan's ships by ship id, from arrowshipStart until arrowshipEnd. */
+  private arrowships = new Map<number, ArrowshipView>();
   /** Xu Chu's tiger guard effects: the fire ring round him, the maw over him while a shot is held, and the trail of the spat ball. */
   private tigerRing = new Map<number, FxInstance>();
   private tigerMaw = new Map<number, FxInstance>();
@@ -891,6 +945,10 @@ export class MatchScene extends Phaser.Scene {
   private setupPreview(): void {
     const { players, ball } = this.state;
     const human = players[this.humanIdx];
+    if (human.specialMode === 'arrowship') {
+      this.setupArrowshipPreview(human);
+      return;
+    }
     const x = FIELD_W - PREVIEW_GOAL_DIST;
     human.x = x;
     human.y = FIELD_D / 2;
@@ -906,6 +964,38 @@ export class MatchScene extends Phaser.Scene {
     ball.special = null;
     ball.x = human.x + human.facingX * (human.radius + DRIBBLE_OFFSET);
     ball.y = human.y;
+    ball.z = 0;
+    ball.vx = 0;
+    ball.vy = 0;
+    ball.vz = 0;
+  }
+
+  /** Sun Quan's arrowship: he stands in front of his own goal, an opponent forward stands 180 px out with the ball in front of him (the e2e shoots it at the goal), and two opponents stand in the volley area. */
+  private setupArrowshipPreview(human: Player): void {
+    const { players, ball } = this.state;
+    const dir = attackDir(this.state, human.team);
+    const goalX = ownGoalX(this.state, human.team);
+    const cy = FIELD_D / 2;
+    human.x = goalX + dir * PREVIEW_ARROW_GK_DX;
+    human.y = cy - PREVIEW_ARROW_GK_DY;
+    human.facingX = dir;
+    human.facingY = 0;
+    const foes = players.filter((p) => p.team !== human.team);
+    const forward = foes.find((p) => p.role === 'FW') ?? foes[0];
+    forward.x = goalX + dir * PREVIEW_ARROW_FWD_DX;
+    forward.y = cy;
+    const victims = foes.filter((p) => p !== forward && p.role !== 'GK');
+    PREVIEW_ARROW_VICTIMS.forEach(([dist, dy], i) => {
+      const v = victims[i];
+      if (!v) return;
+      v.x = goalX + dir * dist;
+      v.y = cy + dy;
+    });
+    ball.ownerIdx = -1;
+    ball.lastTouchIdx = forward.idx;
+    ball.special = null;
+    ball.x = forward.x - dir * PREVIEW_ARROW_BALL_DX;
+    ball.y = cy;
     ball.z = 0;
     ball.vx = 0;
     ball.vy = 0;
@@ -1018,6 +1108,18 @@ export class MatchScene extends Phaser.Scene {
         this.portalArriveFx(e);
       } else if (e.type === 'portalEnd') {
         this.portalEndFx(e.portalId);
+      } else if (e.type === 'eastwindStart') {
+        this.eastwindStartFx(e);
+      } else if (e.type === 'eastwindEnd') {
+        this.eastwindEndFx(e.windId);
+      } else if (e.type === 'arrowshipStart') {
+        this.arrowshipStartFx(e);
+      } else if (e.type === 'arrowshipBlock') {
+        this.arrowshipBlockFx(e);
+      } else if (e.type === 'arrowshipVolley') {
+        this.arrowshipVolleyFx(e);
+      } else if (e.type === 'arrowshipEnd') {
+        this.arrowshipEndFx(e.shipId);
       } else if (e.type === 'attack') {
         if (e.kind === 'punch') this.punchFx(e.playerIdx);
       } else if (e.type === 'lungeStart') {
@@ -1139,6 +1241,7 @@ export class MatchScene extends Phaser.Scene {
     this.updateFearFx();
     this.updateIceTint();
     this.updatePortalChains();
+    this.updateEastwindSlows();
     this.updateTigerTrail();
     this.updateWaveFx();
     this.drawFx();
@@ -1875,6 +1978,151 @@ export class MatchScene extends Phaser.Scene {
   }
 
   /**
+   * Zhou Yu's eastwind cast: the tornado rises at the cast point, the burst ring spreads over the field's ground ellipse, then the
+   * wind field loops until the eastwind ends. The opponents blown out move by the sim's knockback, with no effect of their own.
+   */
+  private eastwindStartFx(e: Extract<SimEvent, { type: 'eastwindStart' }>): void {
+    const owner = this.fxOwner(e.playerIdx);
+    if (!owner) return;
+    const ground = worldToScreen(e.x, e.y, 0);
+    const h = EASTWIND_TORNADO_FX_H;
+    this.playFx(owner.fx, 'tornado', {
+      x: ground.sx,
+      y: ground.sy - h * EASTWIND_TORNADO_BASE,
+      w: (h * owner.fx.frameWidth) / owner.fx.frameHeight,
+      h,
+      depth: EASTWIND_TORNADO_DEPTH,
+    });
+    const forever = Number.POSITIVE_INFINITY;
+    const field = this.playFx(owner.fx, 'burst', {
+      x: ground.sx,
+      y: ground.sy,
+      w: (2 * e.radius) / EASTWIND_RING_W_FRAC,
+      h: (2 * e.radius * DEPTH_SCALE) / EASTWIND_RING_H_FRAC,
+      depth: EASTWIND_FIELD_DEPTH,
+      alpha: EASTWIND_FIELD_ALPHA,
+      blend: 'normal',
+      holdMs: forever,
+      endMs: forever,
+    });
+    if (!field) return;
+    this.eastwindFields.set(e.windId, field);
+    field.sprite.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
+      field.sprite.play(fxAnimKey(owner.fx, 'active'));
+    });
+  }
+
+  /** The eastwind ends: its wind field fades (the slow debuffs on its victims fade in updateEastwindSlows). */
+  private eastwindEndFx(windId: number): void {
+    const field = this.eastwindFields.get(windId);
+    if (!field) return;
+    this.eastwindFields.delete(windId);
+    this.fadeFx(field);
+  }
+
+  /** Sun Quan's arrowship: the ship rises out of the water at the goal mouth (emerge), then shows its arrow stage once risen. */
+  private arrowshipStartFx(e: Extract<SimEvent, { type: 'arrowshipStart' }>): void {
+    const owner = this.fxOwner(e.playerIdx);
+    if (!owner) return;
+    const ground = worldToScreen(e.x, e.y, 0);
+    const h = (ARROWSHIP_FX_W * owner.fx.frameHeight) / owner.fx.frameWidth;
+    const forever = Number.POSITIVE_INFINITY;
+    const ship = this.playFx(owner.fx, 'emerge', {
+      x: ground.sx + e.dir * ARROWSHIP_FX_W * ARROWSHIP_FORWARD_SHIFT,
+      y: ground.sy - h * ARROWSHIP_SINK,
+      w: ARROWSHIP_FX_W,
+      h,
+      depth: e.y + 0.5,
+      flip: e.dir < 0,
+      blend: 'normal',
+      holdMs: forever,
+      endMs: forever,
+    });
+    if (!ship) return;
+    const view: ArrowshipView = { owner: e.playerIdx, sheet: owner.fx, ship, arrows: 0, risen: false, volleyed: false };
+    this.arrowships.set(e.shipId, view);
+    this.time.delayedCall(ARROWSHIP_EMERGE_MS, () => {
+      if (this.arrowships.get(e.shipId) !== view) return;
+      view.risen = true;
+      this.showArrowshipStage(view);
+    });
+  }
+
+  /** The ship's arrow stage: 0 arrows shows stage 1, each arrow the next stage, 3 or more the last. */
+  private showArrowshipStage(view: ArrowshipView): void {
+    const names: FxAnim[] = ['stage1', 'stage2', 'stage3', 'stage4'];
+    view.ship.sprite.play(fxAnimKey(view.sheet, names[Math.min(3, view.arrows)]));
+  }
+
+  /** A shot or attack hits the ship: the stage advances and a small impact flashes where it was blocked. */
+  private arrowshipBlockFx(e: Extract<SimEvent, { type: 'arrowshipBlock' }>): void {
+    const view = this.arrowships.get(e.shipId);
+    if (!view) return;
+    view.arrows = e.arrows;
+    if (view.risen) this.showArrowshipStage(view);
+    const pt = worldToScreen(e.x, e.y, HIT_FX_LIFT);
+    this.playFx(view.sheet, 'impact', {
+      x: pt.sx,
+      y: pt.sy,
+      w: ARROWSHIP_BLOCK_FX_W,
+      h: (ARROWSHIP_BLOCK_FX_W * view.sheet.frameHeight) / view.sheet.frameWidth,
+      depth: e.y + 0.6,
+    });
+  }
+
+  /** The volley: the ship plays its volley frames, arrows fly across the volley area and each victim takes an impact. */
+  private arrowshipVolleyFx(e: Extract<SimEvent, { type: 'arrowshipVolley' }>): void {
+    const view = this.arrowships.get(e.shipId);
+    if (!view) return;
+    view.volleyed = true;
+    view.ship.sprite.play(fxAnimKey(view.sheet, 'volley'));
+    for (let i = 0; i < ARROWSHIP_ARROW_COUNT; i++) {
+      const offY = (ARROWSHIP_ARROW_COUNT > 1 ? (2 * i) / (ARROWSHIP_ARROW_COUNT - 1) - 1 : 0) * e.halfW;
+      this.time.delayedCall(i * ARROWSHIP_ARROW_STAGGER_MS, () => this.arrowshipArrowFx(view.sheet, e, offY));
+    }
+    for (const v of e.victimIdxs) {
+      const victim = this.state.players[v];
+      const pt = worldToScreen(victim.x, victim.y, 0);
+      this.playFx(view.sheet, 'impact', {
+        x: pt.sx,
+        y: pt.sy,
+        w: ARROWSHIP_IMPACT_FX_W,
+        h: (ARROWSHIP_IMPACT_FX_W * view.sheet.frameHeight) / view.sheet.frameWidth,
+        depth: victim.y + 0.5,
+      });
+    }
+  }
+
+  /** One arrow of the volley, flying from the ship line to the end of the volley area at height offY across the field. */
+  private arrowshipArrowFx(sheet: FxSheet, e: Extract<SimEvent, { type: 'arrowshipVolley' }>, offY: number): void {
+    const from = worldToScreen(e.x, e.y + offY, ARROWSHIP_ARROW_Z);
+    const to = worldToScreen(e.x + e.dir * e.len, e.y + offY, ARROWSHIP_ARROW_Z);
+    const fadeAt = ARROWSHIP_ARROW_FLY_MS + FX_FADE_MS;
+    const arrow = this.playFx(sheet, 'arrow', {
+      x: from.sx,
+      y: from.sy,
+      w: ARROWSHIP_ARROW_FX_W,
+      h: (ARROWSHIP_ARROW_FX_W * sheet.frameHeight) / sheet.frameWidth,
+      depth: e.y + offY + 0.5,
+      flip: e.dir < 0,
+      holdMs: ARROWSHIP_ARROW_FLY_MS,
+      endMs: fadeAt,
+    });
+    if (!arrow) return;
+    this.tweens.add({ targets: arrow.sprite, x: to.sx, y: to.sy, duration: ARROWSHIP_ARROW_FLY_MS, ease: 'Linear' });
+  }
+
+  /** The ship's end: after its volley frames (if it fired) it fades. */
+  private arrowshipEndFx(shipId: number): void {
+    const view = this.arrowships.get(shipId);
+    if (!view) return;
+    this.arrowships.delete(shipId);
+    const hold = this.time.now - view.ship.startMs + (view.volleyed ? ARROWSHIP_VOLLEY_HOLD_MS : 0);
+    view.ship.holdMs = hold;
+    view.ship.endMs = hold + FX_FADE_MS;
+  }
+
+  /**
    * Each opponent standing inside a live portal (the slowed ones) gets the chain binding at his feet, following him. The binding
    * fades when he leaves the field or the portal ends.
    */
@@ -1910,6 +2158,45 @@ export class MatchScene extends Phaser.Scene {
       if (bound.has(key)) continue;
       this.portalChains.delete(key);
       this.fadeFx(chain);
+    }
+  }
+
+  /**
+   * Each opponent standing inside a live eastwind gets the slow debuff at his feet, following him. The debuff fades when he leaves
+   * the field or the eastwind ends.
+   */
+  private updateEastwindSlows(): void {
+    const { players, eastwinds } = this.state;
+    const forever = Number.POSITIVE_INFINITY;
+    const bound = new Set<string>();
+    for (const f of eastwinds) {
+      const owner = this.fxOwner(f.ownerIdx);
+      if (!owner) continue;
+      for (const p of players) {
+        if (p.team === f.team || Math.hypot(f.x - p.x, f.y - p.y) > EASTWIND_RADIUS) continue;
+        const key = `${f.id}:${p.idx}`;
+        bound.add(key);
+        if (this.eastwindSlows.has(key)) continue;
+        const feet = worldToScreen(p.x, p.y, 0);
+        const w = EASTWIND_SLOW_FX_W;
+        const slow = this.playFx(owner.fx, 'slow', {
+          x: feet.sx,
+          y: feet.sy,
+          w,
+          h: (w * owner.fx.frameHeight) / owner.fx.frameWidth,
+          depth: p.y + EASTWIND_SLOW_DEPTH_OFF,
+          holdMs: forever,
+          endMs: forever,
+          follow: p.idx,
+          depthOff: EASTWIND_SLOW_DEPTH_OFF,
+        });
+        if (slow) this.eastwindSlows.set(key, slow);
+      }
+    }
+    for (const [key, slow] of this.eastwindSlows) {
+      if (bound.has(key)) continue;
+      this.eastwindSlows.delete(key);
+      this.fadeFx(slow);
     }
   }
 
@@ -2612,7 +2899,9 @@ export class MatchScene extends Phaser.Scene {
           ? p.actionTimer
           : p.sailTicks > 0
             ? p.sailTicks
-            : p.rampageTicks;
+            : p.arrowshipUp
+              ? ARROWSHIP_TICKS - (this.state.arrowships.find((a) => a.ownerIdx === p.idx)?.ticks ?? ARROWSHIP_TICKS)
+              : p.rampageTicks;
       view.tag.setPosition(0, stackY - (silenced ? STAMINA_STACK_STEP : 0)).setText(`無敵 ${(ticks / TICK_HZ).toFixed(1)}`);
     }
     if (view.stamina) {

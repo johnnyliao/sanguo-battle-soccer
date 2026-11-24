@@ -30,6 +30,8 @@ export function createInitialState(
     nextGustId: 1,
     portals: [],
     nextPortalId: 1,
+    eastwinds: [],
+    nextEastWindId: 1,
     arrowships: [],
     nextArrowShipId: 1,
     ball: {

@@ -218,4 +218,32 @@
 - [x] 1. data＋sim：陣容、mode 'portal'＋測試 — worker（556 tests）
 - [x] 2. AI — worker（與 3 平行）（敵持球者在 140px 內或 140px 內 ≥2 敵就放；563 tests）
 - [x] 3. 切圖、fx、sprites、MatchScene、e2e — worker（me 看截圖；法陣 ADD 疊草地變黃白 → fx 轉透明圖＋法陣 NORMAL 混合）
-- [ ] 4. CLAUDE.md、commit、部署、正式網址 e2e — me＋worker
+- [x] 4. CLAUDE.md、commit（dfa5977）、部署（index-CQNt4CXb.js）、正式網址 e2e 7 支全 PASS — me＋worker
+
+# Goal 16（2026-11-24）孫權「受箭回舟」（守門員）
+吳國陣容：孫權 GK／大喬 DF／周瑜 MF／小喬 MF／孫策 FW（黃蓋下場，列入未入選）。孫權（M，6/5/7/6/9）大招：自家球門前召喚戰船橫擋門口（固定），持續 2 秒；期間擋下所有朝球門的球（射門、必殺球、傳球皆彈回成鬆球）、敵人穿不過船身、孫權無敵；每擋下一次（擋球或打孫權）船上多插一支箭（只是畫面）；第 2 秒戰船回轉射箭（沒擋到也射）：船前方約 300px×寬 240px 敵人擊退、扣 30%、持球者掉球。持球不持球皆可。音效暫不做。
+
+# Constraints
+- 圖：art-src/sunquan-sheet.png（1402×1122，5×4：待機、走、劍攻擊、施法（舉劍、指劍喊、收劍、指劍）、受擊/倒地/跪/起身）；art-src/sunquan-fx.png（1402×1122，5×4：箭矢、戰船浮現（水圈→出船）、戰船插箭 1～4 階、回轉萬箭齊發、箭落地爆）。
+
+# Steps 16
+- [x] 1. data＋sim：陣容、mode 'arrowship'＋測試 — worker（579 tests；球 z≤60 才擋；擋攻擊掛在 applyHit/applySpecialHit）
+- [x] 2. AI — worker（與 3 平行）（敵方射門 |vx|≥200 且離門 250px 內，或敵持球者離門中心 200px 內；586 tests）
+- [x] 3. 切圖、fx、sprites、MatchScene、e2e — worker（me 看截圖；戰船改 NORMAL 混合、放大 230px 並往場內偏；預覽改在門前）
+- [ ] 4. CLAUDE.md、commit、部署、正式網址 e2e — me＋worker（與周瑜一起）
+
+# Goal 17（2026-11-24）周瑜「赤壁東風」（中場；使用者要求沿用舊名，效果換新）
+周瑜原本只有舊的持球必殺（赤壁東風蛇行球）、沒有角色圖。新大招：以施放位置為中心半徑 150px 東風陣（固定原地 3 秒）；施放瞬間範圍內敵人被吹到範圍外（擊退＋短暫硬直，持球者掉球）；之後 3 秒範圍內敵人速度剩 15%（緩速 85%，與冰雨／法陣取最慢）、每秒扣 10%（第 1、2、3 秒各一次，最多 30%）。持球不持球皆可。數值不變（5/6/5/10/4）。
+- 圖：art-src/zhouyu-sheet.png（1122×1402，5×4：待機、走、劍攻擊、施法（舉手、按劍閉目、張臂、指劍）、受擊/倒地/躺/起身）；art-src/zhouyu-fx.png（1402×1122，5×4：火焰劍弧、龍捲成形、吹開爆環、東風陣循環、緩速下壓箭頭）。
+
+# Steps 17
+- [x] 1. sim：mode 'eastwind'＋測試 — worker（608 tests；靠邊者沿 170px 圈滑到場內）
+- [x] 2. AI — worker（敵持球者 150px 內或 ≥2 敵；614 tests）
+- [x] 3. 切圖、fx、render、e2e — worker（me 看截圖；拿掉過時的「需持球」e2e）
+- [ ] 4. 文件、commit、部署（孫權＋周瑜一起）、正式網址 e2e
+
+# Goal 18（2026-11-24）音效包整合（孫權、周瑜上線後）
+- 來源：/home/safe3admin/150gameeffectsounds/（150 個 WAV，56 MB；LICENSES.txt：全部 CC0 1.0，不需標註；來源 CoMiGo、Kenney、Kronbits、lentikula）。分類：01 近戰（拳擊打擊、刀出鞘、刀切）、02 遠程（射擊、雷射）、03 爆炸破壞、04 魔法（火、冰、水、風、雷、土、植物、治療衝擊、充能）。
+- 使用者要求：我自己配，先做試聽頁給他聽，確認後才接進比賽。舊 Sun Ce 合成音效 WIP 在 scratchpad/sunce-sounds-wip.patch（可能不再需要）。
+- 做法草案：挑選的檔案轉 ogg/mp3（mono、短、裁靜音）放 public/sfx；15 名武將普攻、大招（分段：施放／命中／結束）＋通用（踢球、倒地、進球）對應表；?sfx=1 試聽頁改為播放檔案。
+- 使用者提醒：有些檔案試聽聽不到聲音。挑選前先逐檔量峰值／RMS（含只有極低頻或極短的檔），過濾掉近乎無聲的，再挑。

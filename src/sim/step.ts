@@ -38,6 +38,7 @@ import {
   carryPassengers,
   clampPlayerToField,
   clearRiders,
+  endEastwinds,
   endGusts,
   endIcefields,
   endPortals,
@@ -49,6 +50,7 @@ import {
   updateAction,
   updateArrowships,
   updateBladeWaves,
+  updateEastwinds,
   updateGusts,
   updateIcefields,
   updatePortals,
@@ -105,6 +107,7 @@ export function step(state: GameState, inputs: InputFrame[]): GameState {
     updateBladeWaves(state);
     updateIcefields(state);
     updatePortals(state);
+    updateEastwinds(state);
     updateArrowships(state);
     updateSails(state);
     applyRampageBumps(state);
@@ -124,6 +127,7 @@ export function step(state: GameState, inputs: InputFrame[]): GameState {
       endIcefields(state);
       endGusts(state);
       endPortals(state);
+      endEastwinds(state);
       endArrowships(state);
       endSails(state);
     }

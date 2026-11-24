@@ -11,7 +11,7 @@ function ch(
   stats: [number, number, number, number, number],
   specialName: string,
   specialKind: SpecialKind,
-  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger' | 'slash' | 'ride' | 'icefield' | 'sail' | 'gust' | 'portal' | 'arrowship' = 'rampage',
+  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger' | 'slash' | 'ride' | 'icefield' | 'sail' | 'gust' | 'portal' | 'arrowship' | 'eastwind' = 'rampage',
   opts: { noBall?: boolean; bumpPct?: number } = {},
 ): CharacterDef {
   const [power, speed, stamina, technique, defense] = stats;
@@ -39,7 +39,7 @@ export const RAW_CHARACTERS: CharacterDef[] = [
   ch('zhangliao', '張遼', 'wei', 'FW', 'M', [7, 10, 6, 7, 2], '遼來了', 'straight', 'fear', { noBall: true }),
   ch('sunquan', '孫權', 'wu', 'GK', 'M', [6, 5, 7, 6, 9], '受箭回舟', 'pierce', 'arrowship', { noBall: true }),
   ch('daqiao', '大喬', 'wu', 'DF', 'M', [5, 6, 7, 6, 8], '時空之門', 'zigzag', 'portal', { noBall: true }),
-  ch('zhouyu', '周瑜', 'wu', 'MF', 'M', [5, 6, 5, 10, 4], '赤壁東風', 'zigzag'),
+  ch('zhouyu', '周瑜', 'wu', 'MF', 'M', [5, 6, 5, 10, 4], '赤壁東風', 'zigzag', 'eastwind', { noBall: true }),
   ch('xiaoqiao', '小喬', 'wu', 'MF', 'S', [3, 6, 5, 9, 5], '吹飛', 'zigzag', 'gust', { noBall: true }),
   ch('sunce', '孫策', 'wu', 'FW', 'M', [9, 8, 7, 6, 1], '揚帆起航', 'straight', 'sail', { noBall: true }),
 ];

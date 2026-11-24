@@ -23,6 +23,14 @@ import {
   DOWN_TICKS_KNOCKED,
   DRIBBLE_OFFSET,
   DT,
+  EASTWIND_DOT_INTERVAL,
+  EASTWIND_DOT_RATIO,
+  EASTWIND_KNOCK_SPEED,
+  EASTWIND_PUSH_MARGIN,
+  EASTWIND_RADIUS,
+  EASTWIND_SLOW_MULT,
+  EASTWIND_STUN_TICKS,
+  EASTWIND_TICKS,
   FEAR_RADIUS,
   FEAR_STAMINA_RATIO,
   FEAR_TICKS,
@@ -162,6 +170,7 @@ import {
   type ArrowShip,
   type AttackKind,
   type BladeWave,
+  type EastWind,
   type Gust,
   type GameState,
   type IceField,
@@ -312,10 +321,10 @@ function coast(p: Player, damp: number): boolean {
   return p.actionTimer <= 0;
 }
 
-/** Where an ice field and a portal both slow a player, the lower multiplier applies (the minimum, not the product). */
+/** Where an ice field, a portal or an eastwind slow a player, the lowest multiplier applies (the minimum, not the product). */
 function maxSpeedOf(state: GameState, p: Player): number {
   const sailMult = p.sailTicks > 0 ? SAIL_SPEED_MULT : 1;
-  const slowMult = Math.min(iceSlowMult(state, p), portalSlowMult(state, p));
+  const slowMult = Math.min(iceSlowMult(state, p), portalSlowMult(state, p), eastwindSlowMult(state, p));
   return (PLAYER_BASE_SPEED + p.stats.speed * PLAYER_SPEED_PER_STAT) * slowMult * sailMult;
 }
 
@@ -599,6 +608,7 @@ function trySpecial(state: GameState, p: Player, input: InputFrame): boolean {
   else if (p.specialMode === 'sail') startSail(state, p);
   else if (p.specialMode === 'gust') startGust(state, p);
   else if (p.specialMode === 'portal') startPortal(state, p);
+  else if (p.specialMode === 'eastwind') startEastwind(state, p);
   else if (p.specialMode === 'arrowship') startArrowship(state, p);
   else startRampage(state, p);
   return true;
@@ -1896,6 +1906,132 @@ function portalPulse(state: GameState, f: Portal): void {
 export function endPortals(state: GameState): void {
   for (const f of state.portals) state.events.push({ type: 'portalEnd', portalId: f.id });
   state.portals = [];
+}
+
+/**
+ * Zhou Yu's 赤壁東風 (eastwind): an instant cast, with or without the ball. The field is fixed at his cast point and does not
+ * move with him. Every opponent inside EASTWIND_RADIUS is blown out at once (see eastwindBlowOut). He keeps acting normally,
+ * and any ball he holds stays with him.
+ */
+function startEastwind(state: GameState, p: Player): void {
+  p.stamina -= SPECIAL_STAMINA_COST;
+  p.specialCooldown = SPECIAL_COOLDOWN_TICKS;
+  const windId = state.nextEastWindId++;
+  state.eastwinds.push({ id: windId, ownerIdx: p.idx, team: p.team, x: p.x, y: p.y, ticks: 0 });
+  state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
+  const victims = state.players.filter(
+    (v) => v.team !== p.team && v.action !== 'down' && !isInvincible(v) && distance(p.x, p.y, v.x, v.y) <= EASTWIND_RADIUS,
+  );
+  state.events.push({
+    type: 'eastwindStart',
+    playerIdx: p.idx,
+    windId,
+    x: p.x,
+    y: p.y,
+    radius: EASTWIND_RADIUS,
+    victimIdxs: victims.map((v) => v.idx),
+  });
+  for (const v of victims) eastwindBlowOut(state, p, v);
+}
+
+/** Angle step of the search for an on-pitch blow-out point: 1 degree. */
+const EASTWIND_ANGLE_STEP = Math.PI / 180;
+
+/**
+ * The angle a blown-out opponent is sent at: `radial` (the ray from the cast point through him) when its ring point lies on the
+ * pitch, otherwise the nearest angle, searched in EASTWIND_ANGLE_STEP steps alternating sides, whose ring point does. The
+ * pitch is wider than the ring's diameter, so angle 0 or pi always lands on it and the search always finds an angle.
+ */
+function eastwindPitchAngle(p: Player, radial: number, reach: number): number {
+  const onPitch = (a: number): boolean => {
+    const x = p.x + Math.cos(a) * reach;
+    const y = p.y + Math.sin(a) * reach;
+    return x >= 0 && x <= FIELD_W && y >= 0 && y <= FIELD_D;
+  };
+  for (let k = 0; k <= 180; k++) {
+    for (const side of [1, -1]) {
+      const a = radial + side * k * EASTWIND_ANGLE_STEP;
+      if (onPitch(a)) return a;
+      if (k === 0) break;
+    }
+  }
+  return radial;
+}
+
+/**
+ * One blown-out opponent: placed on the circle of EASTWIND_RADIUS + EASTWIND_PUSH_MARGIN around the cast point, along the ray
+ * from the cast point through him (a victim exactly at the centre uses Zhou Yu's facing), or along the nearest angle that keeps
+ * that point on the pitch (see eastwindPitchAngle). He is then stunned for EASTWIND_STUN_TICKS and sent outward at
+ * EASTWIND_KNOCK_SPEED. No stamina is lost. A ball he holds is knocked loose.
+ */
+function eastwindBlowOut(state: GameState, p: Player, v: Player): void {
+  reportCastCancel(state, v);
+  const dist = distance(p.x, p.y, v.x, v.y);
+  const radial = dist > 0 ? Math.atan2(v.y - p.y, v.x - p.x) : Math.atan2(p.facingY, p.facingX);
+  const reach = EASTWIND_RADIUS + EASTWIND_PUSH_MARGIN;
+  const angle = eastwindPitchAngle(p, radial, reach);
+  const dirX = Math.cos(angle);
+  const dirY = Math.sin(angle);
+  v.x = p.x + dirX * reach;
+  v.y = p.y + dirY * reach;
+  v.vx = dirX * EASTWIND_KNOCK_SPEED;
+  v.vy = dirY * EASTWIND_KNOCK_SPEED;
+  v.chargeTicks = 0;
+  v.action = 'hitstun';
+  v.actionTimer = EASTWIND_STUN_TICKS;
+  if (state.ball.ownerIdx === v.idx) knockLooseBall(state, p, v, dirX, dirY);
+}
+
+/**
+ * One tick for every eastwind in play: counts it up, pulses on every EASTWIND_DOT_INTERVAL-th tick after the cast, and ends it
+ * once EASTWIND_TICKS have passed (the last pulse fires on that same tick, before the end).
+ */
+export function updateEastwinds(state: GameState): void {
+  if (state.match.phase !== 'play') return;
+  for (const f of state.eastwinds) {
+    f.ticks++;
+    if (f.ticks % EASTWIND_DOT_INTERVAL === 0) eastwindPulse(state, f);
+  }
+  const ended = state.eastwinds.filter((f) => f.ticks >= EASTWIND_TICKS);
+  if (ended.length === 0) return;
+  state.eastwinds = state.eastwinds.filter((f) => f.ticks < EASTWIND_TICKS);
+  for (const f of ended) state.events.push({ type: 'eastwindEnd', windId: f.id });
+}
+
+/**
+ * One pulse of an eastwind: every standing, non-invincible opponent inside EASTWIND_RADIUS loses EASTWIND_DOT_RATIO of his
+ * maxStamina, reported as a normal hit. Emptying his stamina knocks him down. No knockback, and a ball holder keeps the ball.
+ */
+function eastwindPulse(state: GameState, f: EastWind): void {
+  for (const v of state.players) {
+    if (v.team === f.team || v.action === 'down' || isInvincible(v)) continue;
+    if (distance(f.x, f.y, v.x, v.y) > EASTWIND_RADIUS) continue;
+    const cost = EASTWIND_DOT_RATIO * v.maxStamina;
+    v.stamina = Math.max(0, v.stamina - cost);
+    state.events.push({ type: 'hit', attackerIdx: f.ownerIdx, victimIdx: v.idx, kind: 'special', damage: cost });
+    if (v.stamina <= 0) {
+      setDown(v, DOWN_TICKS_EXHAUSTED);
+      state.events.push({ type: 'down', playerIdx: v.idx });
+    }
+  }
+}
+
+/**
+ * Speed multiplier from Zhou Yu's eastwinds: EASTWIND_SLOW_MULT while the player stands within EASTWIND_RADIUS of a field cast by
+ * an opponent. Invincible players are unaffected. Computed from position each tick, like iceSlowMult.
+ */
+function eastwindSlowMult(state: GameState, p: Player): number {
+  if (isInvincible(p)) return 1;
+  for (const f of state.eastwinds) {
+    if (f.team !== p.team && distance(f.x, f.y, p.x, p.y) <= EASTWIND_RADIUS) return EASTWIND_SLOW_MULT;
+  }
+  return 1;
+}
+
+/** Ends every eastwind (the phase left play). */
+export function endEastwinds(state: GameState): void {
+  for (const f of state.eastwinds) state.events.push({ type: 'eastwindEnd', windId: f.id });
+  state.eastwinds = [];
 }
 
 /**

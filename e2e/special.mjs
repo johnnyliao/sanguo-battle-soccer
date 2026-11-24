@@ -1,7 +1,7 @@
 // Special check. Guan Yu (shu DF, human=1) presses L with the ball and rides at once (mount, bike, fire dragon).
 // Zhang Fei (shu GK, human=0) presses L without the ball next to two opponents: the roar fires at once (shockwave, stun, HUD cooldown).
 // Quick taps: touch 大招 / 攻擊 with CDP touchStart + touchEnd back to back (no wait), so press and release fall between
-// two samples. Shu specials need no ball, so Guan Yu rides without it; a wu special without the ball shows the 需持球 hint.
+// two samples. Every special is cast without the ball (no 需持球 hint), so Guan Yu rides and Zhou Yu blows the opponents out without it.
 // Test-only state edits (ball owner, positions, stamina) go through window.__sg. Usage: node e2e/special.mjs <url>
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
@@ -287,16 +287,44 @@ try {
   report('quick tap on 攻擊 with the ball releases it', released.owner !== released.human, `owner ${released.owner}, ball vx ${released.vx.toFixed(1)}`);
   await touch.context.close();
 
-  // d. Wu special (huanggai, GK, needs the ball) without the ball: 大招 quick tap shows the 需持球 hint; the dimmed caption too.
-  const wu = await openTouchMatch(browser, 5, 'wu');
+  // d. Zhou Yu (wu MF, human=7, noBall) 大招 quick tap without the ball casts 赤壁東風 at once. The opponent 60 px in front of him is blown
+  // outside 150 px at the cast (shot at the blow-out). A second opponent is then moved inside the live field and gets the slow debuff.
+  // The tornado, burst ring, field loop and debuff are latched every frame in the rAF loop (short-lived states).
+  const zhouyuDir = '/tmp/claude-1000/-home-safe3admin/0b7bc786-6b15-4a7f-930c-d14bce7049d1/scratchpad/zhouyu';
+  mkdirSync(zhouyuDir, { recursive: true });
+  const wu = await openTouchMatch(browser, 7, 'wu');
   const wp = wu.page;
+  await wp.evaluate(() => {
+    window.__zyFx = { tornado: false, burst: false, active: false, slow: false };
+    const scene = window.__sg.scene;
+    const tick = () => {
+      if (window.__sg.scene !== scene) return;
+      for (const f of scene.fx) {
+        if (!f.sprite.visible) continue;
+        const k = f.sprite.name.replace('fx:', '');
+        if (k in window.__zyFx) window.__zyFx[k] = true;
+        // The field keeps its sprite name (fx:burst) when it swaps to the loop, so the loop is latched by its animation key.
+        if (f.sprite.anims?.currentAnim?.key === 'fx-zhouyu:active') window.__zyFx.active = true;
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
   await wp.evaluate(() => {
     const s = window.__sg.state();
     const h = s.players[window.__sg.humanIdx];
     h.x = 300;
     h.y = 130;
+    h.facingX = 1;
+    h.facingY = 0;
     h.stamina = h.maxStamina;
     h.specialCooldown = 0;
+    const near = s.players.find((p) => p.team !== h.team && p.role !== 'GK');
+    near.x = h.x + 60;
+    near.y = h.y;
+    near.vx = 0;
+    near.vy = 0;
+    window.__zyNear = near.idx;
     s.ball.ownerIdx = -1;
     s.ball.lastTouchIdx = -1;
     s.ball.special = null;
@@ -308,21 +336,53 @@ try {
     s.ball.vz = 0;
   });
   await wp.waitForTimeout(200);
-  const wuDimCaption = await wp.evaluate(() => window.__sg.scene.touch.blockHint.visible);
   await quickTap(wu.cdp, await buttonPoint(wp, 128, 92));
-  await wp.waitForFunction(() => window.__sg.lastHint() === '需持球', null, { timeout: 2000 }).catch(() => {});
-  const wuHint = await wp.evaluate(() => ({
-    text: window.__sg.lastHint(),
-    visible: window.__sg.scene.hintText.visible,
-    cooldown: window.__sg.state().players[window.__sg.humanIdx].specialCooldown,
-  }));
-  await wp.screenshot({ path: shot('hint.png') });
+  await wp.waitForFunction(() => window.__sg.state().eastwinds.length > 0, null, { timeout: 3000 }).catch(() => {});
+  const zyCast = await wp.evaluate(() => {
+    const s = window.__sg.state();
+    const me = s.players[window.__sg.humanIdx];
+    const w = s.eastwinds[0];
+    const near = s.players[window.__zyNear];
+    return {
+      charId: me.charId,
+      winds: s.eastwinds.length,
+      hint: window.__sg.lastHint(),
+      dist: w ? Math.hypot(near.x - w.x, near.y - w.y) : -1,
+    };
+  });
+  await wp.screenshot({ path: resolve(zhouyuDir, 'zhouyu-blow-out.png'), scale: 'css' });
   report(
-    'quick tap on 大招 without the ball (wu) shows the 需持球 hint',
-    wuHint.text === '需持球' && wuHint.visible && wuHint.cooldown === 0,
-    `hint "${wuHint.text}", visible ${wuHint.visible}, cooldown ${wuHint.cooldown}`,
+    'quick tap on 大招 without the ball (zhouyu) casts 赤壁東風, no 需持球 hint',
+    zyCast.charId === 'zhouyu' && zyCast.winds > 0 && zyCast.hint !== '需持球',
+    `charId ${zyCast.charId}, eastwinds ${zyCast.winds}, hint "${zyCast.hint}"`,
   );
-  report('dimmed 大招 shows the 需持球 caption without the ball (wu)', wuDimCaption, `caption visible ${wuDimCaption}`);
+  report('opponent 60 px ahead is blown outside 150 px at the cast', zyCast.dist > 150, `distance ${zyCast.dist.toFixed(0)}`);
+  await wp.waitForFunction(() => window.__zyFx.tornado && window.__zyFx.burst && window.__zyFx.active, null, { timeout: 3000, polling: 'raf' }).catch(() => {});
+  const fieldFx = await wp.evaluate(() => window.__zyFx);
+  report(
+    'eastwind shows the tornado, the burst ring and then the live wind field',
+    fieldFx.tornado && fieldFx.burst && fieldFx.active,
+    `tornado ${fieldFx.tornado}, burst ${fieldFx.burst}, active ${fieldFx.active}`,
+  );
+  await wp.evaluate(() => {
+    const s = window.__sg.state();
+    const me = s.players[window.__sg.humanIdx];
+    const far = s.players.find((p) => p.team !== me.team && p.role !== 'GK' && p.idx !== window.__zyNear);
+    far.x = me.x + 80;
+    far.y = me.y;
+    far.vx = 0;
+    far.vy = 0;
+    window.__zyFar = far.idx;
+  });
+  await wp.waitForFunction(() => window.__zyFx.slow, null, { timeout: 2000, polling: 'raf' }).catch(() => {});
+  const inside = await wp.evaluate(() => {
+    const s = window.__sg.state();
+    const w = s.eastwinds[0];
+    const far = s.players[window.__zyFar];
+    return { slow: window.__zyFx.slow, dist: w ? Math.hypot(far.x - w.x, far.y - w.y) : -1 };
+  });
+  await wp.screenshot({ path: resolve(zhouyuDir, 'zhouyu-field-active.png'), scale: 'css' });
+  report('slow debuff overlays the opponent inside the live field', inside.slow && inside.dist <= 150, `slow ${inside.slow}, distance ${inside.dist.toFixed(0)}`);
   await wu.context.close();
 
   // e. Da Qiao (wu, human=6) 大招 quick tap without the ball casts 時空之門 at once (no 需持球 hint). Her teammates are summoned to her at 0.5 s.
@@ -409,6 +469,103 @@ try {
   await dp2.screenshot({ path: '/tmp/claude-1000/-home-safe3admin/0b7bc786-6b15-4a7f-930c-d14bce7049d1/scratchpad/daqiao/daqiao-field-active.png', scale: 'css' });
   report('portal field is live at its 60th tick with the staged opponent inside', live.ticks >= 60 && live.inside, `ticks ${live.ticks}, inside ${live.inside}`);
   await dq2.context.close();
+
+  // g. Sun Quan (wu GK, human=5) 大招 quick tap without the ball raises 受箭回舟 at once. The ship rises at his goal (fx:emerge, then a stage frame).
+  // A ball crossing the ship line once it is up is blocked: no goal, one arrow, stage 2 shows. The volley fires at the end of the 2 s window.
+  const sq = await openTouchMatch(browser, 5, 'wu');
+  const sp = sq.page;
+  // Every frame, latches the ship's animation keys and the arrows in flight (short-lived states).
+  await sp.evaluate(() => {
+    window.__sgShip = { anims: [], arrowFx: false };
+    const scene = window.__sg.scene;
+    const tick = () => {
+      if (window.__sg.scene !== scene) return;
+      for (const f of scene.fx) {
+        if (f.sprite.name === 'fx:emerge') {
+          const k = f.sprite.anims?.currentAnim?.key;
+          if (k && !window.__sgShip.anims.includes(k)) window.__sgShip.anims.push(k);
+        }
+        if (f.sprite.name === 'fx:arrow' && f.sprite.visible) window.__sgShip.arrowFx = true;
+      }
+      requestAnimationFrame(tick);
+    };
+    tick();
+  });
+  await sp.evaluate(() => {
+    const s = window.__sg.state();
+    const h = s.players[window.__sg.humanIdx];
+    h.x = 1100;
+    h.y = 130;
+    h.stamina = h.maxStamina;
+    h.specialCooldown = 0;
+    s.ball.ownerIdx = -1;
+    s.ball.lastTouchIdx = -1;
+    s.ball.special = null;
+    s.ball.x = 1160;
+    s.ball.y = 130;
+    s.ball.z = 0;
+    s.ball.vx = 0;
+    s.ball.vy = 0;
+    s.ball.vz = 0;
+  });
+  await sp.waitForTimeout(200);
+  const scoreBefore = await sp.evaluate(() => window.__sg.state().match.score.slice());
+  await quickTap(sq.cdp, await buttonPoint(sp, 128, 92));
+  await sp.waitForFunction(() => window.__sg.state().arrowships.length > 0, null, { timeout: 2000, polling: 'raf' }).catch(() => {});
+  const raised = await sp.evaluate(() => ({
+    charId: window.__sg.state().players[window.__sg.humanIdx].charId,
+    ships: window.__sg.state().arrowships.length,
+    hint: window.__sg.lastHint(),
+  }));
+  report(
+    'quick tap on 大招 without the ball (sunquan) raises the arrowship, no 需持球 hint',
+    raised.charId === 'sunquan' && raised.ships > 0 && raised.hint !== '需持球',
+    `charId ${raised.charId}, ships ${raised.ships}, hint "${raised.hint}"`,
+  );
+  // Screenshots are slow in headless, so the ship's timer is held (its ticks reset to 0, test-only) before each one, not counted in the window.
+  const holdShip = () => sp.evaluate(() => {
+    for (const a of window.__sg.state().arrowships) a.ticks = 0;
+  });
+  const emerging = await sp.waitForFunction(() => window.__sgShip.anims.includes('fx-sunquan:emerge'), null, { timeout: 2000, polling: 'raf' })
+    .then(() => true, () => false);
+  await holdShip();
+  await sp.screenshot({ path: shot('ship-emerging.png'), scale: 'css' });
+  report('ship emerges at his goal (fx-sunquan:emerge)', emerging);
+  // The stage frame (stage 1, no arrows yet) shows once the ship has risen.
+  const risen = await sp.waitForFunction(() => window.__sgShip.anims.includes('fx-sunquan:stage1'), null, { timeout: 2000, polling: 'raf' })
+    .then(() => true, () => false);
+  report('ship rises then shows the first arrow stage (fx-sunquan:stage1)', risen);
+  // The shot: the ball crosses the ship line at 1170 from the field side and is stopped (blocked, one arrow).
+  await holdShip();
+  await sp.evaluate(() => {
+    window.__sg.state().ball.vx = 1200;
+  });
+  const blocked = await sp.waitForFunction(() => window.__sg.state().arrowships.some((a) => a.arrows >= 1), null, { timeout: 2000, polling: 'raf' })
+    .then(() => true, () => false);
+  const stage2 = await sp.waitForFunction(() => window.__sgShip.anims.includes('fx-sunquan:stage2'), null, { timeout: 2000, polling: 'raf' })
+    .then(() => true, () => false);
+  await holdShip();
+  await sp.screenshot({ path: shot('ship-arrows.png'), scale: 'css' });
+  const afterBlock = await sp.evaluate(() => ({
+    arrows: window.__sg.state().arrowships[0]?.arrows ?? -1,
+    score: window.__sg.state().match.score.slice(),
+  }));
+  report('shot at goal is blocked by the ship (arrows counted)', blocked && afterBlock.arrows === 1, `arrows ${afterBlock.arrows}`);
+  report('arrow stage advances after the block (fx-sunquan:stage2)', stage2);
+  await sp.waitForTimeout(300);
+  const noGoal = await sp.evaluate((before) => window.__sg.state().match.score.every((v, i) => v === before[i]), scoreBefore);
+  report('no goal from the blocked shot', noGoal, `score ${scoreBefore.join('-')}`);
+  // The volley: when the 2 s window ends (the ship turns and fires), the arrows fly across and the ship fades.
+  const volley = await sp.waitForFunction(() => window.__sgShip.anims.includes('fx-sunquan:volley'), null, { timeout: 6000, polling: 'raf' })
+    .then(() => true, () => false);
+  await sp.screenshot({ path: shot('ship-volley.png'), scale: 'css' });
+  const arrowFx = await sp.evaluate(() => window.__sgShip.arrowFx);
+  report('volley fires at the end of the 2 s window (fx-sunquan:volley)', volley);
+  report('volley arrows fly across (fx:arrow)', arrowFx);
+  const faded = await sp.waitForFunction(() => !window.__sg.scene.fx.some((f) => f.sprite.name === 'fx:emerge'), null, { timeout: 6000, polling: 'raf' })
+    .then(() => true, () => false);
+  report('ship fades after the volley', faded);
+  await sq.context.close();
 } catch (err) {
   console.log(`FAIL: ${err.message}`);
   failed = true;

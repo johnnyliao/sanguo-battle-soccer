@@ -81,7 +81,7 @@ describe('specialDescription', () => {
   });
 
   it('keeps effect texts short enough for one team-select line', () => {
-    const modes = ['rampage', 'roar', 'lunge', 'beam', 'summon', 'fear', 'leap', 'tiger', 'slash', 'ride', 'icefield', 'arrowship'] as const;
+    const modes = ['rampage', 'roar', 'lunge', 'beam', 'summon', 'fear', 'leap', 'tiger', 'slash', 'ride', 'icefield', 'arrowship', 'eastwind'] as const;
     for (const mode of modes) {
       for (const kind of ['straight', 'zigzag', 'lob', 'pierce', 'beam'] as const) {
         expect(specialDescription(def(kind, mode)).effect.length).toBeLessThanOrEqual(30);

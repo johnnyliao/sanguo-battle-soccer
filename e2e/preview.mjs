@@ -16,6 +16,13 @@
 // daqiao-field-forming.png), the summon at 0.5 s brings her teammates to her (daqiao-teammates-arriving.png, with the pillars and the
 // landing bursts), the circle loops (fx-daqiao:active) and the staged opponent is bound by the chain (latched; the active shot is in special.mjs).
 // The Da Qiao shots go to the scratchpad daqiao folder.
+// Sun Quan's arrowship (wu roster GK): the ship rises out of the water at his goal (fx-sunquan:emerge), then shows its first arrow stage
+// (fx-sunquan:stage1, latched). Sun Quan stands in front of his own goal; an opponent forward's shot is staged once the stage shows
+// (arrowshipBlock, then fx-sunquan:stage2), and the volley (arrowshipVolley) knocks the two staged opponents in its area. The shots go
+// to the scratchpad sunquan folder (preview card, rise, block and volley); special.mjs has the in-match ones.
+// Zhou Yu's eastwind (wu roster MF): three opponents are staged 60-110 px in front of him, inside the 150 px field. The cast blows them
+// outside (eastwindStart), the tornado, the burst ring and the wind field loop show (latched), and the card and field shots go to the
+// scratchpad zhouyu folder. special.mjs has the in-match slow debuff and the blow-out shot.
 // Usage: node e2e/preview.mjs <url>
 import { createRequire } from 'node:module';
 import { copyFileSync, mkdirSync } from 'node:fs';
@@ -35,6 +42,10 @@ mkdirSync(outDir, { recursive: true });
 const shot = (name) => resolve(outDir, name);
 const daqiaoDir = '/tmp/claude-1000/-home-safe3admin/0b7bc786-6b15-4a7f-930c-d14bce7049d1/scratchpad/daqiao';
 mkdirSync(daqiaoDir, { recursive: true });
+const sunquanDir = '/tmp/claude-1000/-home-safe3admin/0b7bc786-6b15-4a7f-930c-d14bce7049d1/scratchpad/sunquan';
+mkdirSync(sunquanDir, { recursive: true });
+const zhouyuDir = '/tmp/claude-1000/-home-safe3admin/0b7bc786-6b15-4a7f-930c-d14bce7049d1/scratchpad/zhouyu';
+mkdirSync(zhouyuDir, { recursive: true });
 
 // Expected sim event per preview: the special fires (special), then its effect.
 const CASES = [
@@ -51,6 +62,8 @@ const CASES = [
   { id: 'sunce', name: '孫策', slot: 4, effect: 'sailStart', wu: true },
   { id: 'xiaoqiao', name: '小喬', slot: 3, effect: 'gustMark', wu: true },
   { id: 'daqiao', name: '大喬', slot: 1, effect: 'portalStart', wu: true },
+  { id: 'sunquan', name: '孫權', slot: 0, effect: 'arrowshipStart', wu: true },
+  { id: 'zhouyu', name: '周瑜', slot: 2, effect: 'eastwindStart', wu: true },
 ];
 
 const errors = [];
@@ -142,6 +155,26 @@ const stageSail = () => {
   return { mate: mate.idx, foe: foe.idx };
 };
 
+// Test-only: the opponent forward (staged 180 px out, the ball 48 px in front of him, past his pickup reach) shoots at Sun Quan's own goal along the sim's attack direction.
+const stageSunquanShot = () => {
+  const s = window.__sg.state();
+  const sq = s.players[window.__sg.humanIdx];
+  const attack = (sq.team === 0 ? 1 : -1) * (s.match.swapped ? -1 : 1);
+  const dir = -attack;
+  const shooter = s.players.find((p) => p.team !== sq.team && p.role === 'FW');
+  const b = s.ball;
+  b.ownerIdx = -1;
+  b.lastTouchIdx = shooter.idx;
+  b.special = null;
+  b.x = shooter.x + dir * 48;
+  b.y = shooter.y;
+  b.z = 0;
+  b.vx = dir * 600;
+  b.vy = 0;
+  b.vz = 0;
+  return { shooter: shooter.idx };
+};
+
 // Test-only: two opponents for Xiao Qiao's gust, 150 px and 190 px ahead of her (the nearer one is the gust point, both are inside its reach).
 const stageGust = () => {
   const s = window.__sg.state();
@@ -168,6 +201,26 @@ const stagePortal = () => {
   foe.vx = 0;
   foe.vy = 0;
   return { foe: foe.idx };
+};
+
+// Test-only: three opponents 60-110 px in front of Zhou Yu, inside his eastwind's 150 px (the cast blows them outside).
+const stageEastwind = () => {
+  const s = window.__sg.state();
+  const caster = s.players[window.__sg.humanIdx];
+  const dir = caster.facingX < 0 ? -1 : 1;
+  const foes = s.players.filter((p) => p.team !== caster.team && p.role !== 'GK').slice(0, 3);
+  const spots = [
+    [60, 0],
+    [90, -40],
+    [90, 40],
+  ];
+  foes.forEach((foe, i) => {
+    foe.x = caster.x + dir * spots[i][0];
+    foe.y = caster.y + spots[i][1];
+    foe.vx = 0;
+    foe.vy = 0;
+  });
+  return { foes: foes.map((f) => f.idx) };
 };
 
 // Test-only: an opponent 170 px ahead of Guan Yu along his facing, in his lane (the bike hits him).
@@ -314,6 +367,46 @@ try {
             if (o.name === 'fx:burst') P.burst = true;
             if (o.name === 'fx:chain') P.chain = true;
             if (o.name === 'fx:form' && o.anims?.currentAnim?.key === 'fx-daqiao:active') P.active = true;
+          }
+          requestAnimationFrame(tick);
+        };
+        tick();
+      });
+    }
+
+    let eastwind = null;
+    if (c.effect === 'eastwindStart') {
+      eastwind = await page.evaluate(stageEastwind);
+      // Per-frame latch of the eastwind's short-lived states: the tornado, the burst ring, and the field's loop (it keeps the fx:burst name).
+      await page.evaluate(() => {
+        window.__eastwind = { tornado: false, burst: false, active: false };
+        const scene = window.__sg.scene;
+        const tick = () => {
+          if (window.__sg.scene !== scene) return;
+          for (const o of scene.children.list) {
+            if (!o.visible) continue;
+            const key = o.anims?.currentAnim?.key;
+            if (o.name === 'fx:tornado') window.__eastwind.tornado = true;
+            if (o.name === 'fx:burst' && key === 'fx-zhouyu:burst') window.__eastwind.burst = true;
+            if (o.name === 'fx:burst' && key === 'fx-zhouyu:active') window.__eastwind.active = true;
+          }
+          requestAnimationFrame(tick);
+        };
+        tick();
+      });
+    }
+
+    if (c.effect === 'arrowshipStart') {
+      // Per-frame latch of the ship's animation keys (emerge, then the stage it shows).
+      await page.evaluate(() => {
+        window.__shipAnims = [];
+        const scene = window.__sg.scene;
+        const tick = () => {
+          if (window.__sg.scene !== scene) return;
+          for (const f of scene.fx) {
+            if (f.sprite.name !== 'fx:emerge') continue;
+            const k = f.sprite.anims?.currentAnim?.key;
+            if (k && !window.__shipAnims.includes(k)) window.__shipAnims.push(k);
           }
           requestAnimationFrame(tick);
         };
@@ -480,10 +573,57 @@ try {
       c.effect === 'leapLand'
         ? await page.evaluate(() => window.__sg.state().players.filter((p) => p.silenceTicks > 0).length)
         : null;
+    // The ship's 2 s count is held through this shot (test-only, see the arrowship check below).
+    if (c.effect === 'arrowshipStart') {
+      await page.evaluate(() => {
+        for (const a of window.__sg.state().arrowships) a.ticks = 0;
+      });
+    }
     await page.waitForTimeout(250);
     await page.screenshot({ path: shot(`preview-${c.id}.png`) });
     const events = await page.evaluate(() => window.__sg.preview().events);
     report(`${name} special fires (${c.effect})`, fired, `events ${[...new Set(events)].join(',')}`);
+
+    if (c.effect === 'arrowshipStart') {
+      // The 250 ms preview shot above is the card with the ship rising; the first stage shows once it has risen (0.5 s).
+      copyFileSync(shot('preview-sunquan.png'), resolve(sunquanDir, 'preview-card-sunquan.png'));
+      const staged = await page
+        .waitForFunction(() => window.__shipAnims.includes('fx-sunquan:stage1'), null, { timeout: 3000, polling: 'raf' })
+        .then(() => true, () => false);
+      const anims = await page.evaluate(() => window.__shipAnims);
+      report(`${name} ship rises then shows its arrow stage (fx-sunquan:emerge, stage1)`, staged && anims.includes('fx-sunquan:emerge'), `anims ${anims.join(',')}`);
+      // Screenshots are slow in headless, so the ship's 2 s count is held (its ticks reset to 0, test-only) before each one.
+      const holdShip = () => page.evaluate(() => {
+        for (const a of window.__sg.state().arrowships) a.ticks = 0;
+      });
+      // Shot as the ship has risen (stage 1, no arrows yet). The shot is staged after it, so the block lands on the stage.
+      await holdShip();
+      await page.screenshot({ path: resolve(sunquanDir, 'sunquan-preview-rise.png'), scale: 'css' });
+      await holdShip();
+      await page.evaluate(stageSunquanShot);
+      const blocked = await page
+        .waitForFunction(() => window.__sg.preview().events.includes('arrowshipBlock'), null, { timeout: 3000, polling: 'raf' })
+        .then(() => true, () => false);
+      report(`${name} opponent's shot is blocked by the ship (arrowshipBlock)`, blocked);
+      const stage2 = await page
+        .waitForFunction(() => window.__shipAnims.includes('fx-sunquan:stage2'), null, { timeout: 2000, polling: 'raf' })
+        .then(() => true, () => false);
+      await holdShip();
+      await page.screenshot({ path: resolve(sunquanDir, 'sunquan-preview-block.png'), scale: 'css' });
+      report(`${name} arrow stage advances after the block (fx-sunquan:stage2)`, stage2);
+      // The volley fires when the ship's 2 s count ends; the victims staged in the volley area are knocked back (stunned, airborne).
+      const volley = await page
+        .waitForFunction(() => window.__sg.preview().events.includes('arrowshipVolley'), null, { timeout: 6000, polling: 'raf' })
+        .then(() => true, () => false);
+      const knocked = await page.evaluate(() => {
+        const s = window.__sg.state();
+        const me = s.players[window.__sg.humanIdx];
+        return s.players.filter((p) => p.team !== me.team && (p.action === 'hitstun' || p.z > 0)).length;
+      });
+      await page.waitForFunction(() => window.__shipAnims.includes('fx-sunquan:volley'), null, { timeout: 2000, polling: 'raf' }).catch(() => {});
+      await page.screenshot({ path: resolve(sunquanDir, 'sunquan-preview-volley.png'), scale: 'css' });
+      report(`${name} volley fires and knocks the staged victims (arrowshipVolley)`, volley && knocked >= 1, `knocked ${knocked}`);
+    }
 
     if (c.effect === 'portalStart') {
       // The 250 ms preview shot above is the card and the circle forming (it plays in over 0.5 s); the arrival follows. Each screenshot
@@ -498,6 +638,29 @@ try {
       report(`${name} light pillar and landing burst on arrival (fx:summon, fx:burst)`, P.pillar && P.burst, `pillar ${P.pillar}, burst ${P.burst}`);
       report(`${name} magic circle forms then loops (fx-daqiao:active)`, P.active);
       report(`${name} staged opponent inside the field is bound (fx:chain)`, P.chain, `staged ${portal?.foe}`);
+    }
+
+    if (c.effect === 'eastwindStart') {
+      // The 250 ms preview shot above is the card (the blow-out is already done at the cast); the field's loop is shot once it has started.
+      copyFileSync(shot('preview-zhouyu.png'), resolve(zhouyuDir, 'preview-card-zhouyu.png'));
+      await page.waitForFunction(() => window.__eastwind.active, null, { timeout: 3000, polling: 'raf' }).catch(() => {});
+      await page.screenshot({ path: resolve(zhouyuDir, 'zhouyu-preview-field.png'), scale: 'css' });
+      const E = await page.evaluate(() => window.__eastwind);
+      const dists = await page.evaluate((ids) => {
+        const s = window.__sg.state();
+        const w = s.eastwinds[0] ?? s.players[window.__sg.humanIdx];
+        return ids.map((i) => Math.hypot(s.players[i].x - w.x, s.players[i].y - w.y));
+      }, eastwind.foes);
+      report(
+        `${name} enemies within 150 px are blown outside (eastwindStart)`,
+        dists.every((d) => d > 150),
+        `distances ${dists.map((d) => d.toFixed(0)).join(',')}`,
+      );
+      report(
+        `${name} tornado, burst ring and wind field loop are drawn (fx:tornado, fx:burst, fx-zhouyu:active)`,
+        E.tornado && E.burst && E.active,
+        `tornado ${E.tornado}, burst ${E.burst}, active ${E.active}`,
+      );
     }
 
     if (c.effect === 'iceStart') {

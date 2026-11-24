@@ -29,7 +29,11 @@ export type SpriteAnim = 'idle' | 'run' | 'attack' | 'charge' | 'special' | 'cas
  * markHold until it erupts), the petal ring at her feet at her cast (petals), the cherry-blossom tornado at the eruption (gust), and
  * the flower burst on each victim (impact). For Da Qiao's portal: the fan slash (punch), the magic circle forming on the ground at the cast
  * (form, then active until the portal ends), the light pillar where each teammate is summoned (summon, then the landing burst), and the
- * chain binding on each opponent inside the portal (chain).
+ * chain binding on each opponent inside the portal (chain). For Sun Quan's arrowship: the glowing arrow (punch, and the arrows flying across the
+ * volley), the ship rising out of the water ring (emerge), the ship with 1 to 4 arrows stuck in it (stage1-stage4), the ship's volley of arrows then
+ * its fade (volley), and the impact burst where an arrow lands (impact). For Zhou Yu's eastwind: the fiery sword arc (punch), the
+ * tornado at the cast point (tornado), the burst ring on the ground at the cast (burst), the wind field looping until it ends (active),
+ * and the slow debuff on each opponent inside (slow).
  */
 export type FxAnim =
   | 'thrust'
@@ -74,7 +78,16 @@ export type FxAnim =
   | 'petals'
   | 'form'
   | 'active'
-  | 'chain';
+  | 'chain'
+  | 'arrow'
+  | 'emerge'
+  | 'stage1'
+  | 'stage2'
+  | 'stage3'
+  | 'stage4'
+  | 'volley'
+  | 'tornado'
+  | 'slow';
 
 export interface SpriteMeta {
   frameWidth: number;
@@ -151,6 +164,8 @@ const ZHENJI_META: SpriteMeta = { frameWidth: 160, frameHeight: 123, cols: 4, ro
 const SUNCE_META: SpriteMeta = { frameWidth: 142, frameHeight: 128, cols: 4, rows: 5, anchorX: 73, anchorY: 124 };
 const XIAOQIAO_META: SpriteMeta = { frameWidth: 135, frameHeight: 123, cols: 4, rows: 5, anchorX: 63, anchorY: 121 };
 const DAQIAO_META: SpriteMeta = { frameWidth: 152, frameHeight: 128, cols: 4, rows: 5, anchorX: 78, anchorY: 125 };
+const SUNQUAN_META: SpriteMeta = { frameWidth: 196, frameHeight: 128, cols: 4, rows: 5, anchorX: 95, anchorY: 127 };
+const ZHOUYU_META: SpriteMeta = { frameWidth: 167, frameHeight: 127, cols: 4, rows: 5, anchorX: 91, anchorY: 125 };
 
 /** Frame index of a sheet cell (row-major) for a sheet with this meta. */
 const cellAt = (meta: SpriteMeta) => (row: number, col: number): number => row * meta.cols + col;
@@ -168,6 +183,8 @@ const zjat = cellAt(ZHENJI_META);
 const suat = cellAt(SUNCE_META);
 const xqat = cellAt(XIAOQIAO_META);
 const dqat = cellAt(DAQIAO_META);
+const sqat = cellAt(SUNQUAN_META);
+const zyat = cellAt(ZHOUYU_META);
 /** The Zhao Yun and Zhuge Liang effect sheets are 4 columns of 181 px frames. */
 const fxat = (row: number, col: number): number => row * 4 + col;
 
@@ -663,6 +680,83 @@ export const SPRITE_CONFIGS: Partial<Record<string, SpriteConfig>> = {
         summon: { frames: [fxat(3, 0), fxat(3, 1), fxat(3, 2), fxat(3, 3)], fps: 10, repeat: 0 },
         burst: { frames: [fxat(4, 0), fxat(4, 1), fxat(4, 2), fxat(4, 3)], fps: 12, repeat: 0 },
         chain: { frames: [fxat(5, 0), fxat(5, 1), fxat(5, 2), fxat(5, 3)], fps: 8, repeat: -1 },
+      },
+    },
+  },
+  sunquan: {
+    key: 'sprite-sunquan',
+    url: 'sprites/sunquan.png',
+    meta: SUNQUAN_META,
+    displayHeight: 58,
+    shadowScale: 1.0,
+    anims: {
+      idle: { frames: [sqat(0, 0), sqat(0, 1), sqat(0, 2), sqat(0, 3)], fps: 6, repeat: -1 },
+      run: { frames: [sqat(1, 0), sqat(1, 1), sqat(1, 2), sqat(1, 3)], fps: 10, repeat: -1 },
+      attack: { frames: [sqat(2, 0), sqat(2, 1), sqat(2, 2), sqat(2, 3)], fps: 14, repeat: 0 },
+      charge: { frames: [sqat(2, 0)], fps: 1, repeat: -1 },
+      cast: { frames: [sqat(3, 1)], fps: 1, repeat: -1 },
+      special: { frames: [sqat(3, 0), sqat(3, 1), sqat(3, 2), sqat(3, 3)], fps: 8, repeat: 0 },
+      rampage: { frames: [sqat(3, 3)], fps: 1, repeat: -1 },
+      lunge: { frames: [sqat(3, 3)], fps: 1, repeat: -1 },
+      shot: { frames: [sqat(2, 2)], fps: 1, repeat: -1 },
+      dive: { frames: [sqat(4, 1)], fps: 1, repeat: -1 },
+      hitstun: { frames: [sqat(4, 0)], fps: 1, repeat: -1 },
+      down: { frames: [sqat(4, 1), sqat(4, 2)], fps: 6, repeat: 0 },
+      recover: { frames: [sqat(4, 3)], fps: 1, repeat: -1 },
+    },
+    fx: {
+      key: 'fx-sunquan',
+      url: 'sprites/sunquan-fx.png',
+      frameWidth: 240,
+      frameHeight: 152,
+      punch: 'arrow',
+      punchWidth: 110,
+      anims: {
+        arrow: { frames: [fxat(0, 0), fxat(0, 1), fxat(0, 2), fxat(0, 3)], fps: 16, repeat: -1 },
+        emerge: { frames: [fxat(1, 0), fxat(1, 1), fxat(1, 2), fxat(1, 3)], fps: 8, repeat: 0 },
+        stage1: { frames: [fxat(2, 0)], fps: 1, repeat: -1 },
+        stage2: { frames: [fxat(2, 1)], fps: 1, repeat: -1 },
+        stage3: { frames: [fxat(2, 2)], fps: 1, repeat: -1 },
+        stage4: { frames: [fxat(2, 3)], fps: 1, repeat: -1 },
+        volley: { frames: [fxat(3, 0), fxat(3, 1), fxat(3, 2), fxat(3, 3)], fps: 10, repeat: 0 },
+        impact: { frames: [fxat(4, 0), fxat(4, 1), fxat(4, 2), fxat(4, 3)], fps: 14, repeat: 0 },
+      },
+    },
+  },
+  zhouyu: {
+    key: 'sprite-zhouyu',
+    url: 'sprites/zhouyu.png',
+    meta: ZHOUYU_META,
+    displayHeight: 58,
+    shadowScale: 1.0,
+    anims: {
+      idle: { frames: [zyat(0, 0), zyat(0, 1), zyat(0, 2), zyat(0, 3)], fps: 6, repeat: -1 },
+      run: { frames: [zyat(1, 0), zyat(1, 1), zyat(1, 2), zyat(1, 3)], fps: 10, repeat: -1 },
+      attack: { frames: [zyat(2, 0), zyat(2, 1), zyat(2, 2), zyat(2, 3)], fps: 14, repeat: 0 },
+      charge: { frames: [zyat(2, 0)], fps: 1, repeat: -1 },
+      cast: { frames: [zyat(3, 1)], fps: 1, repeat: -1 },
+      special: { frames: [zyat(3, 0), zyat(3, 1), zyat(3, 2), zyat(3, 3)], fps: 8, repeat: 0 },
+      rampage: { frames: [zyat(3, 3)], fps: 1, repeat: -1 },
+      lunge: { frames: [zyat(3, 3)], fps: 1, repeat: -1 },
+      shot: { frames: [zyat(2, 2)], fps: 1, repeat: -1 },
+      dive: { frames: [zyat(4, 1)], fps: 1, repeat: -1 },
+      hitstun: { frames: [zyat(4, 0)], fps: 1, repeat: -1 },
+      down: { frames: [zyat(4, 1), zyat(4, 2)], fps: 6, repeat: 0 },
+      recover: { frames: [zyat(4, 3)], fps: 1, repeat: -1 },
+    },
+    fx: {
+      key: 'fx-zhouyu',
+      url: 'sprites/zhouyu-fx.png',
+      frameWidth: 200,
+      frameHeight: 128,
+      punch: 'slash',
+      punchWidth: 110,
+      anims: {
+        slash: { frames: [fxat(0, 0), fxat(0, 1), fxat(0, 2), fxat(0, 3)], fps: 20, repeat: 0 },
+        tornado: { frames: [fxat(1, 0), fxat(1, 1), fxat(1, 2), fxat(1, 3)], fps: 12, repeat: 0 },
+        burst: { frames: [fxat(2, 0), fxat(2, 1), fxat(2, 2), fxat(2, 3)], fps: 12, repeat: 0 },
+        active: { frames: [fxat(3, 0), fxat(3, 1), fxat(3, 2), fxat(3, 3)], fps: 8, repeat: -1 },
+        slow: { frames: [fxat(4, 0), fxat(4, 1), fxat(4, 2), fxat(4, 3)], fps: 8, repeat: -1 },
       },
     },
   },

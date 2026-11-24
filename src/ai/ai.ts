@@ -1,4 +1,5 @@
 import {
+  EASTWIND_RADIUS,
   EMPTY_INPUT,
   FEAR_RADIUS,
   FIELD_D,
@@ -71,6 +72,8 @@ const SUMMON_AI_MIN_OPPONENTS = 2;
 const FEAR_MIN_OPPONENTS = 2;
 /** Portal (Da Qiao): cast when an enemy carrier is within PORTAL_RADIUS, or at least PORTAL_MIN_OPPONENTS standing opponents are. */
 const PORTAL_MIN_OPPONENTS = 2;
+/** East wind (Zhou Yu): cast when an enemy carrier is within EASTWIND_RADIUS, or at least EASTWIND_MIN_OPPONENTS standing opponents are. */
+const EASTWIND_MIN_OPPONENTS = 2;
 /** Ride (Guan Yu), off the ball: the lane starts this far ahead of him; two standing opponents in it, or an opponent carrier, cast it. */
 const RIDE_LANE_MIN_AHEAD = 30;
 const RIDE_LANE_MIN_OPPONENTS = 2;
@@ -415,6 +418,19 @@ function ownerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPla
     return frame(NO_MOVE, { l: true });
   }
 
+  // Zhou Yu's east wind while carrying: the blast is instant, so cast it when a pair of opponents is pressing him.
+  if (
+    p.specialMode === 'eastwind' &&
+    !p.prevInput.l &&
+    p.specialCooldown === 0 &&
+    p.stamina >= SHOT_MIN_STAMINA &&
+    eastwindWanted(state, p) &&
+    nextRandom(ai) < SHOT_FULL_CHANCE
+  ) {
+    s.intent = 'eastwind';
+    return frame(NO_MOVE, { l: true });
+  }
+
   const goalDist = Math.abs(goalX - p.x);
   const shotRange = p.role === 'DF' ? SHOT_RANGE_DF : SHOT_RANGE_FWD;
   const inShotRange = goalDist < shotRange;
@@ -549,6 +565,9 @@ function offBallSpecialFrame(
       break;
     case 'portal':
       wanted = portalWanted(state, p);
+      break;
+    case 'eastwind':
+      wanted = eastwindWanted(state, p);
       break;
     default:
       return null;
@@ -722,6 +741,16 @@ function portalWanted(state: GameState, p: Player): boolean {
   const carrier = state.ball.ownerIdx === -1 ? null : state.players[state.ball.ownerIdx];
   if (carrier !== null && carrier.team !== p.team && dist(p.x, p.y, carrier.x, carrier.y) <= PORTAL_RADIUS) return true;
   return opponentsWithin(state, p, PORTAL_RADIUS) >= PORTAL_MIN_OPPONENTS;
+}
+
+/**
+ * Zhou Yu's east wind is worth casting at his position: an enemy carrier stands within EASTWIND_RADIUS of him, or at
+ * least EASTWIND_MIN_OPPONENTS standing opponents do. Off the ball and as the carrier alike.
+ */
+function eastwindWanted(state: GameState, p: Player): boolean {
+  const carrier = state.ball.ownerIdx === -1 ? null : state.players[state.ball.ownerIdx];
+  if (carrier !== null && carrier.team !== p.team && dist(p.x, p.y, carrier.x, carrier.y) <= EASTWIND_RADIUS) return true;
+  return opponentsWithin(state, p, EASTWIND_RADIUS) >= EASTWIND_MIN_OPPONENTS;
 }
 
 /**

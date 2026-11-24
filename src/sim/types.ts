@@ -76,7 +76,7 @@ export interface Player {
   /** Ticks during which this player cannot be bumped by a rampaging opponent again. */
   bumpCooldown: number;
   /** What the special button (L) does: a rampage, a roar (shockwave) for Zhang Fei, a lunge (long dash) for Zhao Yun, a beam (channel, then strikes one opponent) for Zhuge Liang, a summon (cavalry riders) for Ma Chao, a fear (opponents stand still) for Zhang Liao, or a tiger guard (swallows a shot, spits it at opponents) for Xu Chu. */
-  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger' | 'slash' | 'ride' | 'icefield' | 'sail' | 'gust' | 'portal' | 'arrowship';
+  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger' | 'slash' | 'ride' | 'icefield' | 'sail' | 'gust' | 'portal' | 'arrowship' | 'eastwind';
   /** Ticks until the special can be used again. Set when a rampage starts or a roar fires. */
   specialCooldown: number;
   /** Ticks left silenced (a leap landing): only movement works, no J, K or L. 0 = not silenced. */
@@ -204,6 +204,20 @@ export interface Portal {
   y: number;
   ticks: number;
   summoned: boolean;
+}
+
+/**
+ * A field from Zhou Yu's 赤壁東風 (eastwind). It is fixed at the cast point (x, y) and does not move with him. ticks counts the
+ * ticks since the cast. Exists only while the phase is 'play'.
+ */
+export interface EastWind {
+  id: number;
+  /** Idx of the caster (Zhou Yu). */
+  ownerIdx: number;
+  team: 0 | 1;
+  x: number;
+  y: number;
+  ticks: number;
 }
 
 /**
@@ -363,6 +377,10 @@ export type SimEvent =
   | { type: 'portalArrive'; playerIdx: number; x: number; y: number }
   /** A portal ends (timer, or the phase left play). */
   | { type: 'portalEnd'; portalId: number }
+  /** Zhou Yu's eastwind is cast at (x, y) with this radius; the opponents inside it are blown out at once (victimIdxs). */
+  | { type: 'eastwindStart'; playerIdx: number; windId: number; x: number; y: number; radius: number; victimIdxs: number[] }
+  /** An eastwind ends (timer, or the phase left play). */
+  | { type: 'eastwindEnd'; windId: number }
   /** Sun Quan's ship is raised at (x, y) (his own goal, ship line x), facing dir, covering halfSpan either side of y. */
   | { type: 'arrowshipStart'; playerIdx: number; shipId: number; x: number; y: number; dir: 1 | -1; halfSpan: number }
   /** The ship blocks a shot ('ball') or an attack ('attack') at (x, y); arrows is its count after the block. */
@@ -454,6 +472,10 @@ export interface GameState {
   portals: Portal[];
   /** Id given to the next portal. */
   nextPortalId: number;
+  /** Eastwind fields from Zhou Yu's 赤壁東風. Empty outside play. */
+  eastwinds: EastWind[];
+  /** Id given to the next eastwind. */
+  nextEastWindId: number;
   ball: Ball;
   match: MatchState;
   /** Cleared at the start of every step. */

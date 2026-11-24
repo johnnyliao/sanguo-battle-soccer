@@ -1308,6 +1308,68 @@ describe('AI Da Qiao portal (wu DF)', () => {
   });
 });
 
+describe('AI Zhou Yu east wind (wu MF)', () => {
+  const ZHOUYU = 2;
+  const TICKS = 400;
+  const MID = FIELD_D / 2;
+
+  /** Wu (idx 0-4) against wei (idx 5-9), everyone parked far away. Zhou Yu is wu's MF at idx 2, at x 500 facing the wei side. */
+  function eastwindState(seed: number): GameState {
+    const state = createInitialState({ seed, teams: [getTeam('wu'), getTeam('wei')], startInPlay: true }, SIZE_PARAMS);
+    state.players.forEach((p, i) => {
+      p.x = 100;
+      p.y = 20 + i * 24;
+    });
+    state.ball.ownerIdx = -1;
+    state.ball.x = 300;
+    state.ball.y = 40;
+    place(state, ZHOUYU, 500, MID);
+    return state;
+  }
+
+  it('the east wind is wired to Zhou Yu as a no-ball special', () => {
+    const state = eastwindState(90);
+    expect(state.players[ZHOUYU].specialMode).toBe('eastwind');
+    expect(state.players[ZHOUYU].specialNoBall).toBe(true);
+  });
+
+  it('casts when the enemy carrier is 100 px away', () => {
+    const state = eastwindState(91);
+    place(state, 5, 600, MID);
+    carry(state, 5);
+    expect(driveOne(state, createAIState(91), ZHOUYU, TICKS, true).pressedL).toBe(true);
+  });
+
+  it('casts when two opponents stand 100 px away', () => {
+    const state = eastwindState(92);
+    place(state, 5, 600, MID);
+    place(state, 6, 600, MID + 40);
+    expect(driveOne(state, createAIState(92), ZHOUYU, TICKS, true).pressedL).toBe(true);
+  });
+
+  it('does not cast when only one non-carrier opponent is near', () => {
+    const state = eastwindState(93);
+    place(state, 5, 600, MID);
+    expect(driveOne(state, createAIState(93), ZHOUYU, TICKS, true).pressedL).toBe(false);
+  });
+
+  it('does not cast while on cooldown', () => {
+    const state = eastwindState(94);
+    place(state, 5, 600, MID);
+    carry(state, 5);
+    state.players[ZHOUYU].specialCooldown = SPECIAL_COOLDOWN_TICKS;
+    expect(driveOne(state, createAIState(94), ZHOUYU, TICKS, true).pressedL).toBe(false);
+  });
+
+  it('as the carrier casts when two opponents stand 100 px away', () => {
+    const state = eastwindState(95);
+    place(state, 5, 600, MID);
+    place(state, 6, 600, MID + 40);
+    carry(state, ZHOUYU);
+    expect(driveOne(state, createAIState(95), ZHOUYU, TICKS, true).pressedL).toBe(true);
+  });
+});
+
 describe('AI Sun Quan arrowship (wu GK)', () => {
   const SUNQUAN = 0;
   const WEI_CARRIER = 5;
