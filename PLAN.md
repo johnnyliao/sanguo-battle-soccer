@@ -251,7 +251,7 @@
 # Steps 18
 - [x] 1. 候選素材＋試聽頁 ?sfx=pack（每格 A/B/C，音量拉齊）— worker；已部署（99 檔 5.6 MB）
 - [x] 2. 使用者挑選 → 接進比賽 — worker（33 格；hit_punch=Break_01、hit_heavy=BlastImpact_03＋impact_punch_heavy_003@0.8）
-- [ ] 3. 文件、commit、部署、正式網址 e2e
+- [x] 3. 文件、commit（1f8828b）、部署、正式網址 e2e（sfx 33 檔全 200、special、mobile PASS）
 
 - 2026-11-24 使用者第一輪選擇（v2 試聽頁）：
   - kick_pass = B：SmallImpact_02_s01.wav
@@ -287,3 +287,12 @@
   - zhouyu_wind = B：Wind Spell Impact 3_s07.wav
   - hit_punch：重找（三個 impact_punch_medium 都不要）；hit_heavy：A（impact_punch_heavy_000）暫留但要再找更好的。
 - 720b69b 部署後正式網址 e2e：sfx/preview/sprite/mobile/stamina PASS；special 首跑 waitForFunction 逾時一次、重跑 PASS（未查，待觀察）。
+
+# Goal 19（2026-11-24）Roblox demo（規劃書 docs/roblox-rpg-plan.md）
+- 使用者要求：先做一個 Roblox demo 給他看。
+- 做法：另開 ~/sanguo-roblox（不動網頁版）；roblox-ts 把 src/sim 複本編譯成 Luau；Rojo 在 122 build 出 .rbxlx，使用者在筆電 Studio 開啟按 Play。Lune（Luau 執行器）在 122 跑 AI 對 AI 驗證規則。
+- demo 範圍：色塊／方塊角色＋名字（圖片要上傳 Roblox 才能用，先不做）、斜側固定鏡頭、1 真人＋AI 5v5、鍵盤＋手機按鈕。
+# Steps 19
+- [ ] 1. 工具＋R0 可行性：裝 roblox-ts、Rojo、Lune；編譯 sim 複本、列不相容處並修到能編譯；Lune 跑 AI 對 AI 一場 — worker
+- [ ] 2. 遊戲腳本：伺服器 60Hz 跑 step、客戶端送按鍵、畫面同步、鏡頭、UI — worker
+- [ ] 3. rojo build → .rbxlx，交給使用者在 Studio 試玩 — me
