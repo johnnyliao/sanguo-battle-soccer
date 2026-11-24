@@ -76,7 +76,7 @@ export interface Player {
   /** Ticks during which this player cannot be bumped by a rampaging opponent again. */
   bumpCooldown: number;
   /** What the special button (L) does: a rampage, a roar (shockwave) for Zhang Fei, a lunge (long dash) for Zhao Yun, a beam (channel, then strikes one opponent) for Zhuge Liang, a summon (cavalry riders) for Ma Chao, a fear (opponents stand still) for Zhang Liao, or a tiger guard (swallows a shot, spits it at opponents) for Xu Chu. */
-  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger' | 'slash' | 'ride' | 'icefield' | 'sail' | 'gust';
+  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger' | 'slash' | 'ride' | 'icefield' | 'sail' | 'gust' | 'portal';
   /** Ticks until the special can be used again. Set when a rampage starts or a roar fires. */
   specialCooldown: number;
   /** Ticks left silenced (a leap landing): only movement works, no J, K or L. 0 = not silenced. */
@@ -187,6 +187,21 @@ export interface Gust {
   x: number;
   y: number;
   ticks: number;
+}
+
+/**
+ * A portal from Daqiao's 時空之門. It is fixed at the cast point (x, y) and does not move with her. ticks counts the ticks since
+ * the cast. summoned is set once her teammates have been called to her (PORTAL_SUMMON_DELAY_TICKS). Exists only while the phase is 'play'.
+ */
+export interface Portal {
+  id: number;
+  /** Idx of the caster (Daqiao). */
+  ownerIdx: number;
+  team: 0 | 1;
+  x: number;
+  y: number;
+  ticks: number;
+  summoned: boolean;
 }
 
 /**
@@ -321,6 +336,14 @@ export type SimEvent =
   | { type: 'gustBlow'; gustId: number; x: number; y: number; victimIdxs: number[] }
   /** A gust ends without erupting (the phase left play). */
   | { type: 'gustEnd'; gustId: number }
+  /** Daqiao's portal is set at (x, y) with this radius; it summons her teammates after PORTAL_SUMMON_DELAY_TICKS. */
+  | { type: 'portalStart'; playerIdx: number; portalId: number; x: number; y: number; radius: number }
+  /** The portal calls her teammates: summonedIdxs are the teammates moved to her (none if nobody was eligible). */
+  | { type: 'portalSummon'; playerIdx: number; portalId: number; summonedIdxs: number[] }
+  /** A summoned teammate arrives at (x, y), one event per summoned teammate. */
+  | { type: 'portalArrive'; playerIdx: number; x: number; y: number }
+  /** A portal ends (timer, or the phase left play). */
+  | { type: 'portalEnd'; portalId: number }
   | { type: 'whistle'; reason: 'kickoff' | 'half' | 'full' }
   | { type: 'goal'; team: 0 | 1; scorerIdx: number }
   | { type: 'matchEnd'; score: [number, number] }
@@ -396,6 +419,10 @@ export interface GameState {
   gusts: Gust[];
   /** Id given to the next gust. */
   nextGustId: number;
+  /** Portals from Daqiao's 時空之門. Empty outside play. */
+  portals: Portal[];
+  /** Id given to the next portal. */
+  nextPortalId: number;
   ball: Ball;
   match: MatchState;
   /** Cleared at the start of every step. */

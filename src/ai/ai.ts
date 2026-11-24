@@ -10,6 +10,7 @@ import {
   LEAP_BACK_DISTANCE,
   LEAP_FLY_DISTANCE,
   LEAP_RADIUS,
+  PORTAL_RADIUS,
   RIDE_DISTANCE,
   RIDE_LANE_HALF,
   ROAR_FORWARD,
@@ -68,6 +69,8 @@ const SUMMON_AI_RANGE = 200;
 const SUMMON_AI_MIN_OPPONENTS = 2;
 /** Fear (Zhang Liao): cast when an enemy carrier is within FEAR_RADIUS, or at least FEAR_MIN_OPPONENTS standing opponents are. */
 const FEAR_MIN_OPPONENTS = 2;
+/** Portal (Da Qiao): cast when an enemy carrier is within PORTAL_RADIUS, or at least PORTAL_MIN_OPPONENTS standing opponents are. */
+const PORTAL_MIN_OPPONENTS = 2;
 /** Ride (Guan Yu), off the ball: the lane starts this far ahead of him; two standing opponents in it, or an opponent carrier, cast it. */
 const RIDE_LANE_MIN_AHEAD = 30;
 const RIDE_LANE_MIN_OPPONENTS = 2;
@@ -392,6 +395,19 @@ function ownerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPla
     return frame(NO_MOVE, { l: true });
   }
 
+  // Da Qiao's portal while carrying: the field stays where she cast it, so cast it when an enemy carrier or a pair of opponents is inside.
+  if (
+    p.specialMode === 'portal' &&
+    !p.prevInput.l &&
+    p.specialCooldown === 0 &&
+    p.stamina >= SHOT_MIN_STAMINA &&
+    portalWanted(state, p) &&
+    nextRandom(ai) < SHOT_FULL_CHANCE
+  ) {
+    s.intent = 'portal';
+    return frame(NO_MOVE, { l: true });
+  }
+
   const goalDist = Math.abs(goalX - p.x);
   const shotRange = p.role === 'DF' ? SHOT_RANGE_DF : SHOT_RANGE_FWD;
   const inShotRange = goalDist < shotRange;
@@ -516,6 +532,9 @@ function offBallSpecialFrame(
       break;
     case 'gust':
       wanted = gustWanted(state, p);
+      break;
+    case 'portal':
+      wanted = portalWanted(state, p);
       break;
     default:
       return null;
@@ -661,6 +680,16 @@ function gustWanted(state: GameState, p: Player): boolean {
     if (dist(t.x, t.y, target.x, target.y) <= GUST_RADIUS) return true;
   }
   return false;
+}
+
+/**
+ * Da Qiao's portal is worth casting at her position: an enemy carrier stands within PORTAL_RADIUS of her, or at least
+ * PORTAL_MIN_OPPONENTS standing opponents do. Off the ball and as the owner alike.
+ */
+function portalWanted(state: GameState, p: Player): boolean {
+  const carrier = state.ball.ownerIdx === -1 ? null : state.players[state.ball.ownerIdx];
+  if (carrier !== null && carrier.team !== p.team && dist(p.x, p.y, carrier.x, carrier.y) <= PORTAL_RADIUS) return true;
+  return opponentsWithin(state, p, PORTAL_RADIUS) >= PORTAL_MIN_OPPONENTS;
 }
 
 /**

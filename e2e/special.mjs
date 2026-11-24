@@ -324,6 +324,91 @@ try {
   );
   report('dimmed 大招 shows the 需持球 caption without the ball (wu)', wuDimCaption, `caption visible ${wuDimCaption}`);
   await wu.context.close();
+
+  // e. Da Qiao (wu, human=6) 大招 quick tap without the ball casts 時空之門 at once (no 需持球 hint). Her teammates are summoned to her at 0.5 s.
+  const dq = await openTouchMatch(browser, 6, 'wu');
+  const dp = dq.page;
+  await dp.evaluate(() => {
+    const s = window.__sg.state();
+    const h = s.players[window.__sg.humanIdx];
+    h.x = 300;
+    h.y = 130;
+    h.stamina = h.maxStamina;
+    h.specialCooldown = 0;
+    s.ball.ownerIdx = -1;
+    s.ball.lastTouchIdx = -1;
+    s.ball.special = null;
+    s.ball.x = 100;
+    s.ball.y = 70;
+    s.ball.z = 0;
+    s.ball.vx = 0;
+    s.ball.vy = 0;
+    s.ball.vz = 0;
+  });
+  await dp.waitForTimeout(200);
+  await quickTap(dq.cdp, await buttonPoint(dp, 128, 92));
+  await dp.waitForFunction(() => window.__sg.state().portals.length > 0, null, { timeout: 3000 }).catch(() => {});
+  const cast = await dp.evaluate(() => ({
+    charId: window.__sg.state().players[window.__sg.humanIdx].charId,
+    portals: window.__sg.state().portals.length,
+    hint: window.__sg.lastHint(),
+  }));
+  report(
+    'quick tap on 大招 without the ball (daqiao) casts the portal, no 需持球 hint',
+    cast.charId === 'daqiao' && cast.portals > 0 && cast.hint !== '需持球',
+    `charId ${cast.charId}, portals ${cast.portals}, hint "${cast.hint}"`,
+  );
+  await dp.waitForFunction(() => window.__sg.state().portals.some((f) => f.summoned), null, { timeout: 3000 }).catch(() => {});
+  const near = await dp.evaluate(() => {
+    const s = window.__sg.state();
+    const me = s.players[window.__sg.humanIdx];
+    return s.players.filter((p) => p.team === me.team && p.idx !== me.idx && p.role !== 'GK' && Math.hypot(p.x - me.x, p.y - me.y) <= 100).length;
+  });
+  report('portal summons teammates next to her at 0.5 s', near >= 1, `teammates within 100 px ${near}`);
+  await dp.screenshot({ path: shot('portal-daqiao.png') });
+  await dq.context.close();
+
+  // f. The field is live (its circle loops from the forming) with an opponent 90 px ahead of Da Qiao inside it: shot at the portal's 60th tick,
+  // while the 2 s portal is still on and the staged opponent is bound by the chain.
+  const dq2 = await openTouchMatch(browser, 6, 'wu');
+  const dp2 = dq2.page;
+  await dp2.evaluate(() => {
+    const s = window.__sg.state();
+    const h = s.players[window.__sg.humanIdx];
+    h.x = 300;
+    h.y = 130;
+    h.facingX = 1;
+    h.facingY = 0;
+    h.stamina = h.maxStamina;
+    h.specialCooldown = 0;
+    const foe = s.players.find((p) => p.team !== h.team && p.role !== 'GK');
+    foe.x = h.x + 90;
+    foe.y = h.y;
+    foe.vx = 0;
+    foe.vy = 0;
+    s.ball.ownerIdx = -1;
+    s.ball.lastTouchIdx = -1;
+    s.ball.special = null;
+    s.ball.x = 100;
+    s.ball.y = 70;
+    s.ball.z = 0;
+    s.ball.vx = 0;
+    s.ball.vy = 0;
+    s.ball.vz = 0;
+  });
+  await dp2.waitForTimeout(200);
+  await quickTap(dq2.cdp, await buttonPoint(dp2, 128, 92));
+  await dp2.waitForFunction(() => window.__sg.state().portals.some((f) => f.ticks >= 60), null, { timeout: 4000, polling: 'raf' }).catch(() => {});
+  const live = await dp2.evaluate(() => {
+    const s = window.__sg.state();
+    const f = s.portals[0];
+    const me = s.players[window.__sg.humanIdx];
+    const foe = s.players.find((p) => p.team !== me.team && p.role !== 'GK');
+    return { ticks: f?.ticks ?? -1, inside: Math.hypot(foe.x - f?.x, foe.y - f?.y) <= 140 };
+  });
+  await dp2.screenshot({ path: '/tmp/claude-1000/-home-safe3admin/0b7bc786-6b15-4a7f-930c-d14bce7049d1/scratchpad/daqiao/daqiao-field-active.png', scale: 'css' });
+  report('portal field is live at its 60th tick with the staged opponent inside', live.ticks >= 60 && live.inside, `ticks ${live.ticks}, inside ${live.inside}`);
+  await dq2.context.close();
 } catch (err) {
   console.log(`FAIL: ${err.message}`);
   failed = true;

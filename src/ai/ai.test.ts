@@ -1237,3 +1237,73 @@ describe('AI Xiao Qiao gust (wu MF)', () => {
     expect(driveOne(state, createAIState(76), XIAOQIAO, TICKS, true).pressedL).toBe(true);
   });
 });
+
+describe('AI Da Qiao portal (wu DF)', () => {
+  const DAQIAO = 1;
+  const TICKS = 400;
+  const MID = FIELD_D / 2;
+
+  /** Wu (idx 0-4) against wei (idx 5-9), everyone parked far away. Da Qiao is wu's DF at idx 1, at x 500 facing the wei side. */
+  function portalState(seed: number): GameState {
+    const state = createInitialState({ seed, teams: [getTeam('wu'), getTeam('wei')], startInPlay: true }, SIZE_PARAMS);
+    state.players.forEach((p, i) => {
+      p.x = 100;
+      p.y = 20 + i * 24;
+    });
+    state.ball.ownerIdx = -1;
+    state.ball.x = 300;
+    state.ball.y = 40;
+    place(state, DAQIAO, 500, MID);
+    return state;
+  }
+
+  it('the portal is wired to Da Qiao as a no-ball special', () => {
+    const state = portalState(80);
+    expect(state.players[DAQIAO].specialMode).toBe('portal');
+    expect(state.players[DAQIAO].specialNoBall).toBe(true);
+  });
+
+  it('casts when the enemy carrier is 100 px away', () => {
+    const state = portalState(81);
+    place(state, 5, 600, MID);
+    carry(state, 5);
+    expect(driveOne(state, createAIState(81), DAQIAO, TICKS, true).pressedL).toBe(true);
+  });
+
+  it('casts when two opponents stand 100 px away', () => {
+    const state = portalState(82);
+    place(state, 5, 600, MID);
+    place(state, 6, 600, MID + 40);
+    expect(driveOne(state, createAIState(82), DAQIAO, TICKS, true).pressedL).toBe(true);
+  });
+
+  it('does not cast when only one non-carrier opponent is near', () => {
+    const state = portalState(83);
+    place(state, 5, 600, MID);
+    expect(driveOne(state, createAIState(83), DAQIAO, TICKS, true).pressedL).toBe(false);
+  });
+
+  it('does not cast while on cooldown', () => {
+    const state = portalState(84);
+    place(state, 5, 600, MID);
+    carry(state, 5);
+    state.players[DAQIAO].specialCooldown = SPECIAL_COOLDOWN_TICKS;
+    expect(driveOne(state, createAIState(84), DAQIAO, TICKS, true).pressedL).toBe(false);
+  });
+
+  it('does not cast with too little stamina', () => {
+    const state = portalState(85);
+    place(state, 5, 600, MID);
+    carry(state, 5);
+    state.players[DAQIAO].stamina = 0;
+    expect(driveOne(state, createAIState(85), DAQIAO, 1, true).pressedL).toBe(false);
+  });
+
+  it('as the owner casts when two opponents stand 100 px away', () => {
+    const state = portalState(86);
+    place(state, 5, 600, MID);
+    place(state, 6, 600, MID + 40);
+    carry(state, DAQIAO);
+    expect(driveOne(state, createAIState(86), DAQIAO, TICKS, true).pressedL).toBe(true);
+  });
+});

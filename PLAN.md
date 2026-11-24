@@ -204,5 +204,18 @@
 - [x] 1. data＋sim：陣容、mode 'gust'＋測試 — worker
 - [x] 2. AI — worker（與 3 平行）
 - [x] 3. 切圖、fx、sprites、MatchScene、e2e — worker（me 看截圖）
-- [ ] 4. CLAUDE.md、commit、部署、正式網址 e2e — me＋worker
+- [x] 4. CLAUDE.md、commit、部署、正式網址 e2e — me＋worker（preview.mjs 首跑一次失敗：孫策預覽 pageerror「drawImage of null」，重跑 PASS；疑似預覽啟動競態，待觀察）
 - 11-24：擊飛（孫策撞船、小喬吹飛）改為空中 0.6 秒（LAUNCH_AIR_TICKS 36，最高約 40px）＋落地躺 0.4 秒，總 1 秒；原本 1 秒全在空中會飛到約 116px 出畫面。
+
+# Goal 15（2026-11-24）大喬「時空之門」
+吳國陣容：黃蓋 GK／大喬 DF／周瑜 MF／小喬 MF／孫策 FW（太史慈下場，列入未入選）。大喬（M，5/6/7/6/8）大招：施放點開大範圍法陣（半徑 140px，固定原地，持續 2 秒）；施放後 0.5 秒把場上隊友（不含守門員；倒地、無敵、坐船中的不拉）瞬移到她身邊一圈約 50px，持球隊友帶球過來；法陣內敵人速度剩 30%，每 0.5 秒扣 5%（最多 4 次）。持球不持球皆可。武器花舞扇。音效暫不做。
+
+# Constraints
+- 圖：art-src/daqiao-sheet.png（1122×1402，5×4：待機、走、扇攻擊、施法（蹲、舉扇、張口、持扇）、受擊/倒地/跪/起身）；art-src/daqiao-fx.png（1448×1086，6 列×4：扇弧、法陣成形、法陣煙霧循環、召喚光柱、落地爆、鎖鏈）。
+- 範本：甄姬冰雨（iceFields）＝固定法陣＋緩速＋DoT。
+
+# Steps 15
+- [x] 1. data＋sim：陣容、mode 'portal'＋測試 — worker（556 tests）
+- [x] 2. AI — worker（與 3 平行）（敵持球者在 140px 內或 140px 內 ≥2 敵就放；563 tests）
+- [x] 3. 切圖、fx、sprites、MatchScene、e2e — worker（me 看截圖；法陣 ADD 疊草地變黃白 → fx 轉透明圖＋法陣 NORMAL 混合）
+- [ ] 4. CLAUDE.md、commit、部署、正式網址 e2e — me＋worker

@@ -12,9 +12,13 @@
 // and the launched victim (sail-sunce-crash.png), then the dizzy stars when he lands.
 // Xiao Qiao's gust (wu roster): two opponents are staged 150 px and 190 px ahead of her. The mark circle on the ground is shot
 // (gust-xiaoqiao-mark.png) while the gust is live, then the eruption: the tornado and the launched victims (gust-xiaoqiao-blow.png).
+// Da Qiao's portal (wu roster): one opponent is staged 90 px ahead of her. The magic circle forms at the cast (preview card and
+// daqiao-field-forming.png), the summon at 0.5 s brings her teammates to her (daqiao-teammates-arriving.png, with the pillars and the
+// landing bursts), the circle loops (fx-daqiao:active) and the staged opponent is bound by the chain (latched; the active shot is in special.mjs).
+// The Da Qiao shots go to the scratchpad daqiao folder.
 // Usage: node e2e/preview.mjs <url>
 import { createRequire } from 'node:module';
-import { mkdirSync } from 'node:fs';
+import { copyFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -29,6 +33,8 @@ if (!base) {
 const outDir = '/tmp/claude-1000/-home-safe3admin/0b7bc786-6b15-4a7f-930c-d14bce7049d1/scratchpad/preview';
 mkdirSync(outDir, { recursive: true });
 const shot = (name) => resolve(outDir, name);
+const daqiaoDir = '/tmp/claude-1000/-home-safe3admin/0b7bc786-6b15-4a7f-930c-d14bce7049d1/scratchpad/daqiao';
+mkdirSync(daqiaoDir, { recursive: true });
 
 // Expected sim event per preview: the special fires (special), then its effect.
 const CASES = [
@@ -44,6 +50,7 @@ const CASES = [
   { id: 'zhenji', name: '甄姬', slot: 2, effect: 'iceStart', wei: true },
   { id: 'sunce', name: '孫策', slot: 4, effect: 'sailStart', wu: true },
   { id: 'xiaoqiao', name: '小喬', slot: 3, effect: 'gustMark', wu: true },
+  { id: 'daqiao', name: '大喬', slot: 1, effect: 'portalStart', wu: true },
 ];
 
 const errors = [];
@@ -148,6 +155,19 @@ const stageGust = () => {
     p.vy = 0;
   }
   return { near: foes[0].idx, far: foes[1].idx };
+};
+
+// Test-only: one opponent 90 px ahead of Da Qiao, inside her portal's reach (the chain binds him while the field is live).
+const stagePortal = () => {
+  const s = window.__sg.state();
+  const caster = s.players[window.__sg.humanIdx];
+  const dir = caster.facingX < 0 ? -1 : 1;
+  const foe = s.players.find((p) => p.team !== caster.team && p.role !== 'GK');
+  foe.x = caster.x + dir * 90;
+  foe.y = caster.y;
+  foe.vx = 0;
+  foe.vy = 0;
+  return { foe: foe.idx };
 };
 
 // Test-only: an opponent 170 px ahead of Guan Yu along his facing, in his lane (the bike hits him).
@@ -273,6 +293,33 @@ try {
     if (c.effect === 'sailStart') sailing = await page.evaluate(stageSail);
     let gust = null;
     if (c.effect === 'gustMark') gust = await page.evaluate(stageGust);
+    let portal = null;
+    if (c.effect === 'portalStart') {
+      portal = await page.evaluate(stagePortal);
+      // Per-frame latch of the portal's short-lived states: the summon's near teammates, the pillar and burst, the active loop, the chain.
+      await page.evaluate(() => {
+        window.__portal = { summonNear: -1, pillar: false, burst: false, active: false, chain: false };
+        const scene = window.__sg.scene;
+        const tick = () => {
+          if (window.__sg.scene !== scene) return;
+          const s = window.__sg.state();
+          const me = s.players[window.__sg.humanIdx];
+          const P = window.__portal;
+          if (P.summonNear < 0 && s.portals.some((f) => f.summoned)) {
+            P.summonNear = s.players.filter((p) => p.team === me.team && p.idx !== me.idx && p.role !== 'GK' && Math.hypot(p.x - me.x, p.y - me.y) <= 100).length;
+          }
+          for (const o of scene.children.list) {
+            if (!o.visible) continue;
+            if (o.name === 'fx:summon') P.pillar = true;
+            if (o.name === 'fx:burst') P.burst = true;
+            if (o.name === 'fx:chain') P.chain = true;
+            if (o.name === 'fx:form' && o.anims?.currentAnim?.key === 'fx-daqiao:active') P.active = true;
+          }
+          requestAnimationFrame(tick);
+        };
+        tick();
+      });
+    }
 
     if (c.effect === 'leapLand') {
       // Mid-air (the flight is above 20 px high): the crow trail is on him.
@@ -437,6 +484,21 @@ try {
     await page.screenshot({ path: shot(`preview-${c.id}.png`) });
     const events = await page.evaluate(() => window.__sg.preview().events);
     report(`${name} special fires (${c.effect})`, fired, `events ${[...new Set(events)].join(',')}`);
+
+    if (c.effect === 'portalStart') {
+      // The 250 ms preview shot above is the card and the circle forming (it plays in over 0.5 s); the arrival follows. Each screenshot
+      // is slow in headless and the preview ends about 5 s after its start, so only the arrival is shot here (the active field is in special.mjs).
+      copyFileSync(shot('preview-daqiao.png'), resolve(daqiaoDir, 'preview-card-daqiao.png'));
+      copyFileSync(shot('preview-daqiao.png'), resolve(daqiaoDir, 'daqiao-field-forming.png'));
+      await page.waitForFunction(() => window.__portal.pillar, null, { timeout: 3000, polling: 'raf' }).catch(() => {});
+      await page.screenshot({ path: resolve(daqiaoDir, 'daqiao-teammates-arriving.png'), scale: 'css' });
+      const summoned = await page.evaluate(() => window.__portal.summonNear >= 0);
+      const P = await page.evaluate(() => window.__portal);
+      report(`${name} teammates are summoned to her at 0.5 s (portalSummon)`, summoned && P.summonNear >= 1, `near ${P.summonNear}`);
+      report(`${name} light pillar and landing burst on arrival (fx:summon, fx:burst)`, P.pillar && P.burst, `pillar ${P.pillar}, burst ${P.burst}`);
+      report(`${name} magic circle forms then loops (fx-daqiao:active)`, P.active);
+      report(`${name} staged opponent inside the field is bound (fx:chain)`, P.chain, `staged ${portal?.foe}`);
+    }
 
     if (c.effect === 'iceStart') {
       // Mid-field (the first pulse is 0.5 s after the cast): the rain and spikes are on, and the staged opponents inside are tinted.

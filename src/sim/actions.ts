@@ -49,6 +49,13 @@ import {
   PLAYER_BASE_SPEED,
   PLAYER_GRAVITY,
   PLAYER_SPEED_PER_STAT,
+  PORTAL_DOT_INTERVAL,
+  PORTAL_DOT_RATIO,
+  PORTAL_RADIUS,
+  PORTAL_RING_RADIUS,
+  PORTAL_SLOW_MULT,
+  PORTAL_SUMMON_DELAY_TICKS,
+  PORTAL_TICKS,
   PUNCH_ACTIVE_FROM,
   PUNCH_ACTIVE_TO,
   PUNCH_HIT_RADIUS,
@@ -149,6 +156,7 @@ import {
   type InputFrame,
   type Player,
   type PlayerAction,
+  type Portal,
   type Rider,
   type SpecialShot,
 } from './types';
@@ -292,9 +300,11 @@ function coast(p: Player, damp: number): boolean {
   return p.actionTimer <= 0;
 }
 
+/** Where an ice field and a portal both slow a player, the lower multiplier applies (the minimum, not the product). */
 function maxSpeedOf(state: GameState, p: Player): number {
   const sailMult = p.sailTicks > 0 ? SAIL_SPEED_MULT : 1;
-  return (PLAYER_BASE_SPEED + p.stats.speed * PLAYER_SPEED_PER_STAT) * iceSlowMult(state, p) * sailMult;
+  const slowMult = Math.min(iceSlowMult(state, p), portalSlowMult(state, p));
+  return (PLAYER_BASE_SPEED + p.stats.speed * PLAYER_SPEED_PER_STAT) * slowMult * sailMult;
 }
 
 /**
@@ -305,6 +315,18 @@ function iceSlowMult(state: GameState, p: Player): number {
   if (isInvincible(p)) return 1;
   for (const f of state.iceFields) {
     if (f.team !== p.team && distance(f.x, f.y, p.x, p.y) <= ICE_RADIUS) return ICE_SLOW_MULT;
+  }
+  return 1;
+}
+
+/**
+ * Speed multiplier from Daqiao's portals: PORTAL_SLOW_MULT while the player stands within PORTAL_RADIUS of a portal cast by an
+ * opponent. Invincible players are unaffected. Computed from position each tick, like iceSlowMult.
+ */
+function portalSlowMult(state: GameState, p: Player): number {
+  if (isInvincible(p)) return 1;
+  for (const f of state.portals) {
+    if (f.team !== p.team && distance(f.x, f.y, p.x, p.y) <= PORTAL_RADIUS) return PORTAL_SLOW_MULT;
   }
   return 1;
 }
@@ -564,6 +586,7 @@ function trySpecial(state: GameState, p: Player, input: InputFrame): boolean {
   else if (p.specialMode === 'icefield') startIcefield(state, p);
   else if (p.specialMode === 'sail') startSail(state, p);
   else if (p.specialMode === 'gust') startGust(state, p);
+  else if (p.specialMode === 'portal') startPortal(state, p);
   else startRampage(state, p);
   return true;
 }
@@ -1765,6 +1788,101 @@ function launchGustVictim(state: GameState, g: Gust, caster: Player, v: Player):
 export function endGusts(state: GameState): void {
   for (const g of state.gusts) state.events.push({ type: 'gustEnd', gustId: g.id });
   state.gusts = [];
+}
+
+/**
+ * Daqiao's 時空之門 (portal): an instant cast, with or without the ball. The portal is fixed at her cast point and does not
+ * move with her. She keeps acting normally, and any ball she holds stays at her feet.
+ */
+function startPortal(state: GameState, p: Player): void {
+  p.stamina -= SPECIAL_STAMINA_COST;
+  p.specialCooldown = SPECIAL_COOLDOWN_TICKS;
+  const portalId = state.nextPortalId++;
+  state.portals.push({ id: portalId, ownerIdx: p.idx, team: p.team, x: p.x, y: p.y, ticks: 0, summoned: false });
+  state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
+  state.events.push({ type: 'portalStart', playerIdx: p.idx, portalId, x: p.x, y: p.y, radius: PORTAL_RADIUS });
+}
+
+/**
+ * One tick for every portal in play: counts it up, calls her teammates once PORTAL_SUMMON_DELAY_TICKS have passed, pulses on
+ * every PORTAL_DOT_INTERVAL-th tick after the cast, and ends it once PORTAL_TICKS have passed (the last pulse fires on that
+ * same tick, before the end).
+ */
+export function updatePortals(state: GameState): void {
+  if (state.match.phase !== 'play') return;
+  for (const f of state.portals) {
+    f.ticks++;
+    if (!f.summoned && f.ticks === PORTAL_SUMMON_DELAY_TICKS) summonTeammates(state, f);
+    if (f.ticks % PORTAL_DOT_INTERVAL === 0) portalPulse(state, f);
+  }
+  const ended = state.portals.filter((f) => f.ticks >= PORTAL_TICKS);
+  if (ended.length === 0) return;
+  state.portals = state.portals.filter((f) => f.ticks < PORTAL_TICKS);
+  for (const f of ended) state.events.push({ type: 'portalEnd', portalId: f.id });
+}
+
+/** A teammate the summon can move: not a goalkeeper, not down, not invincible, and not mid beam channel or fear. */
+function canBeSummoned(v: Player): boolean {
+  if (v.role === 'GK' || v.action === 'down' || v.action === 'cast' || v.action === 'fear') return false;
+  return !isInvincible(v);
+}
+
+/**
+ * The summon: each eligible teammate of the caster is set on a ring of PORTAL_RING_RADIUS around her current position, evenly
+ * spaced starting at her facing turned 90 degrees, in idx order, and clamped to the field. A summoned teammate loses his velocity
+ * and any dash, charge or punch and goes back to normal play. A ball he holds stays with him (updatePossession moves it to his feet).
+ */
+function summonTeammates(state: GameState, f: Portal): void {
+  f.summoned = true;
+  const caster = state.players[f.ownerIdx];
+  const mates = state.players.filter((v) => v.team === caster.team && v.idx !== caster.idx && canBeSummoned(v));
+  const base = Math.atan2(caster.facingY, caster.facingX) + Math.PI / 2;
+  const summonedIdxs: number[] = [];
+  mates.forEach((v, i) => {
+    const angle = base + (2 * Math.PI * i) / mates.length;
+    const x = Math.min(FIELD_W, Math.max(0, caster.x + PORTAL_RING_RADIUS * Math.cos(angle)));
+    const y = Math.min(FIELD_D, Math.max(0, caster.y + PORTAL_RING_RADIUS * Math.sin(angle)));
+    v.x = x;
+    v.y = y;
+    v.vx = 0;
+    v.vy = 0;
+    v.vz = 0;
+    v.z = 0;
+    v.chargeTicks = 0;
+    v.hitDone = false;
+    v.action = 'normal';
+    v.actionTimer = 0;
+    summonedIdxs.push(v.idx);
+  });
+  state.events.push({ type: 'portalSummon', playerIdx: caster.idx, portalId: f.id, summonedIdxs });
+  for (const idx of summonedIdxs) {
+    const v = state.players[idx];
+    state.events.push({ type: 'portalArrive', playerIdx: idx, x: v.x, y: v.y });
+  }
+}
+
+/**
+ * One pulse of a portal: every standing, non-invincible opponent inside PORTAL_RADIUS loses PORTAL_DOT_RATIO of his maxStamina.
+ * Emptying his stamina knocks him down. No knockback, and a ball holder keeps the ball.
+ */
+function portalPulse(state: GameState, f: Portal): void {
+  for (const v of state.players) {
+    if (v.team === f.team || v.action === 'down' || isInvincible(v)) continue;
+    if (distance(f.x, f.y, v.x, v.y) > PORTAL_RADIUS) continue;
+    const cost = PORTAL_DOT_RATIO * v.maxStamina;
+    v.stamina = Math.max(0, v.stamina - cost);
+    state.events.push({ type: 'hit', attackerIdx: f.ownerIdx, victimIdx: v.idx, kind: 'special', damage: cost });
+    if (v.stamina <= 0) {
+      setDown(v, DOWN_TICKS_EXHAUSTED);
+      state.events.push({ type: 'down', playerIdx: v.idx });
+    }
+  }
+}
+
+/** Clears every portal (the phase left play). */
+export function endPortals(state: GameState): void {
+  for (const f of state.portals) state.events.push({ type: 'portalEnd', portalId: f.id });
+  state.portals = [];
 }
 
 /**

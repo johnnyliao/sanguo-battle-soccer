@@ -28,6 +28,8 @@ export function createInitialState(
     nextIceId: 1,
     gusts: [],
     nextGustId: 1,
+    portals: [],
+    nextPortalId: 1,
     ball: {
       x: FIELD_W / 2,
       y: FIELD_D / 2,

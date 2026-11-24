@@ -15,6 +15,7 @@ import {
   ICE_RADIUS,
   LEAP_FLY_TICKS,
   LUNGE_TICKS,
+  PORTAL_RADIUS,
   RIDER_HIT_RADIUS,
   SPECIAL_COOLDOWN_TICKS,
   SPECIAL_STAMINA_COST,
@@ -158,6 +159,8 @@ interface FxSpawn {
   gustOf?: number;
   lifted?: boolean;
   alpha?: number;
+  /** Normal blend instead of the default additive one (keeps a sheet's own colours over the grass). */
+  blend?: 'normal';
   mirror?: boolean;
   depthOff?: number;
 }
@@ -400,6 +403,19 @@ const GUST_TORNADO_FX_H = 130;
 const GUST_TORNADO_DEPTH = FIELD_D + 50;
 const GUST_TORNADO_BASE = 0.33;
 const GUST_VICTIM_FX_SIZE = 70;
+/** Daqiao's portal: the magic circle under the players (depth), the light pillar where a teammate arrives (its width), the landing burst on the same spot (its width, after the pillar's frames), and the chain binding on each opponent inside (its width, its depth relative to his feet). The sheet's ring sits PORTAL_RING_BASE of the frame height under its centre. */
+const PORTAL_FIELD_DEPTH = -20;
+const PORTAL_PILLAR_FX_W = 120;
+const PORTAL_BURST_FX_W = 110;
+const PORTAL_BURST_DELAY_MS = 400;
+const PORTAL_CHAIN_FX_W = 90;
+const PORTAL_CHAIN_DEPTH_OFF = -0.5;
+const PORTAL_RING_BASE = 0.2;
+/** The magic circle's art is drawn squashed: its ring spans this share of the frame's width and height, so the frame is stretched to put the ring on the field's ground ellipse. */
+const PORTAL_RING_W_FRAC = 0.85;
+const PORTAL_RING_H_FRAC = 0.5;
+/** The circle is drawn with normal blend over the grass at the field's full size, so its purple and gold stay visible (additive blend washed it out to yellow-white). */
+const PORTAL_FIELD_ALPHA = 0.9;
 /** Lunge start: a small shake. The dragon holds for the dash, then fades for LUNGE_FADE_MS. */
 const LUNGE_SHAKE_MS = 120;
 const LUNGE_SHAKE_INTENSITY = 0.002;
@@ -601,6 +617,12 @@ export class MatchScene extends Phaser.Scene {
   private iceFieldFx = new Map<number, { caster: number; x: number; y: number; spikes: FxInstance | null }>();
   /** Xiao Qiao's gust id -> the caster idx, from its mark (the eruption event does not name him). */
   private gustCasters = new Map<number, number>();
+  /** Daqiao's portal id -> its magic circle on the ground (faded when the portal ends). */
+  private portalFields = new Map<number, FxInstance>();
+  /** `${portal id}:${opponent idx}` -> the chain binding on an opponent standing inside that portal. */
+  private portalChains = new Map<string, FxInstance>();
+  /** Caster idx of the portal being summoned, set by portalSummon (the arrivals that follow in the same batch use it). */
+  private portalSummonCaster = -1;
   /** Xu Chu's tiger guard effects: the fire ring round him, the maw over him while a shot is held, and the trail of the spat ball. */
   private tigerRing = new Map<number, FxInstance>();
   private tigerMaw = new Map<number, FxInstance>();
@@ -988,6 +1010,14 @@ export class MatchScene extends Phaser.Scene {
       } else if (e.type === 'gustEnd') {
         this.fadeGustMark(e.gustId);
         this.gustCasters.delete(e.gustId);
+      } else if (e.type === 'portalStart') {
+        this.portalStartFx(e);
+      } else if (e.type === 'portalSummon') {
+        this.portalSummonCaster = e.playerIdx;
+      } else if (e.type === 'portalArrive') {
+        this.portalArriveFx(e);
+      } else if (e.type === 'portalEnd') {
+        this.portalEndFx(e.portalId);
       } else if (e.type === 'attack') {
         if (e.kind === 'punch') this.punchFx(e.playerIdx);
       } else if (e.type === 'lungeStart') {
@@ -1108,6 +1138,7 @@ export class MatchScene extends Phaser.Scene {
     this.drawBall();
     this.updateFearFx();
     this.updateIceTint();
+    this.updatePortalChains();
     this.updateTigerTrail();
     this.updateWaveFx();
     this.drawFx();
@@ -1129,7 +1160,7 @@ export class MatchScene extends Phaser.Scene {
     return { cfg, fx: cfg.fx };
   }
 
-  /** Adds one effect (additive blend) to the scene and tracks it in this.fx until it is removed. */
+  /** Adds one effect (additive blend, or normal when s.blend is 'normal') to the scene and tracks it in this.fx until it is removed. */
   private playFx(fx: FxSheet, name: FxAnim, s: FxSpawn): FxInstance | null {
     const def = fx.anims[name];
     if (!def) return null;
@@ -1138,7 +1169,7 @@ export class MatchScene extends Phaser.Scene {
     const sprite = this.add
       .sprite(s.x, s.y, fx.key)
       .setName(`fx:${name}`)
-      .setBlendMode(Phaser.BlendModes.ADD)
+      .setBlendMode(s.blend === 'normal' ? Phaser.BlendModes.NORMAL : Phaser.BlendModes.ADD)
       .setDisplaySize(s.w, s.h)
       .setDepth(s.depth)
       .setFlipX(s.flip ?? false)
@@ -1778,6 +1809,107 @@ export class MatchScene extends Phaser.Scene {
       if (f.gustOf !== gustId) continue;
       f.holdMs = now - f.startMs;
       f.endMs = f.holdMs + FX_FADE_MS;
+    }
+  }
+
+  /**
+   * Daqiao's portal cast: the magic circle forms on the ground at the cast point (its width is the field's diameter, squashed like the
+   * ice field), then the active circle loops until the portal ends.
+   */
+  private portalStartFx(e: Extract<SimEvent, { type: 'portalStart' }>): void {
+    const owner = this.fxOwner(e.playerIdx);
+    if (!owner) return;
+    const ground = worldToScreen(e.x, e.y, 0);
+    const forever = Number.POSITIVE_INFINITY;
+    const field = this.playFx(owner.fx, 'form', {
+      x: ground.sx,
+      y: ground.sy,
+      w: (2 * e.radius) / PORTAL_RING_W_FRAC,
+      h: (2 * e.radius * DEPTH_SCALE) / PORTAL_RING_H_FRAC,
+      depth: PORTAL_FIELD_DEPTH,
+      alpha: PORTAL_FIELD_ALPHA,
+      blend: 'normal',
+      holdMs: forever,
+      endMs: forever,
+    });
+    if (!field) return;
+    this.portalFields.set(e.portalId, field);
+    field.sprite.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
+      field.sprite.play(fxAnimKey(owner.fx, 'active'));
+    });
+  }
+
+  /** A teammate summoned to Daqiao's portal: the light pillar at his arrival point, then the landing burst on the same spot. */
+  private portalArriveFx(e: Extract<SimEvent, { type: 'portalArrive' }>): void {
+    if (this.portalSummonCaster < 0) return;
+    const owner = this.fxOwner(this.portalSummonCaster);
+    if (!owner) return;
+    const { fx } = owner;
+    const ground = worldToScreen(e.x, e.y, 0);
+    const pillarW = PORTAL_PILLAR_FX_W;
+    this.playFx(fx, 'summon', {
+      x: ground.sx,
+      y: ground.sy - pillarW * (fx.frameHeight / fx.frameWidth) * PORTAL_RING_BASE,
+      w: pillarW,
+      h: (pillarW * fx.frameHeight) / fx.frameWidth,
+      depth: e.y + 0.5,
+    });
+    this.time.delayedCall(PORTAL_BURST_DELAY_MS, () => {
+      const burstW = PORTAL_BURST_FX_W;
+      this.playFx(fx, 'burst', {
+        x: ground.sx,
+        y: ground.sy - burstW * (fx.frameHeight / fx.frameWidth) * PORTAL_RING_BASE,
+        w: burstW,
+        h: (burstW * fx.frameHeight) / fx.frameWidth,
+        depth: e.y + 0.5,
+      });
+    });
+  }
+
+  /** The portal ends: its magic circle fades (the chains on its victims fade in updatePortalChains). */
+  private portalEndFx(portalId: number): void {
+    const field = this.portalFields.get(portalId);
+    if (!field) return;
+    this.portalFields.delete(portalId);
+    this.fadeFx(field);
+  }
+
+  /**
+   * Each opponent standing inside a live portal (the slowed ones) gets the chain binding at his feet, following him. The binding
+   * fades when he leaves the field or the portal ends.
+   */
+  private updatePortalChains(): void {
+    const { players, portals } = this.state;
+    const forever = Number.POSITIVE_INFINITY;
+    const bound = new Set<string>();
+    for (const f of portals) {
+      const owner = this.fxOwner(f.ownerIdx);
+      if (!owner) continue;
+      for (const p of players) {
+        if (p.team === f.team || Math.hypot(f.x - p.x, f.y - p.y) > PORTAL_RADIUS) continue;
+        const key = `${f.id}:${p.idx}`;
+        bound.add(key);
+        if (this.portalChains.has(key)) continue;
+        const feet = worldToScreen(p.x, p.y, 0);
+        const w = PORTAL_CHAIN_FX_W;
+        const chain = this.playFx(owner.fx, 'chain', {
+          x: feet.sx,
+          y: feet.sy,
+          w,
+          h: (w * owner.fx.frameHeight) / owner.fx.frameWidth,
+          depth: p.y + PORTAL_CHAIN_DEPTH_OFF,
+          holdMs: forever,
+          endMs: forever,
+          follow: p.idx,
+          depthOff: PORTAL_CHAIN_DEPTH_OFF,
+        });
+        if (chain) this.portalChains.set(key, chain);
+      }
+    }
+    for (const [key, chain] of this.portalChains) {
+      if (bound.has(key)) continue;
+      this.portalChains.delete(key);
+      this.fadeFx(chain);
     }
   }
 

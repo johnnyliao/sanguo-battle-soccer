@@ -37,6 +37,7 @@ import {
   clearRiders,
   endGusts,
   endIcefields,
+  endPortals,
   endSails,
   endSlashWindows,
   endTigerWindows,
@@ -46,6 +47,7 @@ import {
   updateBladeWaves,
   updateGusts,
   updateIcefields,
+  updatePortals,
   updateRiders,
   updateSails,
 } from './actions';
@@ -97,6 +99,7 @@ export function step(state: GameState, inputs: InputFrame[]): GameState {
     updateRiders(state);
     updateBladeWaves(state);
     updateIcefields(state);
+    updatePortals(state);
     updateSails(state);
     applyRampageBumps(state);
     resolvePlayerCollisions(state.players);
@@ -112,6 +115,7 @@ export function step(state: GameState, inputs: InputFrame[]): GameState {
       endSlashWindows(state);
       endIcefields(state);
       endGusts(state);
+      endPortals(state);
       endSails(state);
     }
   }

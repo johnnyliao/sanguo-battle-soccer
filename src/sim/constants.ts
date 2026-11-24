@@ -249,6 +249,21 @@ export const GUST_PUSH_SPEED = 80;
 /** Upward launch speed of a gust victim: same arc as SAIL_LAUNCH_VZ, so he lands exactly on the last airborne tick. */
 export const GUST_LAUNCH_VZ = (PLAYER_GRAVITY * DT * (LAUNCH_AIR_TICKS + 1)) / 2;
 
+/** Daqiao's 時空之門 (portal): radius around the cast point in px. The field stays where it was cast. */
+export const PORTAL_RADIUS = 140;
+/** How long the portal lasts: 2 s. */
+export const PORTAL_TICKS = 120;
+/** Delay from the cast to the summon: 30 ticks (0.5 s). Teammates are teleported to her then. */
+export const PORTAL_SUMMON_DELAY_TICKS = 30;
+/** Opponents inside the portal move at this share of their normal max speed (30%). */
+export const PORTAL_SLOW_MULT = 0.3;
+/** Every this many ticks after the cast the portal pulses (0.5 s): 120 / 30 = 4 pulses. */
+export const PORTAL_DOT_INTERVAL = 30;
+/** Share of each pulse victim's maxStamina that a pulse takes (5%). */
+export const PORTAL_DOT_RATIO = 0.05;
+/** Summoned teammates stand evenly spaced on a ring of this radius around Daqiao, in px (50 px). */
+export const PORTAL_RING_RADIUS = 50;
+
 export const KICKOFF_TICKS = 60;
 export const GOAL_CELEBRATE_TICKS = 150;
 export const HALFTIME_TICKS = 120;
