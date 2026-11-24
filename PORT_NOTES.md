@@ -72,8 +72,30 @@ npx rbxtsc                                                    # compile src -> o
 ~/.local/bin/lune run lune/run.luau > build/luau_run.txt      # headless AI-vs-AI match, 14400 ticks
 ```
 
-`src/client/main.client.ts` is a one-line scaffold so that `out/client` exists for the Rojo mapping.
-
-`src/server/headless.ts` runs the match (seed 12345, shu vs wu, 2 x 120 s) and prints one exact-text line per tick
+`src/tools/headless.ts` (moved from `src/server/`, so it no longer runs inside the game) runs the match (seed 12345, shu vs wu, 2 x 120 s) and prints one exact-text line per tick
 (`%.16e` per value) plus event counts. `lune/run.luau` is a minimal Roblox-environment shim: it builds an
 Instance tree from the Rojo sourcemap, provides `game`/`script`, and loads each module with `loadstring` (cached).
+
+## Roblox demo place (playable build)
+
+Shared rules (`src/shared/sim`, `ai`, `data`) are untouched by the demo work. The demo adds:
+
+- `src/shared/logic/*`: pure modules (no Roblox services): px to stud mapping, camera math, fixed-step accumulator, slot
+  assignment, input validation + latch, snapshot encode/decode (Luau `buffer`, 179 bytes), interpolation buffer, event
+  filter (`WireEvent`), and `MatchSim` (sim + AI + human latches for one match, including the auto-played penalty shootout).
+- `src/server`: `Match.ts` (MatchService: lobby, pick, 60 Hz loop on Heartbeat, 30 Hz `Snap`, batched `Events`),
+  `main.server.ts`. Remotes are created at runtime under `ReplicatedStorage.Remotes`.
+- `src/client`: field, blocky players, ball, camera, HUD, controls, FX.
+- `default.project.json`: Workspace, Players (`CharacterAutoLoads=false`), Lighting, ServerStorage.Tools (= `out/tools`,
+  holds `headless`; never executed in game because ModuleScripts only run when required).
+
+```
+npx rbxtsc
+rojo build default.project.json -o build/sanguo-demo.rbxlx
+rojo sourcemap default.project.json -o build/sourcemap.json
+lune run lune/run.luau            # headless match, output identical to the spike (sha256 8ce9a595...)
+lune run lune/run.luau tests      # unit checks in lune/tests.luau (logic modules + MatchService with fake services)
+```
+
+`lune/run.luau` changes: entry is now `ServerStorage.Tools.headless`; with argument `tests` it runs `lune/tests.luau`
+in the same shim; a fake `Players` service entry was added (it has no files, so it is not in the sourcemap).

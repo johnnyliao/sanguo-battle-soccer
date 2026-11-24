@@ -1,15 +1,37 @@
 {
-	"name": "sanguo-roblox",
+	"name": "sanguo-demo",
 	"globIgnorePaths": [
 		"**/package.json",
 		"**/tsconfig.json"
 	],
 	"tree": {
 		"$className": "DataModel",
+		"Workspace": {
+			"$className": "Workspace"
+		},
+		"Players": {
+			"$className": "Players",
+			"$properties": {
+				"CharacterAutoLoads": false
+			}
+		},
+		"Lighting": {
+			"$className": "Lighting",
+			"$properties": {
+				"ClockTime": 14,
+				"Brightness": 2
+			}
+		},
 		"ServerScriptService": {
 			"$className": "ServerScriptService",
 			"Server": {
 				"$path": "out/server"
+			}
+		},
+		"ServerStorage": {
+			"$className": "ServerStorage",
+			"Tools": {
+				"$path": "out/tools"
 			}
 		},
 		"ReplicatedStorage": {

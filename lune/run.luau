@@ -5,6 +5,7 @@
 
 local fs = require("@lune/fs")
 local serde = require("@lune/serde")
+local process = require("@lune/process")
 
 local Inst = {}
 -- Methods first, then children by name (so `script.Parent.Promise` works as in Roblox).
@@ -35,6 +36,8 @@ local fakeServices = {
 		IsClient = function(_) return false end,
 		IsServer = function(_) return true end,
 	},
+	-- Not in the sourcemap (no files under it). tests.luau fills in what the server service needs.
+	Players = {},
 }
 
 function Inst:GetService(name)
@@ -100,5 +103,14 @@ require = function(target)
 	error("require: only Instances are supported in this shim")
 end
 
-local entry = game:GetService("ServerScriptService").Children.Server.Children.headless
-loadInstance(entry)
+-- `lune run lune/run.luau`         headless AI-vs-AI match (ServerStorage.Tools.headless)
+-- `lune run lune/run.luau tests`   unit checks in lune/tests.luau (runs in this shim environment)
+if process.args[1] == "tests" then
+	local chunk, err = loadstring(fs.readFile("lune/tests.luau"), "@lune/tests.luau")
+	if chunk == nil then
+		error(err)
+	end
+	chunk()
+else
+	loadInstance(game:GetService("ServerStorage").Children.Tools.Children.headless)
+end
