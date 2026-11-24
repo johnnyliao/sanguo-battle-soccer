@@ -1,0 +1,66 @@
+[
+  {
+    "slot": "hit_punch",
+    "label": "普攻命中",
+    "group": "通用",
+    "intent": "清脆有勁的一拳，不要太悶",
+    "candidates": [
+      {
+        "key": "A",
+        "file": "hit_punch_A.wav",
+        "source": "Break_01_s01.wav",
+        "dur": 0.151,
+        "desc": "中頻噪音感、瞬間爆開、清脆一擊、極短・尾音乾淨、漸亮、自然",
+        "electronic": 1
+      },
+      {
+        "key": "B",
+        "file": "hit_punch_B.wav",
+        "source": "SmallImpact_01_s01.wav",
+        "dur": 0.27,
+        "desc": "厚重噪音感、瞬間爆開、單一悶響、極短・尾音乾淨、漸亮、自然",
+        "electronic": 1
+      },
+      {
+        "key": "C",
+        "file": "hit_punch_C.wav",
+        "source": "impact_punch_medium_002_48kHz_16bit_0.42s_212c5895_s02.wav + Break_01_s01.wav@0.7",
+        "dur": 0.418,
+        "desc": "疊合：低沉噪音感、快速、單一悶響、短・尾音乾淨、漸暗、自然 ＋ 中頻噪音感、瞬間爆開、清脆一擊、極短・尾音乾淨、漸亮、自然",
+        "electronic": 1
+      }
+    ]
+  },
+  {
+    "slot": "hit_heavy",
+    "label": "重擊／鏟球命中",
+    "group": "通用",
+    "intent": "又重又有破壞感的一擊",
+    "candidates": [
+      {
+        "key": "A",
+        "file": "hit_heavy_A.wav",
+        "source": "BlastImpact_03_s01.wav + impact_punch_heavy_003_48kHz_16bit_0.47s_2546df80_s02.wav@0.8",
+        "dur": 0.609,
+        "desc": "疊合：明亮噪音感、瞬間爆開、清脆一擊、短・尾音乾淨、自然 ＋ 低沉噪音感、瞬間爆開、單一悶響、短・尾音乾淨、漸暗、自然",
+        "electronic": 2
+      },
+      {
+        "key": "B",
+        "file": "hit_heavy_B.wav",
+        "source": "impact_punch_heavy_002_48kHz_16bit_0.46s_565485a1_s02.wav + Break_01_s01.wav@0.7",
+        "dur": 0.458,
+        "desc": "疊合：低沉噪音感、快速、單一悶響、短・尾音乾淨、自然 ＋ 中頻噪音感、瞬間爆開、清脆一擊、極短・尾音乾淨、漸亮、自然",
+        "electronic": 1
+      },
+      {
+        "key": "C",
+        "file": "hit_heavy_C.wav",
+        "source": "impact_punch_heavy_004_48kHz_16bit_0.54s_b437d453_s02.wav + SmallImpact_01_s01.wav@0.8",
+        "dur": 0.536,
+        "desc": "疊合：低沉噪音感、瞬間爆開、單一悶響、短・尾音乾淨、漸暗、自然 ＋ 厚重噪音感、瞬間爆開、單一悶響、極短・尾音乾淨、漸亮、自然",
+        "electronic": 1
+      }
+    ]
+  }
+]
