@@ -34,5 +34,5 @@ remotes.Snapshot.OnClientEvent.Connect((s: unknown) => {
 
 RunService.RenderStepped.Connect((dt) => {
 	renderer.update(dt);
-	camera.update(dt, renderer.getFocusX());
+	camera.update(dt, renderer.getFocusX(), renderer.getFocusZ());
 });

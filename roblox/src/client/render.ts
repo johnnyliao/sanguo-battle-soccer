@@ -3,6 +3,7 @@
 import { Country, SetupPlayer, Setup, SnapBall, SnapPlayer, SnapZone, Snapshot, STUDS_PER_PX, TICK_RATE, simToWorld } from "shared/net";
 import { colourOf } from "./world";
 import { SPRITES, SpriteSheet, animFor } from "./sprites";
+import { AvatarView, drawAvatar, getAvatarTemplate, makeAvatar } from "./avatars";
 
 /** Render this many ticks (100 ms at 60 Hz) behind the newest snapshot. */
 const INTERP_DELAY_TICKS = 6;
@@ -45,6 +46,8 @@ interface PlayerView {
 	fz: number;
 	/** Set only for characters that have a sprite sheet; the colour block is then hidden. */
 	sprite: SpriteView | undefined;
+	/** Set only for characters with a 3D avatar model; takes priority over the sprite. */
+	avatar: AvatarView | undefined;
 }
 
 interface SpriteView {
@@ -198,6 +201,7 @@ export class Renderer {
 	private ball: BallView | undefined;
 	private zones: ZoneView[] = [];
 	private focusX = 0;
+	private focusZ = 26;
 	private ballSpin = 0;
 	private lastBallPos = new Vector3(0, 0, 0);
 
@@ -268,6 +272,11 @@ export class Renderer {
 		return this.focusX;
 	}
 
+	/** Interpolated ball world Z (studs), used by the camera. */
+	getFocusZ(): number {
+		return this.focusZ;
+	}
+
 	private segment(rt: number): [Snapshot, Snapshot, number] {
 		const buf = this.buffer;
 		const last = buf.size() - 1;
@@ -319,26 +328,33 @@ export class Renderer {
 
 			const foot = simToWorld(x, y, z);
 			const act = cur.a;
-			const lying = act === "down";
-			let lean = 0;
-			if (act === "punch" || act === "tackle") lean = -0.35;
-			else if (act === "dive") lean = -1.2;
-			const shake = act === "hitstun" || act === "fear" ? math.sin(now * 40) * 0.35 : 0;
-
-			const base = CFrame.lookAt(foot, foot.add(new Vector3(v.fx, 0, v.fz))).mul(new CFrame(shake, 0, 0));
-			const bodyLen = v.height - 1.8;
-			const bodyCF = lying
-				? base.mul(new CFrame(0, 0.8, 0)).mul(CFrame.Angles(math.pi / 2, 0, 0))
-				: base.mul(CFrame.Angles(lean, 0, 0)).mul(new CFrame(0, 0.6 + bodyLen / 2, 0));
-			v.body.CFrame = bodyCF;
-			const spr = v.sprite;
-			if (spr !== undefined) {
-				v.head.CFrame = new CFrame(foot.add(new Vector3(0, spr.sheet.anchorY * spr.scale, 0)));
-				drawSprite(spr, foot, v.fx, act, cur.sp, now);
+			const av = v.avatar;
+			if (av !== undefined) {
+				drawAvatar(av, foot, v.fx, v.fz, act, now);
+				v.head.CFrame = new CFrame(foot.add(new Vector3(0, v.height + 0.2, 0)));
+				v.aura.CFrame = new CFrame(foot.add(new Vector3(0, v.height / 2, 0)));
 			} else {
-				v.head.CFrame = bodyCF.mul(new CFrame(0, bodyLen / 2 + 0.4, 0));
+				const lying = act === "down";
+				let lean = 0;
+				if (act === "punch" || act === "tackle") lean = -0.35;
+				else if (act === "dive") lean = -1.2;
+				const shake = act === "hitstun" || act === "fear" ? math.sin(now * 40) * 0.35 : 0;
+
+				const base = CFrame.lookAt(foot, foot.add(new Vector3(v.fx, 0, v.fz))).mul(new CFrame(shake, 0, 0));
+				const bodyLen = v.height - 1.8;
+				const bodyCF = lying
+					? base.mul(new CFrame(0, 0.8, 0)).mul(CFrame.Angles(math.pi / 2, 0, 0))
+					: base.mul(CFrame.Angles(lean, 0, 0)).mul(new CFrame(0, 0.6 + bodyLen / 2, 0));
+				v.body.CFrame = bodyCF;
+				const spr = v.sprite;
+				if (spr !== undefined) {
+					v.head.CFrame = new CFrame(foot.add(new Vector3(0, spr.sheet.anchorY * spr.scale, 0)));
+					drawSprite(spr, foot, v.fx, act, cur.sp, now);
+				} else {
+					v.head.CFrame = bodyCF.mul(new CFrame(0, bodyLen / 2 + 0.4, 0));
+				}
+				v.aura.CFrame = bodyCF;
 			}
-			v.aura.CFrame = bodyCF;
 			v.aura.Transparency = cur.sp === "" ? 1 : 0.6;
 			v.aura.Color = auraColour(cur.sp);
 			v.glow.Enabled = cur.inv;
@@ -375,6 +391,7 @@ export class Renderer {
 		bv.shadow.CFrame = groundCF(pos.X, 0.08, pos.Z);
 		bv.trail.Enabled = cur.special !== "";
 		this.focusX = pos.X;
+		this.focusZ = pos.Z;
 	}
 
 	private drawZones(zs: SnapZone[]): void {
@@ -436,7 +453,9 @@ export class Renderer {
 		const country: Country = p.team === 0 ? s.home : s.away;
 		const hex = TEAM_COLOUR[country];
 		const gk = p.role === "GK";
-		const height = SIZE_HEIGHT[p.size] ?? 5.5;
+		// 3D avatars share one base height (8.8 studs); body size only nudges it (S -7%, L +7%). Build differences come from the models.
+		const AVATAR_SIZE_MUL: Record<string, number> = { S: 0.93, M: 1, L: 1.07 };
+		const height = getAvatarTemplate(p.charId) !== undefined ? 8.8 * (AVATAR_SIZE_MUL[p.size] ?? 1) : SIZE_HEIGHT[p.size] ?? 5.5;
 		const bodyLen = height - 1.8;
 		const human = p.idx === s.humanIdx;
 
@@ -448,9 +467,19 @@ export class Renderer {
 		const shadow = makePart(model, "Shadow", Enum.PartType.Cylinder, new Vector3(0.1, 2.6, 2.6), colourOf(0x000000), 0.5);
 		const ring = makePart(model, "Ring", Enum.PartType.Cylinder, new Vector3(0.12, 3.6, 3.6), colourOf(HUMAN_RING_COLOUR), human ? 0.3 : 1);
 
+		let avatar: AvatarView | undefined;
+		const template = getAvatarTemplate(p.charId);
+		if (template !== undefined) {
+			avatar = makeAvatar(template, model, height, p.charId);
+			body.Transparency = 1;
+			head.Transparency = 1;
+			ring.Color = colourOf(human ? HUMAN_RING_COLOUR : hex);
+			ring.Transparency = human ? 0.3 : 0.4;
+		}
+
 		const sheet = SPRITES[p.charId];
 		let sprite: SpriteView | undefined;
-		if (sheet !== undefined) {
+		if (avatar === undefined && sheet !== undefined) {
 			body.Transparency = 1;
 			head.Transparency = 1;
 			sprite = makeSprite(model, sheet);
@@ -502,7 +531,7 @@ export class Renderer {
 
 		model.PrimaryPart = body;
 		model.Parent = this.actors;
-		return { model, body, head, aura, shadow, ring, glow, barBack, barFill, height, fx: 1, fz: 0, sprite };
+		return { model, body, head, aura, shadow, ring, glow, barBack, barFill, height, fx: 1, fz: 0, sprite, avatar };
 	}
 
 	private makeBall(): BallView {
