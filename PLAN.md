@@ -359,6 +359,12 @@ src/sim（＋ai、data）用 roblox-ts 編譯成 Luau，在 Roblox 伺服器跑�
 - **待使用者肉眼確認**：screen_capture 在這台拍不到 3D 視窗（Edit 模式預設底板也是全白，GUI 拍得到），所以場地、鏡頭角度、色塊角色、球、特效圈要使用者看。另：J/K 手感、手機觸控（Device Simulator）未測。
 - rojo serve 在背景，新 session 要重開（cd roblox; rojo serve；若埠被占＝已在跑）。
 
+# R1c（2026-11-25）改 3D 角色
+- 使用者看過 2D 看板張遼覺得突兀，試做 3D 張遼後決定全部改 3D。15 武將用 Studio MCP generate_avatar（pipeline npc，文字描述，無武器）生成 R15 模型，存在 roblox/sanguo.rbxl 的 ServerStorage.Avatars（以 charId 命名）。
+- 模型沒有整體資產 ID（只有各 MeshPart 的 MeshId），所以靠 sanguo.rbxl 進 git；ServerStorage 不歸 Rojo 管，不會被同步清掉。
+- 生成會在 client 端 timeout，但 Studio 內仍會跑完（約 1.5～3 分）；要一個一個做、輪詢 Workspace。許褚第一次失敗（描述含裸露字眼），改皮背心後成功。
+- 下一步：比賽中把色塊換成 3D 模型＋動作（跑、攻擊、倒地…，generate_animation）；再做武器（generate_mesh 綁手上）；特效沿用原 fx 圖做粒子序列圖／地面貼圖，戰船、鐵騎、虎等做 3D。
+
 # Lessons learned（R1a）
 - roblox-ts：頂層 const 呼叫「後面才定義」的 function 會是 nil（JS 有提升、Luau 沒有）。helper 函式放在最上面。build 後可掃 out/ 找 `local X` 前置宣告後頂層先呼叫。
 - 沒有 avatar 時 PlayerScripts.PlayerModule 可能不出現，不要無限 WaitForChild 擋住啟動。

@@ -4,3 +4,7 @@ test-results/
 *.png
 !art-src/*.png
 !public/sprites/*.png
+
+# Roblox Studio
+*.rbxl.lock
+roblox/r0-errors.log
