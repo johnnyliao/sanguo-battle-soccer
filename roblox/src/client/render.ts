@@ -32,8 +32,8 @@ const BALL_TRAIL_COLOUR = 0xffb020;
 /** Seconds in hitstun after which a stunned player gets the orbiting stars. */
 const STUN_STARS_AFTER = 0.45;
 /** Weapon swing lengths (s) handed to the procedural weapon pose. */
-const PUNCH_SWING = 0.3;
-const TACKLE_SWING = 0.42;
+const PUNCH_SWING = 0.15;
+const TACKLE_SWING = 0.21;
 const SPECIAL_SWING = 0.45;
 const PATCH_OFFSETS: Vector3[] = [new Vector3(0.74, 0, 0), new Vector3(0, 0.74, 0), new Vector3(-0.3, -0.25, 0.66)];
 

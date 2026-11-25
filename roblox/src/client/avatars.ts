@@ -341,7 +341,7 @@ function tickCur(v: AvatarView): void {
 	if (t === undefined || t.Length <= 0) return;
 	if (!v.curSpeedSet) {
 		v.curSpeedSet = true;
-		if (v.curSecs > 0) t.AdjustSpeed(math.max(0.5, math.min(4, t.Length / v.curSecs)));
+		if (v.curSecs > 0) t.AdjustSpeed(math.max(0.5, math.min(8, t.Length / v.curSecs)));
 	}
 	if (v.curHold > 0 && !v.curHeld && t.TimePosition >= t.Length * v.curHold) {
 		v.curHeld = true;
@@ -391,7 +391,7 @@ function updateAction(v: AvatarView, act: string, now: number): void {
 		return;
 	}
 	if (want === "") stopCur(v);
-	else if (want === "attack") startCur(v, "attack", ca?.attack, false, act === "tackle" ? 0.42 : 0.3, 0, now);
+	else if (want === "attack") startCur(v, "attack", ca?.attack, false, act === "tackle" ? 0.21 : 0.15, 0, now);
 	else if (want === "hit") startCur(v, "hit", SHARED_ANIMS.hit, false, 0.35, 0, now);
 	else if (want === "stun") startCur(v, "stun", SHARED_ANIMS.stun, true, 0, 0, now);
 	else if (want === "down") startCur(v, "down", SHARED_ANIMS.knockdown, false, 0.5, 0.94, now);

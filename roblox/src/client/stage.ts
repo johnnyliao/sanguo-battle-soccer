@@ -184,7 +184,8 @@ function doAttack(c: Ctx): void {
 	} else {
 		let waited = 0;
 		while (clip.Length <= 0 && waited < 0.6) waited += task.wait();
-		if (clip.Length > 0) len = clip.Length;
+		if (clip.Length > 0) len = clip.Length / 2;
+		clip.AdjustSpeed(fx.getTimeScale() * 2); // normal attacks play 2x faster
 	}
 	const it = weaponImpactPhase(g.charId) ?? 0.4;
 	const cls = weaponClassOf(g.charId);
