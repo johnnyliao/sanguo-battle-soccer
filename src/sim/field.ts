@@ -1,3 +1,4 @@
+import { abs } from './num';
 import { FIELD_D, FIELD_W, GK_AREA_DEPTH, GOAL_H, GOAL_HALF_W } from './constants';
 import type { GameState, Player } from './types';
 
@@ -44,7 +45,7 @@ export function ownGoalX(state: GameState, team: 0 | 1): number {
 
 /** True if the player is within the goalkeeper area in front of its own goal. */
 export function inOwnArea(state: GameState, p: Player): boolean {
-  return Math.abs(p.x - ownGoalX(state, p.team)) < GK_AREA_DEPTH;
+  return abs(p.x - ownGoalX(state, p.team)) < GK_AREA_DEPTH;
 }
 
 // Formation offsets measured from the team's own goal line (x), for a team attacking +x. slot order GK,DF,MF,MF,FW.

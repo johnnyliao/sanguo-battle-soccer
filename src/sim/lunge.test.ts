@@ -114,7 +114,7 @@ describe('lunge start', () => {
     expect(p.specialCooldown).toBe(SPECIAL_COOLDOWN_TICKS);
     expect(p.stamina).toBeCloseTo(stamina0 - SPECIAL_STAMINA_COST, 6);
     expect(state.ball.ownerIdx).toBe(0);
-    expect(state.ball.special).toBeNull();
+    expect(state.ball.special).toBeUndefined();
   });
 
   it('a lunge covers about LUNGE_DISTANCE along facing, keeps the ball, and returns to normal', () => {

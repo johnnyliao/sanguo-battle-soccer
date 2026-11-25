@@ -70,7 +70,7 @@ function detectGoal(state: GameState): boolean {
   const m = state.match;
   m.score[team]++;
   b.ownerIdx = -1;
-  b.special = null;
+  b.special = undefined;
   m.lastGoal = { team, scorerIdx: b.lastTouchIdx, tick: state.tick };
   m.kickoffTeam = otherTeam(team);
   m.phase = 'goal';
@@ -147,7 +147,7 @@ export function resetForKickoff(state: GameState): void {
   b.vz = 0;
   b.ownerIdx = -1;
   b.lastTouchIdx = -1;
-  b.special = null;
+  b.special = undefined;
 
   m.phase = 'kickoff';
   m.phaseTimer = KICKOFF_TICKS;

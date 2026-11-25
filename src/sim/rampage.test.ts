@@ -115,7 +115,7 @@ describe('rampage start', () => {
     expect(events).toContainEqual({ type: 'rampageStart', playerIdx: 0 });
     expect(p.rampageTicks).toBe(RAMPAGE_TICKS);
     expect(state.ball.ownerIdx).toBe(0);
-    expect(state.ball.special).toBeNull();
+    expect(state.ball.special).toBeUndefined();
     expect(p.action).toBe('normal');
     expect(p.stamina).toBeCloseTo(stamina0 - SPECIAL_STAMINA_COST, 0);
   });
@@ -283,7 +283,7 @@ describe('rampage special ball', () => {
     expect(events).toContainEqual({ type: 'rampageEnd', playerIdx: 0 });
     expect(events).toContainEqual({ type: 'specialShot', playerIdx: 0, kind: 'straight' });
     expect(events.some((e) => e.type === 'special')).toBe(false);
-    expect(state.ball.special).not.toBeNull();
+    expect(state.ball.special).not.toBeUndefined();
     expect(state.ball.special?.kind).toBe('straight');
     expect(state.ball.special?.dirX).toBeGreaterThan(0);
     expect(state.ball.ownerIdx).toBe(-1);
@@ -298,7 +298,7 @@ describe('rampage special ball', () => {
 
     run(state, 1, inputFor(0, { j: true }));
 
-    expect(state.ball.special).not.toBeNull();
+    expect(state.ball.special).not.toBeUndefined();
     expect(state.players[0].stamina).toBe(0);
   });
 
@@ -412,7 +412,7 @@ describe('rampage into the goal', () => {
 });
 
 /** Team 0 player 0 is a no-ball rampager (a shu special) at x facing `facingX`. The ball lies loose and far away. */
-function noBallState(x: number, facingX = 1, bumpPct: number | null = null, seed = 1): GameState {
+function noBallState(x: number, facingX = 1, bumpPct: number | undefined = undefined, seed = 1): GameState {
   const state = ownerState(x, facingX, seed);
   const p = state.players[0];
   p.specialNoBall = true;
@@ -462,7 +462,7 @@ describe('no-ball rampage (shu specials)', () => {
     const events = run(state, 1, inputFor(0, { j: true }));
 
     expect(events.some((e) => e.type === 'specialShot' || e.type === 'attack' || e.type === 'rampageEnd')).toBe(false);
-    expect(state.ball.special).toBeNull();
+    expect(state.ball.special).toBeUndefined();
     expect(state.players[0].rampageTicks).toBeGreaterThan(0);
   });
 
@@ -475,7 +475,7 @@ describe('no-ball rampage (shu specials)', () => {
     const events = run(state, 1, inputFor(0, { j: true }));
 
     expect(events).toContainEqual({ type: 'specialShot', playerIdx: 0, kind: 'straight' });
-    expect(state.ball.special).not.toBeNull();
+    expect(state.ball.special).not.toBeUndefined();
     expect(state.players[0].rampageTicks).toBe(0);
   });
 

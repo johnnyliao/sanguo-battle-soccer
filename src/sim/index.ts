@@ -3,6 +3,7 @@ export * from './constants';
 export * from './types';
 export * from './rng';
 export * from './hash';
+export * from './digest';
 export * from './field';
 export * from './state';
 export * from './match';

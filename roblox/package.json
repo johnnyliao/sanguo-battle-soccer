@@ -1,0 +1,17 @@
+{
+  "name": "sanguo-roblox",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "build": "npm run sync && rbxtsc && node scripts/check-locals.mjs",
+    "watch": "npm run sync && rbxtsc -w",
+    "serve": "rojo serve",
+    "sync": "node scripts/sync-game.mjs"
+  },
+  "devDependencies": {
+    "@rbxts/compiler-types": "^3.0.0-types.0",
+    "@rbxts/types": "^1.0.963",
+    "roblox-ts": "^3.0.0",
+    "typescript": "^7.0.2"
+  }
+}

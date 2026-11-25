@@ -110,7 +110,7 @@ function flyUntilEnd(state: GameState, maxTicks: number): { x: number; y: number
   const frames: { x: number; y: number; z: number }[] = [];
   for (let t = 0; t < maxTicks; t++) {
     step(state, []);
-    if (state.ball.special !== null) {
+    if (state.ball.special !== undefined) {
       frames.push({ x: state.ball.x, y: state.ball.y, z: state.ball.z });
     }
     if (state.events.some((e) => e.type === 'specialEnd')) break;
@@ -298,7 +298,7 @@ describe('charge', () => {
 
     expect(events.some((e) => e.type === 'special')).toBe(false);
     expect(events).toContainEqual({ type: 'kick', playerIdx: 0, kind: 'shot', targetIdx: -1 });
-    expect(state.ball.special).toBeNull();
+    expect(state.ball.special).toBeUndefined();
   });
 
   it('being punched while charging loses the ball and cancels the charge', () => {
@@ -384,7 +384,7 @@ describe('special shots', () => {
     expect(victim.action).toBe('down');
     const xAtHit = state.ball.x;
     for (let t = 0; t < 10; t++) step(state, []);
-    expect(state.ball.special).not.toBeNull();
+    expect(state.ball.special).not.toBeUndefined();
     expect(state.ball.x).toBeGreaterThan(xAtHit);
   });
 

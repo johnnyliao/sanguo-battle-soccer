@@ -101,8 +101,8 @@ export interface Player {
   specialName: string;
   /** The special can be cast without the ball. */
   specialNoBall: boolean;
-  /** Share of the victim's maxStamina a contact hit of this special removes, or null for the flat default. */
-  specialBumpPct: number | null;
+  /** Share of the victim's maxStamina a contact hit of this special removes, or undefined for the flat default. */
+  specialBumpPct: number | undefined;
   prevInput: InputFrame;
 }
 
@@ -158,9 +158,9 @@ export interface Ball {
   ownerIdx: number | -1;
   /** Index of the last player who touched the ball, or -1. */
   lastTouchIdx: number | -1;
-  special: SpecialShot | null;
-  /** A swallowed shot (held, then spat) or a spat tiger ball in flight. null otherwise. See TigerBall. */
-  tiger: TigerBall | null;
+  special: SpecialShot | undefined;
+  /** A swallowed shot (held, then spat) or a spat tiger ball in flight. undefined otherwise. See TigerBall. */
+  tiger: TigerBall | undefined;
 }
 
 /**
@@ -404,8 +404,8 @@ export type PkStage = 'order' | 'aim' | 'flight' | 'result' | 'done';
 export interface PkState {
   stage: PkStage;
   stageTimer: number;
-  /** Player idxs per team (5 each), null until chosen. */
-  order: [number[] | null, number[] | null];
+  /** Player idxs per team (5 each), undefined until chosen. */
+  order: [number[] | undefined, number[] | undefined];
   kicks: [('goal' | 'miss')[], ('goal' | 'miss')[]];
   kickingTeam: 0 | 1;
   firstTeam: 0 | 1;
@@ -420,7 +420,7 @@ export interface PkState {
   aimHigh: boolean;
   guessCol: number;
   guessHigh: boolean;
-  outcome: null | 'goal' | 'save' | 'miss';
+  outcome: undefined | 'goal' | 'save' | 'miss';
   score: [number, number];
   winner: -1 | 0 | 1;
 }
@@ -441,9 +441,9 @@ export interface MatchState {
   swapped: boolean;
   kickoffTeam: 0 | 1;
   firstKickoffTeam: 0 | 1;
-  lastGoal: null | { team: 0 | 1; scorerIdx: number; tick: number };
-  /** null until the penalty shootout starts. */
-  pk: PkState | null;
+  lastGoal: undefined | { team: 0 | 1; scorerIdx: number; tick: number };
+  /** undefined until the penalty shootout starts. */
+  pk: PkState | undefined;
 }
 
 export interface GameState {

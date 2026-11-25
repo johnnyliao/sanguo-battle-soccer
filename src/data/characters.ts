@@ -1,3 +1,4 @@
+import { floor, min, max, len, fail, sortBy } from '../sim/num';
 import type { BodySize, CharacterDef, Country, Role, SizeParams, SpecialKind, Stats } from './types';
 
 const STAT_KEYS: (keyof Stats)[] = ['power', 'speed', 'stamina', 'technique', 'defense'];
@@ -54,9 +55,9 @@ export function normalizeTeam(defs: CharacterDef[], target = 150): CharacterDef[
   defs.forEach((d) => STAT_KEYS.forEach((key) => values.push(d.stats[key])));
   const total = values.reduce((s, v) => s + v, 0);
 
-  const out = values.map((v) => Math.floor((v * target) / total));
+  const out = values.map((v) => floor((v * target) / total));
   const rems = values.map((v) => (v * target) % total);
-  const order = values.map((_, i) => i).sort((a, b) => rems[b] - rems[a] || a - b);
+  const order = sortBy(values.map((_, i) => i), (a, b) => rems[b] - rems[a] || a - b);
 
   let remaining = target - out.reduce((s, v) => s + v, 0);
   for (const i of order) {
@@ -65,8 +66,8 @@ export function normalizeTeam(defs: CharacterDef[], target = 150): CharacterDef[
     remaining -= 1;
   }
 
-  for (let i = 0; i < out.length; i++) {
-    out[i] = Math.min(10, Math.max(1, out[i]));
+  for (let i = 0; i < len(out); i++) {
+    out[i] = min(10, max(1, out[i]));
   }
 
   // Clamping may have changed the sum; nudge stats that are not at the bound.
@@ -76,19 +77,19 @@ export function normalizeTeam(defs: CharacterDef[], target = 150): CharacterDef[
     let moved = false;
     for (const i of order) {
       if (diff === 0) break;
-      const next = out[i] + step;
-      if (next < 1 || next > 10) continue;
-      out[i] = next;
+      const nudged = out[i] + step;
+      if (nudged < 1 || nudged > 10) continue;
+      out[i] = nudged;
       diff -= step;
       moved = true;
     }
-    if (!moved) throw new Error(`normalizeTeam: cannot reach target ${target}`);
+    if (!moved) fail(`normalizeTeam: cannot reach target ${target}`);
   }
 
   return defs.map((d, ci) => {
     const stats = { ...d.stats };
     STAT_KEYS.forEach((key, si) => {
-      stats[key] = out[ci * STAT_KEYS.length + si];
+      stats[key] = out[ci * len(STAT_KEYS) + si];
     });
     return { ...d, stats };
   });
@@ -98,7 +99,10 @@ export function getTeam(country: Country): CharacterDef[] {
   return normalizeTeam(RAW_CHARACTERS.filter((d) => d.country === country));
 }
 
-export const CHARACTERS: CharacterDef[] = (['shu', 'wei', 'wu'] as const).flatMap((c) => getTeam(c));
+export const CHARACTERS: CharacterDef[] = [];
+for (const c of ['shu', 'wei', 'wu'] as const) {
+  for (const d of getTeam(c)) CHARACTERS.push(d);
+}
 
 export const COUNTRY_INFO: Record<Country, { name: string; color: number }> = {
   shu: { name: '蜀', color: 0x2fa84f },

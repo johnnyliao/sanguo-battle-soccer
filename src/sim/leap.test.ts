@@ -205,7 +205,7 @@ describe('leap cast', () => {
       expect(state.ball.x).toBeCloseTo(p.x + p.facingX * (p.radius + DRIBBLE_OFFSET), 6);
       expect(state.ball.y).toBeCloseTo(p.y, 6);
     }
-    expect(state.ball.special).toBeNull();
+    expect(state.ball.special).toBeUndefined();
   });
 
   it('z is 0 on the back-hop, peaks at LEAP_PEAK_Z mid-flight, and is 0 after landing', () => {
@@ -366,7 +366,7 @@ describe('silence', () => {
     expect(seen.some((e) => e.type === 'kick' || e.type === 'chargeFull' || e.type === 'callPass')).toBe(false);
     expect(seen.some((e) => e.type === 'specialShot')).toBe(false);
     expect(state.ball.ownerIdx).toBe(0);
-    expect(state.ball.special).toBeNull();
+    expect(state.ball.special).toBeUndefined();
     expect(p.callPassTicks).toBe(0);
 
     // Movement works and he dribbles the ball along.

@@ -1,3 +1,4 @@
+import { round } from './num';
 import type { BodySize, SizeParams } from '../data/types';
 import {
   FIELD_D,
@@ -17,7 +18,7 @@ export function createInitialState(
   setup: MatchSetup,
   sizeParams: Record<BodySize, SizeParams>,
 ): GameState {
-  const halfTicks = Math.round((setup.halfSeconds ?? DEFAULT_HALF_SECONDS) * TICK_HZ);
+  const halfTicks = round((setup.halfSeconds ?? DEFAULT_HALF_SECONDS) * TICK_HZ);
   const state: GameState = {
     tick: 0,
     rng: (setup.seed >>> 0) || 0x9e3779b9,
@@ -43,8 +44,8 @@ export function createInitialState(
       vz: 0,
       ownerIdx: -1,
       lastTouchIdx: -1,
-      special: null,
-      tiger: null,
+      special: undefined,
+      tiger: undefined,
     },
     match: {
       phase: 'kickoff',
@@ -56,8 +57,8 @@ export function createInitialState(
       swapped: false,
       kickoffTeam: 0,
       firstKickoffTeam: 0,
-      lastGoal: null,
-      pk: null,
+      lastGoal: undefined,
+      pk: undefined,
     },
     events: [],
   };
@@ -112,7 +113,7 @@ export function createInitialState(
         specialKind: def.special.kind,
         specialName: def.special.name,
         specialNoBall: def.special.noBall ?? false,
-        specialBumpPct: def.special.bumpPct ?? null,
+        specialBumpPct: def.special.bumpPct ?? undefined,
         prevInput: { ...EMPTY_INPUT },
       };
       state.players.push(player);

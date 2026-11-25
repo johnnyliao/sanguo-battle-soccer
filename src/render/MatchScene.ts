@@ -962,7 +962,7 @@ export class MatchScene extends Phaser.Scene {
     });
     ball.ownerIdx = this.humanIdx;
     ball.lastTouchIdx = this.humanIdx;
-    ball.special = null;
+    ball.special = undefined;
     ball.x = human.x + human.facingX * (human.radius + DRIBBLE_OFFSET);
     ball.y = human.y;
     ball.z = 0;
@@ -994,7 +994,7 @@ export class MatchScene extends Phaser.Scene {
     });
     ball.ownerIdx = -1;
     ball.lastTouchIdx = forward.idx;
-    ball.special = null;
+    ball.special = undefined;
     ball.x = forward.x - dir * PREVIEW_ARROW_BALL_DX;
     ball.y = cy;
     ball.z = 0;
@@ -2517,7 +2517,7 @@ export class MatchScene extends Phaser.Scene {
 
   /** Field overview in the top-left: players, ball, goals and the camera's x range. Hidden during the shootout. */
   private drawMinimap(): void {
-    const visible = this.state.match.pk === null && this.preview === null;
+    const visible = this.state.match.pk === undefined && this.preview === null;
     this.minimapGfx.setVisible(visible);
     if (!visible) return;
     this.minimapFrames++;
@@ -2585,7 +2585,7 @@ export class MatchScene extends Phaser.Scene {
     const px = sx - cam.scrollX;
     const py = sy - cam.scrollY;
     const outside = px < ARROW_MARGIN || px > W - ARROW_MARGIN || py < ARROW_MARGIN || py > H - ARROW_MARGIN;
-    const show = this.state.match.phase === 'play' && this.state.match.pk === null && outside && this.preview === null;
+    const show = this.state.match.phase === 'play' && this.state.match.pk === undefined && outside && this.preview === null;
     this.arrowShown = show;
     this.arrowText.setVisible(show);
     if (!show) return;
@@ -3245,10 +3245,10 @@ export class MatchScene extends Phaser.Scene {
     this.awayText.setText(`${s1} ${away.name}`);
 
     const pk = match.pk;
-    this.touch.setPk(pk !== null);
+    this.touch.setPk(pk !== undefined);
     // The order overlay covers the PK panel, so the panel waits until the order is set.
-    this.pkObjs.forEach((o) => o.setVisible(pk !== null && pk.stage !== 'order'));
-    if (pk !== null) {
+    this.pkObjs.forEach((o) => o.setVisible(pk !== undefined && pk.stage !== 'order'));
+    if (pk !== undefined) {
       this.drawPkHud(pk);
     } else {
       this.drawMatchHud();
@@ -3381,7 +3381,7 @@ export class MatchScene extends Phaser.Scene {
     this.pkOrderTap = null;
 
     const pk = this.state.match.pk;
-    const open = pk !== null && pk.stage === 'order' && pk.order[0] === null;
+    const open = pk !== undefined && pk.stage === 'order' && pk.order[0] === undefined;
     if (!open) {
       if (this.pkOrderOpen) {
         this.setPkOrderVisible(false);

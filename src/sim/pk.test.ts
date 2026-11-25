@@ -59,7 +59,7 @@ function startShootout(seed: number): GameState {
 
 function pkOf(state: GameState): PkState {
   const pk = state.match.pk;
-  if (pk === null) throw new Error('no shootout state');
+  if (pk === undefined) throw new Error('no shootout state');
   return pk;
 }
 
@@ -113,9 +113,9 @@ function forceResult(state: GameState, outcome: 'goal' | 'miss'): SimEvent[] {
   return run(state, 1);
 }
 
-function pkResultOf(events: SimEvent[]): 'goal' | 'save' | 'miss' | null {
+function pkResultOf(events: SimEvent[]): 'goal' | 'save' | 'miss' | undefined {
   for (const e of events) if (e.type === 'pkResult') return e.outcome;
-  return null;
+  return undefined;
 }
 
 describe('shootout start and orders', () => {
@@ -146,8 +146,8 @@ describe('shootout start and orders', () => {
     const state = startShootout(4);
     autoPkOrders(state, 0);
     const pk = pkOf(state);
-    expect(pk.order[0]).toBeNull();
-    expect(pk.order[1]).not.toBeNull();
+    expect(pk.order[0]).toBeUndefined();
+    expect(pk.order[1]).not.toBeUndefined();
     expect(pk.stage).toBe('order');
   });
 
@@ -157,7 +157,7 @@ describe('shootout start and orders', () => {
     expect(() => submitPkOrder(state, 0, [0, 1, 2, 3, 3])).toThrow();
     expect(() => submitPkOrder(state, 0, [0, 1, 2, 3, 5])).toThrow();
     expect(() => submitPkOrder(state, 0, [0, 1, 2, 3, 4, 4])).toThrow();
-    expect(pkOf(state).order[0]).toBeNull();
+    expect(pkOf(state).order[0]).toBeUndefined();
   });
 
   it('defaultPkOrder sorts by power + technique, highest first, ties to the lowest idx', () => {

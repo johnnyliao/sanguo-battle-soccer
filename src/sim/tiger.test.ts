@@ -94,8 +94,8 @@ function loose(state: GameState, x: number, y: number, vx: number, vy: number, l
   b.vz = 0;
   b.ownerIdx = -1;
   b.lastTouchIdx = lastTouch;
-  b.special = null;
-  b.tiger = null;
+  b.special = undefined;
+  b.tiger = undefined;
 }
 
 /** Steps `n` ticks and returns every event tagged with the tick it was emitted on. */
@@ -199,8 +199,8 @@ describe('tiger guard swallow', () => {
     expect(state.ball.vx).toBeGreaterThan(0);
 
     guard = 0;
-    while (state.ball.tiger !== null && guard++ < 300) step(state, []);
-    expect(state.ball.tiger).toBeNull();
+    while (state.ball.tiger !== undefined && guard++ < 300) step(state, []);
+    expect(state.ball.tiger).toBeUndefined();
     expect(state.ball.z).toBe(0);
     expect(Math.abs(state.ball.x - spitX - TIGER_SPIT_DISTANCE)).toBeLessThanOrEqual(20);
     expect(state.ball.y).toBeCloseTo(MID_Y, 5);
@@ -224,7 +224,7 @@ describe('tiger guard swallow', () => {
     };
     const log = run(state, 1);
     expect(typesOf(log)).toEqual(expect.arrayContaining(['tigerSwallow', 'specialEnd']));
-    expect(state.ball.special).toBeNull();
+    expect(state.ball.special).toBeUndefined();
     expect(state.ball.tiger?.phase).toBe('hold');
   });
 
@@ -234,7 +234,7 @@ describe('tiger guard swallow', () => {
     loose(state, 200, 40, -400, 0, 5);
     const log = run(state, 10);
     expect(typesOf(log)).not.toContain('tigerSwallow');
-    expect(state.ball.tiger).toBeNull();
+    expect(state.ball.tiger).toBeUndefined();
   });
 
   it('does not swallow a teammate back-pass', () => {
@@ -243,7 +243,7 @@ describe('tiger guard swallow', () => {
     loose(state, 220, MID_Y, -400, 0, 2);
     const log = run(state, 10);
     expect(typesOf(log)).not.toContain('tigerSwallow');
-    expect(state.ball.tiger).toBeNull();
+    expect(state.ball.tiger).toBeUndefined();
   });
 
   it('does not swallow a dribble (the ball is owned)', () => {
@@ -270,7 +270,7 @@ describe('tiger guard swallow', () => {
     loose(state, 220, MID_Y, -400, 0, 5);
     const log = run(state, 10);
     expect(typesOf(log)).not.toContain('tigerSwallow');
-    expect(state.ball.tiger).toBeNull();
+    expect(state.ball.tiger).toBeUndefined();
   });
 });
 

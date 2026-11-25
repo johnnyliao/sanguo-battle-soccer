@@ -1,3 +1,4 @@
+import { INF, abs, sqrt, floor, min, max, len } from '../sim/num';
 import {
   EASTWIND_RADIUS,
   EMPTY_INPUT,
@@ -163,9 +164,13 @@ interface Move {
 const NO_MOVE: Move = { moveX: 0, moveY: 0 };
 
 export function createAIState(seed: number): AIState {
+  const perPlayer: AIState['perPlayer'] = [];
+  for (let i = 0; i < PLAYER_COUNT; i++) {
+    perPlayer.push({ holdTicks: 0, cooldown: 0, intent: 'support' });
+  }
   return {
     rng: seed >>> 0,
-    perPlayer: Array.from({ length: PLAYER_COUNT }, () => ({ holdTicks: 0, cooldown: 0, intent: 'support' })),
+    perPlayer,
     pk: createPkAIState(),
   };
 }
@@ -196,7 +201,7 @@ function activeFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPl
   // A passenger on Sun Ce's sail: the sim ignores his input.
   if (p.sailPassengerOf !== -1) return { ...EMPTY_INPUT };
   const roar = roarFrame(state, p, s);
-  if (roar !== null) return roar;
+  if (roar !== undefined) return roar;
   if (p.action !== 'normal') return { ...EMPTY_INPUT };
   if (p.sailTicks > 0) return sailFrame(state, p, s);
   if (state.ball.ownerIdx === p.idx) {
@@ -205,10 +210,10 @@ function activeFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPl
   }
   if (p.specialMode === 'slash' && p.slashTicks > 0) {
     const chase = slashChaseFrame(state, ai, p, s);
-    if (chase !== null) return chase;
+    if (chase !== undefined) return chase;
   }
   const special = offBallSpecialFrame(state, ai, p, s);
-  if (special !== null) return special;
+  if (special !== undefined) return special;
   return freeFrame(state, ai, p, s);
 }
 
@@ -217,15 +222,15 @@ function activeFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPl
  * once, with or without the ball. As goalkeeper, an incoming shot in the roar's reach is roared at with certainty, on
  * the normal goalkeeper frame.
  */
-function roarFrame(state: GameState, p: Player, s: AIState['perPlayer'][number]): InputFrame | null {
-  if (p.specialMode !== 'roar') return null;
-  if (p.action !== 'normal') return null;
+function roarFrame(state: GameState, p: Player, s: AIState['perPlayer'][number]): InputFrame | undefined {
+  if (p.specialMode !== 'roar') return undefined;
+  if (p.action !== 'normal') return undefined;
   if (roarShotIncoming(state, p)) {
     const normal = gkFreeFrame(state, p, s);
     s.intent = 'roarShot';
     return { ...normal, l: !p.prevInput.l };
   }
-  if (!roarWanted(state, p)) return null;
+  if (!roarWanted(state, p)) return undefined;
   s.intent = 'roar';
   return frame(NO_MOVE, { l: !p.prevInput.l });
 }
@@ -276,7 +281,7 @@ function roarWanted(state: GameState, p: Player): boolean {
     inCircle++;
     if (t.idx === state.ball.ownerIdx) carrierInCircle = true;
   }
-  const ballNearOwnGoal = Math.abs(state.ball.x - ownGoal) < GK_AREA_DEPTH + 60;
+  const ballNearOwnGoal = abs(state.ball.x - ownGoal) < GK_AREA_DEPTH + 60;
   return inCircle >= 2 || carrierInCircle || (inCircle >= 1 && ballNearOwnGoal);
 }
 
@@ -285,7 +290,7 @@ function ownerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPla
   const dir = attackDir(state, team);
   const goalX = opponentGoalX(state, team);
 
-  if (hasCaller(state, p)) return passFrame(p, null);
+  if (hasCaller(state, p)) return passFrame(p, undefined);
 
   // Zhuge Liang's beam: channelled on the same per-tick chance as the other specials.
   if (
@@ -431,7 +436,7 @@ function ownerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPla
     return frame(NO_MOVE, { l: true });
   }
 
-  const goalDist = Math.abs(goalX - p.x);
+  const goalDist = abs(goalX - p.x);
   const shotRange = p.role === 'DF' ? SHOT_RANGE_DF : SHOT_RANGE_FWD;
   const inShotRange = goalDist < shotRange;
   const inChargeRange = goalDist < CHARGE_SHOT_RANGE;
@@ -453,13 +458,13 @@ function ownerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPla
     }
   }
 
-  if (opponentAhead(state, p, PRESSURE_RANGE, Infinity) && nextRandom(ai) < PRESSURE_PASS_CHANCE) {
+  if (opponentAhead(state, p, PRESSURE_RANGE, INF) && nextRandom(ai) < PRESSURE_PASS_CHANCE) {
     s.intent = 'pass';
-    return passFrame(p, pickReceiver(state, p, -Infinity));
+    return passFrame(p, pickReceiver(state, p, -INF));
   }
 
   const forward = pickReceiver(state, p, FORWARD_PASS_MIN_AHEAD);
-  if (forward !== null && nextRandom(ai) < FORWARD_PASS_CHANCE) {
+  if (forward !== undefined && nextRandom(ai) < FORWARD_PASS_CHANCE) {
     s.intent = 'pass';
     return passFrame(p, forward);
   }
@@ -474,65 +479,65 @@ function ownerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPla
 
 /**
  * Special cast without the ball (only for specialNoBall players), on the per-tick chance once the situation for its
- * kind holds. Returns null when no special is cast this tick.
+ * kind holds. Returns undefined when no special is cast this tick.
  */
 function offBallSpecialFrame(
   state: GameState,
   ai: AIState,
   p: Player,
   s: AIState['perPlayer'][number],
-): InputFrame | null {
-  if (!p.specialNoBall || p.prevInput.l || p.specialCooldown > 0 || p.stamina < SHOT_MIN_STAMINA) return null;
+): InputFrame | undefined {
+  if (!p.specialNoBall || p.prevInput.l || p.specialCooldown > 0 || p.stamina < SHOT_MIN_STAMINA) return undefined;
   // Xu Chu's tiger guard: the goalkeeper's normal frame (freeFrame) with L added on top, so his movement is unchanged.
   if (p.specialMode === 'tiger') {
-    if (!tigerThreat(state, p) || nextRandom(ai) >= TIGER_AI_CHANCE) return null;
+    if (!tigerThreat(state, p) || nextRandom(ai) >= TIGER_AI_CHANCE) return undefined;
     const normal = freeFrame(state, ai, p, s);
     s.intent = 'tiger';
     return { ...normal, l: true };
   }
   // Sun Quan's arrowship: the same shape as the tiger guard, on the goalkeeper's normal frame with L added on top.
   if (p.specialMode === 'arrowship') {
-    if (!arrowshipWanted(state, p) || nextRandom(ai) >= ARROWSHIP_AI_CHANCE) return null;
+    if (!arrowshipWanted(state, p) || nextRandom(ai) >= ARROWSHIP_AI_CHANCE) return undefined;
     const normal = freeFrame(state, ai, p, s);
     s.intent = 'arrowship';
     return { ...normal, l: true };
   }
-  const carrier = state.ball.ownerIdx === -1 ? null : state.players[state.ball.ownerIdx];
-  const enemyCarrier = carrier !== null && carrier.team !== p.team ? carrier : null;
+  const carrier = state.ball.ownerIdx === -1 ? undefined : state.players[state.ball.ownerIdx];
+  const enemyCarrier = carrier !== undefined && carrier.team !== p.team ? carrier : undefined;
   let wanted = false;
   let steer: Move = NO_MOVE;
   switch (p.specialMode) {
     case 'ride': {
       const inLane = rideLaneOpponents(state, p);
-      const laneCarrier = inLane.find((t) => t.idx === state.ball.ownerIdx) ?? null;
-      wanted = laneCarrier !== null || inLane.length >= RIDE_LANE_MIN_OPPONENTS;
+      const laneCarrier = inLane.find((t) => t.idx === state.ball.ownerIdx) ?? undefined;
+      wanted = laneCarrier !== undefined || len(inLane) >= RIDE_LANE_MIN_OPPONENTS;
       // Facing already points down the lane, so only a carrier needs steering to keep him in the bike's path.
-      steer = laneCarrier !== null ? steerTo(p, laneCarrier.x, laneCarrier.y) : NO_MOVE;
+      steer = laneCarrier !== undefined ? steerTo(p, laneCarrier.x, laneCarrier.y) : NO_MOVE;
       break;
     }
     case 'fear':
       wanted =
-        (enemyCarrier !== null && dist(p.x, p.y, enemyCarrier.x, enemyCarrier.y) <= FEAR_RADIUS) ||
+        (enemyCarrier !== undefined && dist(p.x, p.y, enemyCarrier.x, enemyCarrier.y) <= FEAR_RADIUS) ||
         opponentsWithin(state, p, FEAR_RADIUS) >= FEAR_MIN_OPPONENTS;
       break;
     case 'beam':
-      wanted = enemyCarrier !== null && Math.abs(enemyCarrier.x - ownGoalX(state, p.team)) < FIELD_W / 2;
+      wanted = enemyCarrier !== undefined && abs(enemyCarrier.x - ownGoalX(state, p.team)) < FIELD_W / 2;
       break;
     case 'lunge':
-      if (enemyCarrier !== null) {
+      if (enemyCarrier !== undefined) {
         const dx = enemyCarrier.x - p.x;
         const dy = enemyCarrier.y - p.y;
         const d = dist(p.x, p.y, enemyCarrier.x, enemyCarrier.y);
         wanted =
           d >= LUNGE_BALL_MIN &&
           d <= LUNGE_BALL_MAX &&
-          Math.abs(dy) < LUNGE_BALL_LATERAL &&
-          sign(p.facingX) === sign(dx);
+          abs(dy) < LUNGE_BALL_LATERAL &&
+          unitSign(p.facingX) === unitSign(dx);
         steer = steerTo(p, enemyCarrier.x, enemyCarrier.y);
       }
       break;
     case 'leap':
-      if (enemyCarrier !== null) {
+      if (enemyCarrier !== undefined) {
         const land = leapLanding(p);
         const ahead = (enemyCarrier.x - p.x) * p.facingX + (enemyCarrier.y - p.y) * p.facingY;
         wanted =
@@ -551,11 +556,11 @@ function offBallSpecialFrame(
       break;
     case 'icefield':
       wanted =
-        (enemyCarrier !== null && dist(p.x, p.y, enemyCarrier.x, enemyCarrier.y) <= ICE_CARRIER_RANGE) ||
+        (enemyCarrier !== undefined && dist(p.x, p.y, enemyCarrier.x, enemyCarrier.y) <= ICE_CARRIER_RANGE) ||
         opponentsWithin(state, p, ICE_OFF_BALL_RANGE) >= ICE_OFF_BALL_MIN_OPPONENTS;
       break;
     case 'sail':
-      if (enemyCarrier !== null) {
+      if (enemyCarrier !== undefined) {
         wanted = dist(p.x, p.y, enemyCarrier.x, enemyCarrier.y) <= SAIL_CARRIER_RANGE;
         steer = steerTo(p, enemyCarrier.x, enemyCarrier.y);
       }
@@ -570,9 +575,9 @@ function offBallSpecialFrame(
       wanted = eastwindWanted(state, p);
       break;
     default:
-      return null;
+      return undefined;
   }
-  if (!wanted || nextRandom(ai) >= SHOT_FULL_CHANCE) return null;
+  if (!wanted || nextRandom(ai) >= SHOT_FULL_CHANCE) return undefined;
   s.intent = 'offBall';
   return frame(steer, { l: true });
 }
@@ -588,11 +593,11 @@ function tigerThreat(state: GameState, p: Player): boolean {
   const ball = state.ball;
   if (ball.ownerIdx !== -1) {
     const carrier = state.players[ball.ownerIdx];
-    return carrier.team !== p.team && Math.abs(carrier.x - goalX) < TIGER_CARRIER_RANGE;
+    return carrier.team !== p.team && abs(carrier.x - goalX) < TIGER_CARRIER_RANGE;
   }
   if (ball.lastTouchIdx === -1 || state.players[ball.lastTouchIdx].team === p.team) return false;
   const towardGoal = goalX === 0 ? ball.vx < 0 : ball.vx > 0;
-  return towardGoal && Math.abs(ball.x - goalX) < TIGER_SHOT_RANGE;
+  return towardGoal && abs(ball.x - goalX) < TIGER_SHOT_RANGE;
 }
 
 /**
@@ -610,7 +615,7 @@ function arrowshipWanted(state: GameState, p: Player): boolean {
   }
   if (ball.lastTouchIdx === -1 || state.players[ball.lastTouchIdx].team === p.team) return false;
   const towardGoal = goalX === 0 ? ball.vx < 0 : ball.vx > 0;
-  return towardGoal && Math.abs(ball.vx) >= ARROWSHIP_SHOT_MIN_VX && Math.abs(ball.x - goalX) <= ARROWSHIP_SHOT_RANGE;
+  return towardGoal && abs(ball.vx) >= ARROWSHIP_SHOT_MIN_VX && abs(ball.x - goalX) <= ARROWSHIP_SHOT_RANGE;
 }
 
 /** Where a leap from p lands if cast now: LEAP_LAND along his facing (the sim normalises facing on the cast). */
@@ -640,7 +645,7 @@ function rideOwnerWanted(state: GameState, p: Player): boolean {
   if (p.facingX * attackDir(state, p.team) <= 0) return false;
   if (opponentsWithin(state, p, RIDE_OWNER_ESCAPE_RANGE) >= 1) return true;
   const goalX = opponentGoalX(state, p.team);
-  return Math.abs(goalX - p.x) < RIDE_DISTANCE && Math.abs(p.y - CENTER_Y) < GOAL_HALF_W;
+  return abs(goalX - p.x) < RIDE_DISTANCE && abs(p.y - CENTER_Y) < GOAL_HALF_W;
 }
 
 /**
@@ -654,7 +659,7 @@ function rideLaneOpponents(state: GameState, p: Player): Player[] {
     const dy = t.y - p.y;
     const along = dx * p.facingX + dy * p.facingY;
     if (along < RIDE_LANE_MIN_AHEAD || along > RIDE_DISTANCE) return false;
-    return Math.abs(dx * p.facingY - dy * p.facingX) <= RIDE_LANE_HALF;
+    return abs(dx * p.facingY - dy * p.facingX) <= RIDE_LANE_HALF;
   });
 }
 
@@ -667,8 +672,8 @@ function sailOwnerWanted(state: GameState, p: Player): boolean {
   const goalX = opponentGoalX(state, p.team);
   return (
     p.facingX * attackDir(state, p.team) > 0 &&
-    Math.abs(goalX - p.x) < SAIL_OPEN_MAX_GOAL_DIST &&
-    !opponentAhead(state, p, SAIL_OPEN_RANGE, Infinity)
+    abs(goalX - p.x) < SAIL_OPEN_MAX_GOAL_DIST &&
+    !opponentAhead(state, p, SAIL_OPEN_RANGE, INF)
   );
 }
 
@@ -679,7 +684,7 @@ function sailOwnerWanted(state: GameState, p: Player): boolean {
 function sailFrame(state: GameState, p: Player, s: AIState['perPlayer'][number]): InputFrame {
   const goalX = opponentGoalX(state, p.team);
   if (state.ball.ownerIdx === p.idx) {
-    const goalDist = Math.abs(goalX - p.x);
+    const goalDist = abs(goalX - p.x);
     const shotRange = p.role === 'DF' ? SHOT_RANGE_DF : SHOT_RANGE_FWD;
     const steer = steerTo(p, goalX, CENTER_Y);
     if (goalDist < shotRange && p.facingX * attackDir(state, p.team) > 0 && !p.prevInput.j) {
@@ -690,22 +695,22 @@ function sailFrame(state: GameState, p: Player, s: AIState['perPlayer'][number])
     return frame(steer);
   }
   const ball = state.ball;
-  const carrier = ball.ownerIdx === -1 ? null : state.players[ball.ownerIdx];
-  const enemyCarrier = carrier !== null && carrier.team !== p.team ? carrier : null;
+  const carrier = ball.ownerIdx === -1 ? undefined : state.players[ball.ownerIdx];
+  const enemyCarrier = carrier !== undefined && carrier.team !== p.team ? carrier : undefined;
   s.intent = 'sailSteer';
-  if (enemyCarrier !== null) return frame(steerTo(p, enemyCarrier.x, enemyCarrier.y));
+  if (enemyCarrier !== undefined) return frame(steerTo(p, enemyCarrier.x, enemyCarrier.y));
   if (ball.ownerIdx === -1) return frame(steerTo(p, ball.x, ball.y));
   return frame(steerTo(p, goalX, CENTER_Y));
 }
 
 /**
  * The gust target as the sim picks it: the nearest standing opponent on p's facing side within GUST_TARGET_RANGE (ties go
- * to the lowest idx), or null when none is in reach.
+ * to the lowest idx), or undefined when none is in reach.
  */
-function gustTarget(state: GameState, p: Player): Player | null {
-  const side = p.facingX !== 0 ? sign(p.facingX) : attackDir(state, p.team);
-  let best: Player | null = null;
-  let bestDist = Infinity;
+function gustTarget(state: GameState, p: Player): Player | undefined {
+  const side = p.facingX !== 0 ? unitSign(p.facingX) : attackDir(state, p.team);
+  let best: Player | undefined = undefined;
+  let bestDist = INF;
   for (const t of state.players) {
     if (t.team === p.team || t.action === 'down' || t.action === 'recover') continue;
     if ((t.x - p.x) * side <= 0) continue;
@@ -724,7 +729,7 @@ function gustTarget(state: GameState, p: Player): Player | null {
  */
 function gustWanted(state: GameState, p: Player): boolean {
   const target = gustTarget(state, p);
-  if (target === null) return false;
+  if (target === undefined) return false;
   if (target.idx === state.ball.ownerIdx) return true;
   for (const t of state.players) {
     if (t === target || t.team === p.team || t.action === 'down' || t.action === 'recover') continue;
@@ -738,8 +743,8 @@ function gustWanted(state: GameState, p: Player): boolean {
  * PORTAL_MIN_OPPONENTS standing opponents do. Off the ball and as the owner alike.
  */
 function portalWanted(state: GameState, p: Player): boolean {
-  const carrier = state.ball.ownerIdx === -1 ? null : state.players[state.ball.ownerIdx];
-  if (carrier !== null && carrier.team !== p.team && dist(p.x, p.y, carrier.x, carrier.y) <= PORTAL_RADIUS) return true;
+  const carrier = state.ball.ownerIdx === -1 ? undefined : state.players[state.ball.ownerIdx];
+  if (carrier !== undefined && carrier.team !== p.team && dist(p.x, p.y, carrier.x, carrier.y) <= PORTAL_RADIUS) return true;
   return opponentsWithin(state, p, PORTAL_RADIUS) >= PORTAL_MIN_OPPONENTS;
 }
 
@@ -748,8 +753,8 @@ function portalWanted(state: GameState, p: Player): boolean {
  * least EASTWIND_MIN_OPPONENTS standing opponents do. Off the ball and as the carrier alike.
  */
 function eastwindWanted(state: GameState, p: Player): boolean {
-  const carrier = state.ball.ownerIdx === -1 ? null : state.players[state.ball.ownerIdx];
-  if (carrier !== null && carrier.team !== p.team && dist(p.x, p.y, carrier.x, carrier.y) <= EASTWIND_RADIUS) return true;
+  const carrier = state.ball.ownerIdx === -1 ? undefined : state.players[state.ball.ownerIdx];
+  if (carrier !== undefined && carrier.team !== p.team && dist(p.x, p.y, carrier.x, carrier.y) <= EASTWIND_RADIUS) return true;
   return opponentsWithin(state, p, EASTWIND_RADIUS) >= EASTWIND_MIN_OPPONENTS;
 }
 
@@ -760,9 +765,9 @@ function eastwindWanted(state: GameState, p: Player): boolean {
 function slashWanted(state: GameState, p: Player): boolean {
   if (p.slashTicks > 0) return false;
   if (opponentsWithin(state, p, SLASH_CAST_RANGE) >= 1) return true;
-  const carrier = state.ball.ownerIdx === -1 ? null : state.players[state.ball.ownerIdx];
+  const carrier = state.ball.ownerIdx === -1 ? undefined : state.players[state.ball.ownerIdx];
   return (
-    carrier !== null &&
+    carrier !== undefined &&
     carrier.team !== p.team &&
     carrier.action !== 'down' &&
     dist(p.x, p.y, carrier.x, carrier.y) < SLASH_CARRIER_RANGE
@@ -779,17 +784,17 @@ function slashChaseFrame(
   ai: AIState,
   p: Player,
   s: AIState['perPlayer'][number],
-): InputFrame | null {
-  const carrier = state.ball.ownerIdx === -1 ? null : state.players[state.ball.ownerIdx];
+): InputFrame | undefined {
+  const carrier = state.ball.ownerIdx === -1 ? undefined : state.players[state.ball.ownerIdx];
   const enemyCarrier =
-    carrier !== null &&
+    carrier !== undefined &&
     carrier.team !== p.team &&
     carrier.action !== 'down' &&
     dist(p.x, p.y, carrier.x, carrier.y) <= SLASH_CHASE_CARRIER_RANGE
       ? carrier
-      : null;
-  const target = enemyCarrier ?? nearestOpponent(state, p.team, p.x, p.y, Infinity);
-  if (target === null) return null;
+      : undefined;
+  const target = enemyCarrier ?? nearestOpponent(state, p.team, p.x, p.y, INF);
+  if (target === undefined) return undefined;
   if (target === enemyCarrier) {
     const chase = chaseFrame(state, ai, p, s, target);
     if (chase.j) return chase;
@@ -805,7 +810,7 @@ function slashChaseFrame(
 function rampageFrame(state: GameState, p: Player, s: AIState['perPlayer'][number]): InputFrame {
   s.intent = 'rampage';
   const goalX = opponentGoalX(state, p.team);
-  const goalDist = Math.abs(goalX - p.x);
+  const goalDist = abs(goalX - p.x);
   const fireRange = p.specialKind === 'lob' ? RAMPAGE_FIRE_RANGE_LOB : RAMPAGE_FIRE_RANGE;
   const fire = goalDist < fireRange || p.rampageTicks < RAMPAGE_FIRE_LEFT;
   return frame(steerTo(p, goalX, CENTER_Y), { j: fire });
@@ -814,7 +819,7 @@ function rampageFrame(state: GameState, p: Player, s: AIState['perPlayer'][numbe
 function gkOwnerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPlayer'][number]): InputFrame {
   if (s.intent !== 'gkHold') {
     s.intent = 'gkHold';
-    s.holdTicks = GK_HOLD_MIN + Math.floor(nextRandom(ai) * GK_HOLD_SPAN);
+    s.holdTicks = GK_HOLD_MIN + floor(nextRandom(ai) * GK_HOLD_SPAN);
   }
   // Facing up-field both while holding and on the pass press, so the owned ball never sits behind the goal line.
   const upField = steerTo(p, p.x + attackDir(state, p.team) * GK_FORWARD_STEP, CENTER_Y);
@@ -828,7 +833,7 @@ function freeFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPlay
 
   const victim = nearestOpponent(state, p.team, p.x, p.y, OPPORTUNIST_RANGE);
   if (
-    victim !== null &&
+    victim !== undefined &&
     victim.idx !== ball.ownerIdx &&
     victim.rampageTicks === 0 &&
     s.cooldown === 0 &&
@@ -842,9 +847,9 @@ function freeFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPlay
 
   if (p.role === 'GK') return gkFreeFrame(state, p, s);
 
-  const owner = ball.ownerIdx === -1 ? null : state.players[ball.ownerIdx];
-  if (owner !== null && owner.team === p.team) return supportFrame(state, p, s);
-  const chasers = owner === null ? 2 : 1;
+  const owner = ball.ownerIdx === -1 ? undefined : state.players[ball.ownerIdx];
+  if (owner !== undefined && owner.team === p.team) return supportFrame(state, p, s);
+  const chasers = owner === undefined ? 2 : 1;
   if (chaseRank(state, p) < chasers) return chaseFrame(state, ai, p, s, owner);
   return defendFrame(state, p, s);
 }
@@ -857,16 +862,16 @@ function gkFreeFrame(state: GameState, p: Player, s: AIState['perPlayer'][number
 
   if (ball.ownerIdx === -1) {
     const towardGoal = goalX === 0 ? ball.vx < 0 : ball.vx > 0;
-    const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
-    if (towardGoal && speed > DIVE_MIN_SPEED && Math.abs(ball.x - goalX) < DIVE_MAX_DIST_X) {
+    const speed = sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+    if (towardGoal && speed > DIVE_MIN_SPEED && abs(ball.x - goalX) < DIVE_MAX_DIST_X) {
       const t = (goalX - ball.x) / ball.vx;
       const projY = ball.y + ball.vy * t;
-      if (Math.abs(projY - p.y) > DIVE_MIN_DY && p.z === 0 && p.vz === 0 && !p.prevInput.j) {
+      if (abs(projY - p.y) > DIVE_MIN_DY && p.z === 0 && p.vz === 0 && !p.prevInput.j) {
         s.intent = 'dive';
         return frame(steerTo(p, p.x, projY), { j: true });
       }
     }
-    if (Math.abs(ball.x - goalX) < GK_AREA_DEPTH && isClosestToBall(state, p)) {
+    if (abs(ball.x - goalX) < GK_AREA_DEPTH && isClosestToBall(state, p)) {
       s.intent = 'gkChase';
       return frame(steerTo(p, ball.x, ball.y));
     }
@@ -904,17 +909,17 @@ function supportFrame(state: GameState, p: Player, s: AIState['perPlayer'][numbe
   return frame(steerTo(p, tx, ty), { dash: far && p.stamina > DASH_STAMINA_FRAC * p.maxStamina });
 }
 
-/** Chaser for a loose ball (owner null) or for an opponent carrier (punch / slide tackle when close). */
+/** Chaser for a loose ball (owner undefined) or for an opponent carrier (punch / slide tackle when close). */
 function chaseFrame(
   state: GameState,
   ai: AIState,
   p: Player,
   s: AIState['perPlayer'][number],
-  owner: Player | null,
+  owner: Player | undefined,
 ): InputFrame {
   s.intent = 'chase';
   const dashOk = p.stamina > DASH_STAMINA_FRAC * p.maxStamina;
-  if (owner === null) {
+  if (owner === undefined) {
     const ball = state.ball;
     const d = dist(p.x, p.y, ball.x, ball.y);
     return frame(steerTo(p, ball.x, ball.y), { dash: dashOk && d > 40 });
@@ -952,8 +957,8 @@ function defendFrame(state: GameState, p: Player, s: AIState['perPlayer'][number
 }
 
 /** Pass frame: steer toward the receiver (sets facing), then press K. */
-function passFrame(p: Player, receiver: Player | null): InputFrame {
-  const move = receiver === null ? NO_MOVE : steerTo(p, receiver.x, receiver.y);
+function passFrame(p: Player, receiver: Player | undefined): InputFrame {
+  const move = receiver === undefined ? NO_MOVE : steerTo(p, receiver.x, receiver.y);
   return frame(move, { k: !p.prevInput.k });
 }
 
@@ -965,26 +970,26 @@ function frame(move: Move, extra: Partial<InputFrame> = {}): InputFrame {
 function steerTo(p: { x: number; y: number }, tx: number, ty: number): Move {
   const dx = tx - p.x;
   const dy = ty - p.y;
-  const d = Math.sqrt(dx * dx + dy * dy);
+  const d = sqrt(dx * dx + dy * dy);
   if (d < STOP_DIST) return NO_MOVE;
   return {
-    moveX: Math.abs(dx) > 0.38 * d ? sign(dx) : 0,
-    moveY: Math.abs(dy) > 0.38 * d ? sign(dy) : 0,
+    moveX: abs(dx) > 0.38 * d ? unitSign(dx) : 0,
+    moveY: abs(dy) > 0.38 * d ? unitSign(dy) : 0,
   };
 }
 
-function sign(v: number): -1 | 0 | 1 {
+function unitSign(v: number): -1 | 0 | 1 {
   return v > 0 ? 1 : v < 0 ? -1 : 0;
 }
 
 function clamp(v: number, lo: number, hi: number): number {
-  return Math.min(hi, Math.max(lo, v));
+  return min(hi, max(lo, v));
 }
 
 function dist(ax: number, ay: number, bx: number, by: number): number {
   const dx = ax - bx;
   const dy = ay - by;
-  return Math.sqrt(dx * dx + dy * dy);
+  return sqrt(dx * dx + dy * dy);
 }
 
 /** Dot product of the player's facing with the unit vector toward (x, y). 0 if the point is the player. */
@@ -1000,9 +1005,9 @@ function hasCaller(state: GameState, p: Player): boolean {
   );
 }
 
-/** Nearest standing opponent of `team` within range, or null. Ties go to the lowest idx. */
-function nearestOpponent(state: GameState, team: 0 | 1, x: number, y: number, range: number): Player | null {
-  let best: Player | null = null;
+/** Nearest standing opponent of `team` within range, or undefined. Ties go to the lowest idx. */
+function nearestOpponent(state: GameState, team: 0 | 1, x: number, y: number, range: number): Player | undefined {
+  let best: Player | undefined = undefined;
   let bestDist = range;
   for (const t of state.players) {
     if (t.team === team || t.action === 'down') continue;
@@ -1041,10 +1046,10 @@ function opponentAhead(state: GameState, p: Player, range: number, lateral: numb
     if (t.team === p.team || t.action === 'down') return false;
     const dx = t.x - p.x;
     const dy = t.y - p.y;
-    if (Math.sqrt(dx * dx + dy * dy) >= range) return false;
+    if (sqrt(dx * dx + dy * dy) >= range) return false;
     const along = dx * p.facingX + dy * p.facingY;
     if (along <= 0) return false;
-    return Math.abs(dx * p.facingY - dy * p.facingX) < lateral;
+    return abs(dx * p.facingY - dy * p.facingX) < lateral;
   });
 }
 
@@ -1052,15 +1057,15 @@ function opponentAhead(state: GameState, p: Player, range: number, lateral: numb
  * Free teammate (no opponent within RECEIVER_FREE_RANGE) that is at least minAhead further toward the
  * opponent goal than the player. Picks the one furthest forward. Null if none.
  */
-function pickReceiver(state: GameState, p: Player, minAhead: number): Player | null {
+function pickReceiver(state: GameState, p: Player, minAhead: number): Player | undefined {
   const dir = attackDir(state, p.team);
-  let best: Player | null = null;
-  let bestAhead = -Infinity;
+  let best: Player | undefined = undefined;
+  let bestAhead = -INF;
   for (const t of state.players) {
     if (t.team !== p.team || t.idx === p.idx || t.action === 'down') continue;
     const ahead = (t.x - p.x) * dir;
     if (ahead < minAhead || ahead <= bestAhead) continue;
-    if (nearestOpponent(state, p.team, t.x, t.y, RECEIVER_FREE_RANGE) !== null) continue;
+    if (nearestOpponent(state, p.team, t.x, t.y, RECEIVER_FREE_RANGE) !== undefined) continue;
     best = t;
     bestAhead = ahead;
   }

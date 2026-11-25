@@ -158,7 +158,7 @@ describe('special button (L)', () => {
     expect(p.stamina).toBeCloseTo(stamina0 - SPECIAL_STAMINA_COST, 0);
     expect(p.specialCooldown).toBe(SPECIAL_COOLDOWN_TICKS);
     expect(state.ball.ownerIdx).toBe(0);
-    expect(state.ball.special).toBeNull();
+    expect(state.ball.special).toBeUndefined();
   });
 
   it('without the ball, a rampage character pressing L does nothing', () => {
@@ -447,7 +447,7 @@ function goalLineRoarState(seed = 1): GameState {
 /** Puts the loose ball at (x, y, z) moving with (vx, vy, vz), last touched by team 1 idx 5. */
 function shotAt(state: GameState, x: number, y: number, z: number, vx: number, vy: number, vz: number): void {
   const b = state.ball;
-  Object.assign(b, { x, y, z, vx, vy, vz, ownerIdx: -1, lastTouchIdx: 5, special: null, tiger: null });
+  Object.assign(b, { x, y, z, vx, vy, vz, ownerIdx: -1, lastTouchIdx: 5, special: undefined, tiger: undefined });
 }
 
 describe('roar knocks a free ball away from the goal', () => {
@@ -499,7 +499,7 @@ describe('roar knocks a free ball away from the goal', () => {
 
     expect(events).toContainEqual({ type: 'specialEnd' });
     expect(events).toContainEqual({ type: 'roarBall', playerIdx: 0, x: 40, y: 130 });
-    expect(state.ball.special).toBeNull();
+    expect(state.ball.special).toBeUndefined();
     expect(state.ball.vx).toBeGreaterThan(0);
   });
 
@@ -522,7 +522,7 @@ describe('roar knocks a free ball away from the goal', () => {
     const events = pressL(state);
 
     expect(events).toContainEqual({ type: 'roarBall', playerIdx: 0, x: 40, y: 130 });
-    expect(state.ball.tiger).toBeNull();
+    expect(state.ball.tiger).toBeUndefined();
     expect(state.ball.vx).toBeGreaterThan(0);
   });
 

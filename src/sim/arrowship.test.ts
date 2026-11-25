@@ -116,8 +116,8 @@ function shotToward(state: GameState, x: number, y: number, vx: number, shooterI
   const b = state.ball;
   b.ownerIdx = -1;
   b.lastTouchIdx = shooterIdx;
-  b.special = null;
-  b.tiger = null;
+  b.special = undefined;
+  b.tiger = undefined;
   b.x = x;
   b.y = y;
   b.z = 0;

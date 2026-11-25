@@ -1,3 +1,4 @@
+import { min, max, len, fail, sortBy } from './num';
 import { FIELD_D, FIELD_W, GOAL_H, GOAL_HALF_W } from './constants';
 import { endRampage } from './actions';
 import { rngInt, rngNext } from './rng';
@@ -55,7 +56,7 @@ function colFromMoveY(moveY: -1 | 0 | 1): number {
 
 function requirePk(state: GameState): PkState {
   const pk = state.match.pk;
-  if (pk === null) throw new Error('penalty shootout has not started');
+  if (pk === undefined) fail('penalty shootout has not started');
   return pk;
 }
 
@@ -73,7 +74,7 @@ export function startPk(state: GameState): void {
   state.match.pk = {
     stage: 'order',
     stageTimer: 0,
-    order: [null, null],
+    order: [undefined, undefined],
     kicks: [[], []],
     kickingTeam: firstTeam,
     firstTeam,
@@ -85,7 +86,7 @@ export function startPk(state: GameState): void {
     aimHigh: false,
     guessCol: 1,
     guessHigh: false,
-    outcome: null,
+    outcome: undefined,
     score: [0, 0],
     winner: -1,
   };
@@ -99,27 +100,27 @@ export function defaultPkOrder(state: GameState, team: 0 | 1): number[] {
     const s = state.players[idx].stats;
     return s.power + s.technique;
   };
-  return teamIdxs(team).sort((a, b) => rating(b) - rating(a) || a - b);
+  return sortBy(teamIdxs(team), (a, b) => rating(b) - rating(a) || a - b);
 }
 
 /** Stores a team's kicking order. When both orders are set, the first kick begins. */
 export function submitPkOrder(state: GameState, team: 0 | 1, order: number[]): void {
   const pk = requirePk(state);
-  if (pk.stage !== 'order') throw new Error('penalty order is locked');
+  if (pk.stage !== 'order') fail('penalty order is locked');
   const expected = teamIdxs(team);
   const valid =
-    order.length === TEAM_SIZE &&
-    [...order].sort((a, b) => a - b).every((idx, i) => idx === expected[i]);
-  if (!valid) throw new Error(`invalid penalty order for team ${team}: ${order.join(',')}`);
+    len(order) === TEAM_SIZE &&
+    sortBy(order, (a, b) => a - b).every((idx, i) => idx === expected[i]);
+  if (!valid) fail(`invalid penalty order for team ${team}: ${order.join(',')}`);
   pk.order[team] = [...order];
-  if (pk.order[0] !== null && pk.order[1] !== null) beginKick(state, pk);
+  if (pk.order[0] !== undefined && pk.order[1] !== undefined) beginKick(state, pk);
 }
 
-/** Fills every null order except the human team's (-1 = no human team) with defaultPkOrder. */
+/** Fills every undefined order except the human team's (-1 = no human team) with defaultPkOrder. */
 export function autoPkOrders(state: GameState, humanTeam: 0 | 1 | -1): void {
   for (const team of [0, 1] as const) {
     if (team === humanTeam) continue;
-    if (requirePk(state).order[team] === null) {
+    if (requirePk(state).order[team] === undefined) {
       submitPkOrder(state, team, defaultPkOrder(state, team));
     }
   }
@@ -129,8 +130,8 @@ export function autoPkOrders(state: GameState, humanTeam: 0 | 1 | -1): void {
 function beginKick(state: GameState, pk: PkState): void {
   const team = pk.kickingTeam;
   const order = pk.order[team];
-  if (order === null) throw new Error(`no penalty order for team ${team}`);
-  pk.shooterIdx = order[pk.kicks[team].length % TEAM_SIZE];
+  if (order === undefined) fail(`no penalty order for team ${team}`);
+  pk.shooterIdx = order[len(pk.kicks[team]) % TEAM_SIZE];
   pk.keeperIdx = (1 - team) * TEAM_SIZE;
   pk.stage = 'aim';
   pk.stageTimer = PK_AIM_TICKS;
@@ -140,7 +141,7 @@ function beginKick(state: GameState, pk: PkState): void {
   pk.aimHigh = false;
   pk.guessCol = 1;
   pk.guessHigh = false;
-  pk.outcome = null;
+  pk.outcome = undefined;
   placePlayers(state, pk.shooterIdx, pk.keeperIdx);
   placeBall(state);
   state.events.push({ type: 'pkKick', shooterIdx: pk.shooterIdx });
@@ -184,7 +185,7 @@ function placeBall(state: GameState): void {
   b.vz = 0;
   b.ownerIdx = -1;
   b.lastTouchIdx = -1;
-  b.special = null;
+  b.special = undefined;
 }
 
 /** Advances the shootout one tick. Players do not move normally during the PK; only the kick stages read inputs. */
@@ -285,7 +286,7 @@ function tickFlight(state: GameState, pk: PkState): void {
   keeper.y = lerp(CENTER_Y, dive.y, t);
   keeper.z = lerp(0, dive.z, t);
 
-  if (pk.stageTimer <= 0 && pk.outcome !== null) enterResult(state, pk, pk.outcome);
+  if (pk.stageTimer <= 0 && pk.outcome !== undefined) enterResult(state, pk, pk.outcome);
 }
 
 /** Records the kick and emits its result. The next decision happens after PK_RESULT_TICKS. */
@@ -316,12 +317,12 @@ function tickResult(state: GameState, pk: PkState): void {
  * Sudden death (past 5 kicks): decided only when both teams have the same number of kicks and the scores differ.
  */
 function checkWinner(pk: PkState): -1 | 0 | 1 {
-  const taken0 = pk.kicks[0].length;
-  const taken1 = pk.kicks[1].length;
+  const taken0 = len(pk.kicks[0]);
+  const taken1 = len(pk.kicks[1]);
   if (taken0 <= PK_ROUNDS && taken1 <= PK_ROUNDS) {
     for (const team of [0, 1] as const) {
       const other: 0 | 1 = team === 0 ? 1 : 0;
-      const remaining = Math.max(0, PK_ROUNDS - pk.kicks[other].length);
+      const remaining = max(0, PK_ROUNDS - len(pk.kicks[other]));
       if (pk.score[team] > pk.score[other] + remaining) return team;
     }
     return -1;
@@ -368,5 +369,5 @@ function lerp(a: number, b: number, t: number): number {
 }
 
 function clamp(v: number, lo: number, hi: number): number {
-  return Math.min(hi, Math.max(lo, v));
+  return min(hi, max(lo, v));
 }

@@ -579,12 +579,12 @@ describe('AI tiger guard (Xu Chu, off the ball)', () => {
     const { state, goalX, inward } = tigerState(48);
     shuCarrierAt(state, goalX, inward, 200);
     const ai = createAIState(48);
-    let press: InputFrame | null = null;
-    for (let t = 0; t < TIGER_TICKS_CHECK && press === null; t++) {
+    let press: InputFrame | undefined = undefined;
+    for (let t = 0; t < TIGER_TICKS_CHECK && press === undefined; t++) {
       const f = computeAIInputs(state, ai, NO_HUMANS)[XU_CHU];
       if (f.l) press = f;
     }
-    expect(press).not.toBeNull();
+    expect(press).not.toBeUndefined();
     expect({ ...press, l: false }).toEqual(normal);
   });
 });
@@ -811,7 +811,7 @@ describe('AI behaviour', () => {
     }
 
     expect(fired).toBe(true);
-    expect(state.ball.special).not.toBeNull();
+    expect(state.ball.special).not.toBeUndefined();
     expect(Math.abs(FIELD_W - owner.x)).toBeLessThan(260);
   });
 

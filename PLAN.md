@@ -296,3 +296,38 @@
 - [ ] 1. 工具＋R0 可行性：裝 roblox-ts、Rojo、Lune；編譯 sim 複本、列不相容處並修到能編譯；Lune 跑 AI 對 AI 一場 — worker
 - [ ] 2. 遊戲腳本：伺服器 60Hz 跑 step、客戶端送按鍵、畫面同步、鏡頭、UI — worker
 - [ ] 3. rojo build → .rbxlx，交給使用者在 Studio 試玩 — me
+
+---
+# Goal R0（2026-11-24）Roblox 可行性試驗
+src/sim（＋ai、data）用 roblox-ts 編譯成 Luau，在 Roblox 伺服器跑一場 AI 對 AI，結果（比分、最終狀態 hash）跟網頁版（Node）一致。
+
+# Constraints / decisions
+- 開發全在 Windows 這台；Roblox 專案在 roblox/（roblox-ts 3.0 + Rojo 7.7.1）。
+- 唯一來源是 ../src/{sim,ai,data}：roblox/scripts/sync-game.mjs 把非 test 的 .ts 複製到 roblox/src/shared/game/（gitignore），不在 roblox/ 裡手改規則。
+- 相容性修改改在 ../src，網頁版行為與 vitest 必須不變（亂數、hash 結果要跟原本逐位元相同）。
+- 實作、編譯、跑測試一律派 Haiku 打工仔；me 只規劃、審查 diff。
+- 平台差異集中在 src/sim/num.ts（PI、INF、abs/sqrt/min/max/floor/sign/sin/cos/atan2、round、len、fail、sortBy、imulU）；Roblox 版用 roblox/overrides/ 的同名檔覆蓋（sync 時蓋上）。sim/ai/data 不得直接用 Math、Infinity、陣列/字串 .length、throw new Error、Array.sort、Array.from、flatMap、null。
+- 亂數：imulU 用純算術（16 位元拆半），兩邊同一份程式；web 結果須跟 Math.imul 版逐位元相同（測試比對）。
+- round：web 用 Math.round；Roblox 用 floor(x+0.5)。sortBy 回新陣列且穩定（Luau table.sort 不穩定，Roblox 版自己寫插入排序）。
+- hash.ts（JSON/structuredClone）只給 web；Roblox 版覆蓋，跨平台比對用第 3 步的正規化摘要（數字比 64 位元原始位元）。
+- sync 改成只寫有變的檔、刪多的檔，不整個資料夾刪（整個刪會讓 rojo serve 當掉）。
+
+# Steps R0
+- [x] 1. sync 腳本 ＋ 首次 rbxtsc 編譯，分類統計錯誤（不修）：235 錯，見 roblox/R0-SURVEY.md — worker
+- [x] 2a. src：新增 num.ts，sim/ai/data 全改用它＋null→undefined＋rng 改 imulU — worker — verify: 根目錄 vitest＋tsc
+- [x] 2b. roblox：overrides（num、hash）、sync 支援覆蓋與增量寫入 — worker（與 2a 平行）
+- [x] 2c. 合併後 rbxtsc 第二輪錯誤清到 0（只剩 `next` 是 Luau 保留字，已改名）— worker
+- [x] 3. 對答案（web：25 checkpoints，蜀 1:0 魏，tick 14851 結束）：num.ts 加 f64hex/entriesSorted/kindOf/fnv1aUtf8；src/sim/digest.ts 正規化摘要；src/ai/selfplay.ts 可分段跑的 AI 對 AI；web 產生 golden（每 600 tick 比分＋摘要）寫成 roblox/src/server/golden.ts；Roblox 伺服器腳本分段跑（每段 task.wait）並自動比對，印 R0 PASS / 第一個不一致的 checkpoint — worker（me 定介面）
+- [x] 3b. Luau 200 local 上限：actions.ts 改 `import * as C`、constants 拆 3 檔、build 加 check-locals — worker
+- [x] 3c. 修 -0 語意（sign/min/max/round 照 JS，src/sim/jsmath.ts）＋ fdlibm sin/cos/atan2 純 TS 移植（src/sim/fdlibm.ts，Roblox 用；web 仍用 Math，測試比對 ~180 萬組逐位元相同）— worker；-0 字面值改成執行期算（Luau 可能把 -0 常數折成 +0）— me
+- [x] 4. Studio 實跑：**2026-11-24 R0 PASS**（25 checkpoints 全一致，tick 14851，蜀 1:0 魏，Roblox 2.6s 含每段 task.wait）→ 結論已寫進 docs/roblox-rpg-plan.md
+
+# 下次接續（R0 完成後）
+- 還沒 commit（使用者沒要求；這台的 push 權限也還沒設）。下次先問要不要 commit／怎麼設 push。
+- roblox/overrides/sim/hash.ts 還是舊版（hashState 會 error、多一個 cloneState）；web 的 hash.ts 已改成 hashState＝stateDigest。之後讓 Roblox 版也改成 stateDigest。
+- 下一階段 R1（單人可玩）：斜側鏡頭、2D 看板角色、球場、手機搖桿＋按鈕、1 真人 vs AI。開工前先跟使用者確認範圍。
+
+# Lessons learned（R0）
+- Luau 每個函式（含模組最外層）最多 200 個 local；roblox-ts 把每個具名 import 和頂層 const/function 都變成 local。大檔用 `import * as C`，常數檔拆小；build 加 check-locals（>180 報錯）。
+- Rojo 只能在 Studio 編輯模式 Connect（Play 中按會出現 "Http requests can only be executed by game server"）。
+- 整個刪掉被同步的資料夾會讓 rojo serve 當掉 → sync 用增量寫入。

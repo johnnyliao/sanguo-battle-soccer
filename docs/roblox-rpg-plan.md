@@ -79,6 +79,13 @@
 - 武將：每位的等級、經驗、裝備的兵法與造型。
 - 用 Roblox DataStore 存，每場結束與離開時寫入，加版本號方便之後改格式。
 
+## R0 結果（2026-11-24）：通過
+- 網頁版和 Roblox 版共用 `src/sim`、`src/ai`、`src/data` 同一份規則程式（roblox-ts 編譯成 Luau）。同種子 AI 對 AI 跑一整場（14851 tick），25 個檢查點的比分和狀態摘要**逐位元相同**。
+- Roblox 伺服器跑一整場約 2.6 秒（含分段 `task.wait`），即時 60Hz 綽綽有餘。
+- 為此做的改動：平台差異集中在 `src/sim/num.ts`（Roblox 版用 `roblox/overrides/sim/num.ts` 覆蓋）；`null` 全改 `undefined`；亂數乘法改純算術 `imulU`；Roblox 的 sin/cos/atan2 用移植的 fdlibm（跟 V8 相同演算法）；sign/min/max/round 照 JS 的 -0 規則；常數檔拆小（Luau 一個檔最外層最多 200 個 local）。
+- 對答案流程：`WRITE_GOLDEN=1 npx vitest run src/ai/selfplay.test.ts` 產生 `roblox/src/server/golden.ts`；Studio 按 Play 後伺服器腳本自動比對，印 `[R0] PASS`／`FAIL`。改規則後要重產 golden 再到 Studio 驗。
+- 下一步：R1 單人可玩。
+
 ## 三、建議的第一步
 1. **R0 可行性試驗**（最重要，決定整個做法）：在 122 裝 roblox-ts 與 Rojo，試編譯 `src/sim`，列出不相容的地方與要改多少。
 2. 同時用網頁版先做 RPG 的「帳號等級＋每日任務＋武將等級」原型（存在瀏覽器），先驗證好不好玩，再搬進 Roblox。

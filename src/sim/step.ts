@@ -1,3 +1,4 @@
+import { INF, abs, sqrt, cos, min, max, len } from './num';
 import {
   BALL_AIR_DRAG,
   BALL_BOUNCE,
@@ -99,7 +100,7 @@ export function step(state: GameState, inputs: InputFrame[]): GameState {
     // Gusts erupt before the actions, so a victim's own tick already sees the launch.
     updateGusts(state);
     const ballPrevX = state.ball.x;
-    for (let i = 0; i < state.players.length; i++) {
+    for (let i = 0; i < len(state.players); i++) {
       updateAction(state, state.players[i], frames[i]);
     }
 
@@ -133,7 +134,7 @@ export function step(state: GameState, inputs: InputFrame[]): GameState {
     }
   }
 
-  for (let i = 0; i < state.players.length; i++) {
+  for (let i = 0; i < len(state.players); i++) {
     state.players[i].prevInput = { ...frames[i] };
   }
 
@@ -146,14 +147,14 @@ export function step(state: GameState, inputs: InputFrame[]): GameState {
  * An invincible player (rampaging or lunging) has infinite mass: it is not pushed, and an opponent takes the whole push.
  */
 function resolvePlayerCollisions(players: Player[]): void {
-  for (let i = 0; i < players.length; i++) {
-    for (let j = i + 1; j < players.length; j++) {
+  for (let i = 0; i < len(players); i++) {
+    for (let j = i + 1; j < len(players); j++) {
       const a = players[i];
       const b = players[j];
       if (a.action === 'down' || b.action === 'down') continue;
       const dx = b.x - a.x;
       const dy = b.y - a.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      const dist = sqrt(dx * dx + dy * dy);
       const minDist = a.radius + b.radius;
       if (dist >= minDist) continue;
 
@@ -198,10 +199,10 @@ function updateBall(state: GameState): void {
   const b = state.ball;
   if (b.ownerIdx !== -1) return;
 
-  if (b.tiger !== null && advanceTigerBall(state)) return;
+  if (b.tiger !== undefined && advanceTigerBall(state)) return;
   if (tryTigerSwallow(state)) return;
 
-  if (b.special !== null) {
+  if (b.special !== undefined) {
     // A special ball that ends this tick still gets the wall / goal-net handling below.
     if (!advanceSpecial(state)) bounceOffWalls(b);
     return;
@@ -224,10 +225,10 @@ function updateBall(state: GameState): void {
   }
 
   const friction = b.z === 0 ? BALL_GROUND_FRICTION : BALL_AIR_DRAG;
-  const mult = Math.max(0, 1 - friction * DT);
+  const mult = max(0, 1 - friction * DT);
   b.vx *= mult;
   b.vy *= mult;
-  if (b.z === 0 && Math.sqrt(b.vx * b.vx + b.vy * b.vy) < BALL_STOP_SPEED) {
+  if (b.z === 0 && sqrt(b.vx * b.vx + b.vy * b.vy) < BALL_STOP_SPEED) {
     b.vx = 0;
     b.vy = 0;
   }
@@ -279,12 +280,12 @@ function bounceOffWalls(b: Ball): void {
 function advanceSpecial(state: GameState): boolean {
   const b = state.ball;
   const sp = b.special;
-  if (sp === null) return false;
+  if (sp === undefined) return false;
   sp.ticks++;
 
   const speed = sp.speed;
   if (sp.kind === 'zigzag') {
-    const lateral = Math.cos(sp.ticks * SPECIAL_ZIGZAG_FREQ) * SPECIAL_ZIGZAG_AMP;
+    const lateral = cos(sp.ticks * SPECIAL_ZIGZAG_FREQ) * SPECIAL_ZIGZAG_AMP;
     b.vx = sp.dirX * speed - sp.dirY * lateral;
     b.vy = sp.dirY * speed + sp.dirX * lateral;
     b.z = SPECIAL_FLAT_Z;
@@ -309,7 +310,7 @@ function advanceSpecial(state: GameState): boolean {
   const outOfPlay = b.x < 0 || b.x > FIELD_W || b.y < 0 || b.y > FIELD_D;
   if (sp.ticks > SPECIAL_MAX_TICKS || outOfPlay || landed) {
     if (landed) b.z = 0;
-    b.special = null;
+    b.special = undefined;
     state.events.push({ type: 'specialEnd' });
     return false;
   }
@@ -327,7 +328,7 @@ function resolveSpecialContacts(state: GameState, sp: SpecialShot): boolean {
     if (p.team === sp.team || p.action === 'down') continue;
     const dx = b.x - p.x;
     const dy = b.y - p.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
+    const dist = sqrt(dx * dx + dy * dy);
 
     if (p.role === 'GK' && inOwnArea(state, p) && !sp.rolled.includes(p.idx)) {
       const reach = pickupReach(state, p);
@@ -335,7 +336,7 @@ function resolveSpecialContacts(state: GameState, sp: SpecialShot): boolean {
         sp.rolled.push(p.idx);
         const shooter = state.players[sp.shooterIdx];
         if (rngNext(state) < specialSaveChance(p, shooter)) {
-          b.special = null;
+          b.special = undefined;
           b.ownerIdx = p.idx;
           b.lastTouchIdx = p.idx;
           state.events.push({ type: 'specialEnd' });
@@ -347,7 +348,7 @@ function resolveSpecialContacts(state: GameState, sp: SpecialShot): boolean {
 
     if (sp.hit.includes(p.idx)) continue;
     if (dist >= p.radius + BALL_RADIUS + SPECIAL_CONTACT_PAD) continue;
-    if (Math.abs(b.z - p.z) >= SPECIAL_CONTACT_Z) continue;
+    if (abs(b.z - p.z) >= SPECIAL_CONTACT_Z) continue;
     sp.hit.push(p.idx);
     applySpecialHit(state, state.players[sp.shooterIdx], p, sp.kind, sp.dirX, sp.dirY);
   }
@@ -361,15 +362,15 @@ function resolveSpecialContacts(state: GameState, sp: SpecialShot): boolean {
  */
 function tryTigerSwallow(state: GameState): boolean {
   const b = state.ball;
-  if (b.lastTouchIdx === -1 || b.tiger !== null) return false;
-  if (Math.sqrt(b.vx * b.vx + b.vy * b.vy) <= BALL_STOP_SPEED) return false;
+  if (b.lastTouchIdx === -1 || b.tiger !== undefined) return false;
+  if (sqrt(b.vx * b.vx + b.vy * b.vy) <= BALL_STOP_SPEED) return false;
   const shooter = state.players[b.lastTouchIdx];
   for (const tiger of state.players) {
     if (tiger.tigerTicks === 0 || tiger.team === shooter.team) continue;
     if (tiger.action === 'down' || tiger.action === 'recover') continue;
     const dx = b.x - tiger.x;
     const dy = b.y - tiger.y;
-    if (Math.sqrt(dx * dx + dy * dy) > TIGER_SWALLOW_RANGE) continue;
+    if (sqrt(dx * dx + dy * dy) > TIGER_SWALLOW_RANGE) continue;
     if (!crossesOwnMouth(state, tiger.team, b)) continue;
     swallowBall(state, tiger);
     return true;
@@ -392,8 +393,8 @@ function crossesOwnMouth(state: GameState, team: 0 | 1, b: Ball): boolean {
 function swallowBall(state: GameState, tiger: Player): void {
   const b = state.ball;
   tiger.tigerTicks = 0;
-  if (b.special !== null) {
-    b.special = null;
+  if (b.special !== undefined) {
+    b.special = undefined;
     state.events.push({ type: 'specialEnd' });
   }
   b.tiger = { tigerIdx: tiger.idx, team: tiger.team, phase: 'hold', holdTicks: TIGER_HOLD_TICKS, hit: [] };
@@ -420,7 +421,7 @@ function placeInMouth(state: GameState, tiger: Player): void {
 function advanceTigerBall(state: GameState): boolean {
   const b = state.ball;
   const t = b.tiger;
-  if (t === null) return false;
+  if (t === undefined) return false;
   const tiger = state.players[t.tigerIdx];
   if (t.phase === 'hold') {
     placeInMouth(state, tiger);
@@ -437,11 +438,11 @@ function advanceTigerBall(state: GameState): boolean {
   if (b.z <= 0) {
     b.z = 0;
     b.vz = 0;
-    b.tiger = null;
+    b.tiger = undefined;
     return true;
   }
   if (b.x < 0 || b.x > FIELD_W || b.y < 0 || b.y > FIELD_D) {
-    b.tiger = null;
+    b.tiger = undefined;
     return false;
   }
   return true;
@@ -455,7 +456,7 @@ function advanceTigerBall(state: GameState): boolean {
 function spitTigerBall(state: GameState, tiger: Player, t: TigerBall): void {
   const b = state.ball;
   const vz0 = TIGER_SPIT_VZ;
-  const flightTime = (vz0 + Math.sqrt(vz0 * vz0 + 2 * GRAVITY * TIGER_MOUTH_Z)) / GRAVITY;
+  const flightTime = (vz0 + sqrt(vz0 * vz0 + 2 * GRAVITY * TIGER_MOUTH_Z)) / GRAVITY;
   b.vx = (attackDir(state, tiger.team) * TIGER_SPIT_DISTANCE) / flightTime;
   b.vy = 0;
   b.vz = vz0;
@@ -471,15 +472,15 @@ function spitTigerBall(state: GameState, tiger: Player, t: TigerBall): void {
 function tigerBallContacts(state: GameState, t: TigerBall): void {
   const b = state.ball;
   const tiger = state.players[t.tigerIdx];
-  const speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+  const speed = sqrt(b.vx * b.vx + b.vy * b.vy);
   const dirX = speed > 0 ? b.vx / speed : attackDir(state, tiger.team);
   const dirY = speed > 0 ? b.vy / speed : 0;
   for (const p of state.players) {
     if (p.team === t.team || p.action === 'down' || t.hit.includes(p.idx) || isInvincible(p)) continue;
     const dx = b.x - p.x;
     const dy = b.y - p.y;
-    if (Math.sqrt(dx * dx + dy * dy) >= p.radius + BALL_RADIUS + SPECIAL_CONTACT_PAD) continue;
-    if (Math.abs(b.z - p.z) >= SPECIAL_CONTACT_Z) continue;
+    if (sqrt(dx * dx + dy * dy) >= p.radius + BALL_RADIUS + SPECIAL_CONTACT_PAD) continue;
+    if (abs(b.z - p.z) >= SPECIAL_CONTACT_Z) continue;
     t.hit.push(p.idx);
     tigerBallHit(state, tiger, p, dirX, dirY);
   }
@@ -496,7 +497,7 @@ function gkCatchChance(gk: Player): number {
 }
 
 function clamp(v: number, lo: number, hi: number): number {
-  return Math.min(hi, Math.max(lo, v));
+  return min(hi, max(lo, v));
 }
 
 /**
@@ -513,7 +514,7 @@ function pickupReach(state: GameState, p: Player): number {
   if (p.action === 'normal') {
     if (ball.z >= (inArea ? GK_PICKUP_MAX_Z : PICKUP_MAX_Z)) return -1;
   } else if (p.action === 'dive') {
-    if (!gk || Math.abs(ball.z - p.z) >= GK_PICKUP_MAX_Z) return -1;
+    if (!gk || abs(ball.z - p.z) >= GK_PICKUP_MAX_Z) return -1;
     reach += GK_DIVE_EXTRA_REACH;
   } else {
     return -1;
@@ -539,16 +540,16 @@ function parryFastBall(state: GameState, gk: Player): void {
 function updatePickup(state: GameState): void {
   const ball = state.ball;
   const inNet = ball.x < 0 || ball.x > FIELD_W;
-  if (state.match.phase === 'play' && ball.ownerIdx === -1 && ball.special === null && ball.tiger === null && !inNet) {
+  if (state.match.phase === 'play' && ball.ownerIdx === -1 && ball.special === undefined && ball.tiger === undefined && !inNet) {
     let best = -1;
-    let bestDist = Infinity;
-    for (let i = 0; i < state.players.length; i++) {
+    let bestDist = INF;
+    for (let i = 0; i < len(state.players); i++) {
       const p = state.players[i];
       const reach = pickupReach(state, p);
       if (reach < 0) continue;
       const dx = ball.x - p.x;
       const dy = ball.y - p.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      const dist = sqrt(dx * dx + dy * dy);
       if (dist < reach && dist < bestDist) {
         best = i;
         bestDist = dist;
@@ -556,7 +557,7 @@ function updatePickup(state: GameState): void {
     }
     if (best !== -1) {
       const gk = state.players[best];
-      if (gk.role === 'GK' && Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy) > GK_FAST_SHOT_SPEED) {
+      if (gk.role === 'GK' && sqrt(ball.vx * ball.vx + ball.vy * ball.vy) > GK_FAST_SHOT_SPEED) {
         const caught = rngNext(state) < gkCatchChance(gk);
         state.events.push({ type: 'save', playerIdx: best, caught });
         if (!caught) {
@@ -572,8 +573,8 @@ function updatePickup(state: GameState): void {
     }
   }
 
-  for (let i = 0; i < state.players.length; i++) {
+  for (let i = 0; i < len(state.players); i++) {
     const p = state.players[i];
-    p.noTouchTicks = Math.max(0, p.noTouchTicks - 1);
+    p.noTouchTicks = max(0, p.noTouchTicks - 1);
   }
 }

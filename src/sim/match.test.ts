@@ -387,13 +387,13 @@ describe('goalkeeper catching', () => {
 
       let saved = false;
       let hitGk = false;
-      for (let t = 0; t < 60 && state.ball.special !== null; t++) {
+      for (let t = 0; t < 60 && state.ball.special !== undefined; t++) {
         step(state, []);
         if (state.events.some((e) => e.type === 'hit' && e.victimIdx === 5)) hitGk = true;
         if (state.events.some((e) => e.type === 'save' && e.caught)) {
           saved = true;
           expect(state.ball.ownerIdx).toBe(5);
-          expect(state.ball.special).toBeNull();
+          expect(state.ball.special).toBeUndefined();
           expect(state.events).toContainEqual({ type: 'specialEnd' });
           break;
         }

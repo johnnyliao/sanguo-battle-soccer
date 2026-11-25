@@ -2,7 +2,7 @@
 
 私人專案。2D 斜側視角、5 人制「亂鬥足球」網頁遊戲，角色全是三國名將。玩法類型參考經典亂鬥足球遊戲，
 但名稱、角色、美術、音樂、畫面全部原創，不可模仿任何既有作品的外觀或內容。
-2026-11-18 在筆電的 Claude session 完成需求訪談，開發一律在 10.16.41.122（safe3admin）進行，筆電效能差不要在筆電跑測試。
+2026-11-18 在筆電的 Claude session 完成需求訪談。**2026-11-24 起所有開發改在使用者的 Windows 電腦（C:\Users\Johnny\sanguo-battle-soccer）進行，不再使用 122。**
 
 ## 回應規則（使用者偏好）
 - 一律繁體中文。
@@ -11,13 +11,24 @@
 - 先列步驟並標 me/worker；跑通一次的流程（測試、截圖）交給 implementer（Haiku）。
 - 背景工作啟動後 1～3 分鐘要確認有進展；長工作每幾分鐘回使用者一行進度。
 
-## 122 環境
-- Node 22：~/opt/node22（login shell 才有 PATH，非互動 ssh 要 `bash -lc`）。npm registry 可連。
-- headless 瀏覽器最多同時 2 個（8 核、無 GPU；122 也是 SAFE3 打包測試機，不要動 docker、~/compose、~/SAFE3.0_install_02）。測完關掉 server 與瀏覽器。
-- playwright＋chromium 已在 ~/mountain-race-dev/node_modules，可沿用（--use-angle=swiftshader --enable-unsafe-swiftshader）。
-- GitHub：public repo johnnyliao/sanguo-battle-soccer（branch main）。remote = git@github-sg:johnnyliao/sanguo-battle-soccer.git，
-  122 用專屬可寫 deploy key ~/.ssh/sanguo_deploy（ssh config 別名 github-sg，走 ssh.github.com:443）。122 可直接 commit / push。
-  push 前先 git fetch。GitHub Pages：https://johnnyliao.github.io/sanguo-battle-soccer/ ，來源是 gh-pages 分支（npm run build 後把 dist 加 .nojekyll 強推到 gh-pages）。
+## 開發環境（Windows，2026-11-24 起）
+- Windows 11；Node 26（winget 裝）、Roblox Studio、Rojo 7.7.1（winget，Studio 外掛已用 `rojo plugin install` 裝）。
+  Claude Code 的 PowerShell 若找不到 node/rojo，先重新載入 PATH：
+  `$env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')`
+- Rokit 已裝但連不到 GitHub API（沙箱網路），工具改用 winget 安裝。
+- 派工：使用者裝了 planner-worker（~/.claude/agents 的 implementer、Explore，跑 Haiku），實作步驟交給 implementer。
+- Roblox 版在 `roblox/`（roblox-ts 3.0 + Rojo）：`npm run build`（sync＋rbxtsc＋check-locals）、`npm run watch`、`npm run serve`（rojo serve，埠 34872），
+  Studio **編輯模式**下 外掛程式 → Rojo → Connect（Play 中按會報 "Http requests can only be executed by game server"）。輸出視窗在「視窗」選單。
+  out/、include/、node_modules/、src/shared/game/ 不進 git。
+- **共用規則（R0，2026-11-24 通過）**：src/sim、src/ai、src/data 是唯一來源，roblox/scripts/sync-game.mjs 複製到 roblox/src/shared/game/（增量寫入；整個刪會讓 rojo serve 當掉），
+  roblox/overrides/ 同路徑檔覆蓋（目前 sim/num.ts、sim/hash.ts）。這三個資料夾的程式**不得直接用** Math、Infinity、JSON、陣列/字串 .length、null、throw new Error、
+  Array.sort、Array.from、flatMap、Object.keys，一律走 src/sim/num.ts（PI、INF、abs、sqrt、floor、sign、sin、cos、atan2、min、max、round、len、fail、sortBy、imulU、f64hex…）。
+  變數不能叫 `next`（Luau 保留）。Luau 一個檔最外層最多 200 個 local：大檔用 `import * as C from './constants'`，check-locals 超過 180 會讓 build 失敗。
+  Roblox 的 sin/cos/atan2 用 src/sim/fdlibm.ts（V8 同演算法），sign/min/max/round 用 src/sim/jsmath.ts（JS 的 -0 規則）；-0 不要寫字面值，用執行期算（如 `x * 0`）。
+- 跨平台對答案：`WRITE_GOLDEN=1 npx vitest run src/ai/selfplay.test.ts` → roblox/src/server/golden.ts；Studio Play 後看 `[R0] PASS`。改了規則就重產 golden 再驗。
+- GitHub：public repo johnnyliao/sanguo-battle-soccer（branch main）。push 前先 git fetch。
+  GitHub Pages：https://johnnyliao.github.io/sanguo-battle-soccer/ ，來源是 gh-pages 分支（npm run build 後把 dist 加 .nojekyll 強推到 gh-pages）。
+  這台電腦的 push 權限尚未設定（目前 remote 是 https 唯讀 clone）。
 
 ## 已定案的設計（2026-11-18 訪談，使用者全部同意）
 ### 技術

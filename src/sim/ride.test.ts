@@ -234,7 +234,7 @@ describe('ride dash', () => {
     const events = run(state, 1, inputFor(0, { j: true }));
 
     expect(events.some((e) => e.type === 'specialShot' || e.type === 'attack' || e.type === 'rideEnd')).toBe(false);
-    expect(state.ball.special).toBeNull();
+    expect(state.ball.special).toBeUndefined();
     expect(state.players[0].action).toBe('ride');
   });
 
