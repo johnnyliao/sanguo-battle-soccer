@@ -116,7 +116,7 @@ function buildStandIn(kind: string, color: Color3, footOffset: number): Prop {
 }
 
 /** Clones ReplicatedStorage.Props.<name> (centre pivot, anchored, no collisions) or builds a neon stand-in of `kind`. The model is parented under fx. */
-export function makeProp(name: string, kind: string, color: Color3, footOffset: number): Prop {
+export function makeProp(name: string, kind: string, color: Color3, footOffset: number, riderOffset?: Vector3, scale = 1): Prop {
 	const folder = ReplicatedStorage.FindFirstChild("Props");
 	const real = folder !== undefined ? folder.FindFirstChild(name) : undefined;
 	let prop: Prop;
@@ -132,14 +132,15 @@ export function makeProp(name: string, kind: string, color: Color3, footOffset: 
 		}
 		m.WorldPivot = new CFrame(0, 0, 0);
 		m.PivotTo(new CFrame(0, 0, 0));
+		if (scale !== 1) m.ScaleTo(scale);
+		// The model keeps its original pivot (origin, via PrimaryPart); the lowest point of its box sits on the ground.
 		const [boxCF, boxSize] = m.GetBoundingBox();
-		m.WorldPivot = boxCF;
-		let seat = new Vector3(0, boxSize.Y / 2 + footOffset, 0);
+		let seat = new Vector3(0, boxCF.Position.Y + boxSize.Y / 2 + footOffset, 0);
 		const att = m.FindFirstChild("Seat", true);
 		if (att !== undefined && att.IsA("Attachment")) {
-			seat = boxCF.PointToObjectSpace(att.WorldPosition);
+			seat = att.WorldPosition.add(riderOffset ?? new Vector3(0, footOffset, 0));
 		}
-		prop = { model: m, seat, lift: boxSize.Y / 2, real: true };
+		prop = { model: m, seat, lift: boxSize.Y / 2 - boxCF.Position.Y, real: true };
 	} else {
 		prop = buildStandIn(kind, color, footOffset);
 	}

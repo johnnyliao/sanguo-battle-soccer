@@ -22,6 +22,7 @@ import {
 import * as fx from "./fx";
 import { Ctx, WHITE, chest, flinch, flinchActor, impact, sheetFx, starsOn } from "./kit";
 import { SPECIALS } from "./specials";
+import { startWeaponAttack, weaponClassOf, weaponImpactPhase } from "./weaponPose";
 import { STAGE_CENTER, StageEnv, buildStageEnv } from "./stageEnv";
 
 const Workspace = game.GetService("Workspace");
@@ -33,13 +34,17 @@ export type ActionKind = "idle" | "run" | "attack" | "hit" | "knockdown" | "stun
 const LOOK = new Vector3(1, 0, 0);
 const UP = new Vector3(0, 1, 0);
 const RIGHT = LOOK.Cross(UP);
-const DUMMY_DIST = 7;
-const CAM_FOV = 55;
-const CAM_BASE_RADIUS = 36;
-const CAM_SPECIAL_RADIUS = 54;
-const CAM_HEIGHT = 8;
+const DUMMY_DIST = 8;
+const CAM_FOV = 50;
+const CAM_BASE_RADIUS = 16.5;
+const CAM_SPECIAL_RADIUS = 32;
+const CAM_HEIGHT = 0;
 /** Azimuth presets in radians: 前 (front), 側 (side), 斜 (3/4). 0 = camera beyond the dummy looking back at the general. */
-export const CAM_PRESETS: number[] = [math.rad(18), math.rad(90), math.rad(50)];
+export const CAM_PRESETS: number[] = [math.rad(58), math.rad(90), math.rad(48)];
+/** Per preset: focus (0 = midpoint between the two, 1 = on the general) and a radius multiplier. */
+const CAM_FOCUS: number[] = [1, 0, 0];
+const CAM_RMUL: number[] = [1.0, 1.0, 1.25];
+let presetIdx = 1;
 const ORBIT_RATE = 0.3;
 const STEP_NAME = "ShowroomStageCam";
 
@@ -50,7 +55,8 @@ let dummy: Actor | undefined;
 let ctxChar = "";
 
 // Camera state.
-let azimuth = CAM_PRESETS[2];
+let azimuth = CAM_PRESETS[1];
+let focus = 0;
 let radius = CAM_BASE_RADIUS;
 let radiusTarget = CAM_BASE_RADIUS;
 let autoOrbit = false;
@@ -58,8 +64,16 @@ let animTime = 0;
 let savedType: Enum.CameraType | undefined;
 let savedCFrame: CFrame | undefined;
 let savedFov = 70;
+let savedLight: Map<Instance, Map<string, unknown>> | undefined;
 let mouseConn: RBXScriptConnection | undefined;
 let actionToken = 0;
+
+function baseRadius(): number {
+	const m = CAM_RMUL[presetIdx];
+	if (ctxChar === "xuchu") return CAM_BASE_RADIUS * 1.4 * m;
+	if (ctxChar === "zhangfei") return CAM_BASE_RADIUS * 1.2 * m;
+	return CAM_BASE_RADIUS * m;
+}
 
 function midPoint(): Vector3 {
 	return STAGE_CENTER.add(LOOK.mul(DUMMY_DIST / 2));
@@ -73,12 +87,14 @@ function updateCamera(dt: number): void {
 	if (autoOrbit) azimuth += ORBIT_RATE * dt;
 	if (UserInputService.IsKeyDown(Enum.KeyCode.Left)) azimuth -= 1.6 * dt;
 	if (UserInputService.IsKeyDown(Enum.KeyCode.Right)) azimuth += 1.6 * dt;
-	if (UserInputService.IsKeyDown(Enum.KeyCode.Up)) radiusTarget = math.max(18, radiusTarget - 22 * dt);
-	if (UserInputService.IsKeyDown(Enum.KeyCode.Down)) radiusTarget = math.min(75, radiusTarget + 22 * dt);
+	if (UserInputService.IsKeyDown(Enum.KeyCode.Up)) radiusTarget = math.max(6, radiusTarget - 12 * dt);
+	if (UserInputService.IsKeyDown(Enum.KeyCode.Down)) radiusTarget = math.min(60, radiusTarget + 12 * dt);
 	radius += (radiusTarget - radius) * (1 - math.exp(-3 * dt));
-	const target = midPoint().add(new Vector3(0, 4.5, 0));
+	const wantFocus = radiusTarget > CAM_SPECIAL_RADIUS * 0.7 ? 0 : CAM_FOCUS[presetIdx];
+	focus += (wantFocus - focus) * (1 - math.exp(-4 * dt));
+	const target = midPoint().Lerp(STAGE_CENTER.add(LOOK.mul(1.2)), focus).add(new Vector3(0, 4.6, 0));
 	const dir = LOOK.mul(math.cos(azimuth)).add(RIGHT.mul(math.sin(azimuth)));
-	const eye = target.add(dir.mul(radius)).add(new Vector3(0, CAM_HEIGHT + (radius - CAM_BASE_RADIUS) * 0.25, 0));
+	const eye = target.add(dir.mul(radius)).add(new Vector3(0, CAM_HEIGHT + (radius - CAM_BASE_RADIUS) * 0.3, 0));
 	const shake = fx.shakeOffset(dt);
 	cam.CameraType = Enum.CameraType.Scriptable;
 	cam.FieldOfView = CAM_FOV;
@@ -110,6 +126,8 @@ function doAttack(c: Ctx): void {
 		while (clip.Length <= 0 && waited < 0.6) waited += task.wait();
 		if (clip.Length > 0) len = clip.Length;
 	}
+	const it = weaponImpactPhase(g.charId) ?? 0.4;
+	startWeaponAttack(g.model, len);
 	fx.wait(len * 0.1);
 	setTrails(g, true);
 	if (clip === undefined) {
@@ -118,8 +136,8 @@ function doAttack(c: Ctx): void {
 			moveTo(g, g.homeFoot, len * 0.4);
 		});
 	}
-	fx.wait(len * 0.3);
-	// Impact moment (about 40% of the clip).
+	fx.wait(len * (it - 0.1));
+	// Impact moment (about 40% of the clip; class-specific for scripted weapons).
 	const pos = chest(c).sub(LOOK.mul(0.8));
 	const color = colorOf(g.charId);
 	if (!sheetFx(c, "slash", pos, 9, 0.4, color)) {
@@ -129,9 +147,13 @@ function doAttack(c: Ctx): void {
 	flinch(c);
 	fx.shake(0.4, 0.25);
 	fx.flash(WHITE, 0.65, 0.18);
+	if (weaponClassOf(g.charId) === "hammer") {
+		fx.dust(g.foot.add(LOOK.mul(3)).add(new Vector3(0, 0.4, 0)), 16, 7);
+		fx.shake(0.8, 0.35);
+	}
 	fx.wait(len * 0.3);
 	setTrails(g, false);
-	fx.wait(len * 0.3);
+	fx.wait(len * math.max(0.1, 1 - it - 0.3));
 }
 
 function doHit(c: Ctx): void {
@@ -194,7 +216,7 @@ function doSpecial(c: Ctx): void {
 		warn(`[showroom] no special move for ${g.charId}`);
 		return;
 	}
-	radiusTarget = CAM_SPECIAL_RADIUS;
+	radiusTarget = baseRadius() + (CAM_SPECIAL_RADIUS - CAM_BASE_RADIUS) + (ctxChar === "sunquan" ? 8 : ctxChar === "machao" ? 8 : ctxChar === "guanyu" || ctxChar === "sunce" ? -6 : 0);
 	const clip = playOnce(g, CHAR_ANIMS[g.charId]?.special);
 	if (clip === undefined) warnOnce(`special-${g.charId}`, `[showroom] ${g.charId}: no special animation, effects only`);
 	fn(c);
@@ -230,7 +252,7 @@ export function stageAction(kind: ActionKind): void {
 	fx.reset();
 	resetActor(g);
 	resetActor(d);
-	radiusTarget = CAM_BASE_RADIUS;
+	radiusTarget = baseRadius();
 	task.spawn(() => {
 		let persistent = true;
 		fx.guard(() => {
@@ -239,7 +261,7 @@ export function stageAction(kind: ActionKind): void {
 		if (!persistent && token === actionToken) {
 			resetActor(g);
 			resetActor(d);
-			radiusTarget = CAM_BASE_RADIUS;
+			radiusTarget = baseRadius();
 		}
 	});
 }
@@ -252,7 +274,9 @@ export function stageSetSpeed(s: number): void {
 
 export function stageSetPreset(i: number): void {
 	autoOrbit = false;
+	presetIdx = i;
 	azimuth = CAM_PRESETS[i];
+	radiusTarget = baseRadius();
 }
 
 /** Toggles the slow auto-orbit; returns the new state. */
@@ -280,6 +304,32 @@ function spawnActors(charId: string): boolean {
 }
 
 /** Enters the stage (or switches general when already on it). Returns false when the general's avatar is not available. */
+function applyStageLighting(): void {
+	const L = game.GetService("Lighting");
+	const saved = new Map<Instance, Map<string, unknown>>();
+	const keep = (inst: Instance, props: Record<string, unknown>) => {
+		const m = new Map<string, unknown>();
+		for (const [k] of pairs(props)) m.set(k as string, (inst as unknown as Record<string, unknown>)[k as string]);
+		saved.set(inst, m);
+		for (const [k, v] of pairs(props)) (inst as unknown as Record<string, unknown>)[k as string] = v;
+	};
+	keep(L, { Brightness: 1.2, ExposureCompensation: -0.25, Ambient: Color3.fromRGB(125, 120, 150), OutdoorAmbient: Color3.fromRGB(125, 120, 150) });
+	for (const c of L.GetChildren()) {
+		if (c.IsA("BloomEffect")) keep(c, { Intensity: 0.15 });
+		else if (c.IsA("DepthOfFieldEffect") || c.IsA("SunRaysEffect")) keep(c, { Enabled: false });
+		else if (c.IsA("Atmosphere")) keep(c, { Density: 0, Haze: 0, Glare: 0 });
+	}
+	savedLight = saved;
+}
+
+function restoreLighting(): void {
+	if (savedLight === undefined) return;
+	for (const [inst, m] of savedLight) {
+		for (const [k, v] of m) (inst as unknown as Record<string, unknown>)[k] = v;
+	}
+	savedLight = undefined;
+}
+
 export function enterStage(charId: string): boolean {
 	if (env === undefined) env = buildStageEnv();
 	if (!active) {
@@ -290,11 +340,14 @@ export function enterStage(charId: string): boolean {
 			savedFov = cam.FieldOfView;
 		}
 		Workspace.SetAttribute("ShowroomActive", true);
+		applyStageLighting();
 		env.folder.Parent = Workspace;
 		fx.setRoot(env.fxFolder);
-		azimuth = CAM_PRESETS[2];
+		presetIdx = 1;
+		azimuth = CAM_PRESETS[1];
+		focus = 0;
 		radius = CAM_BASE_RADIUS;
-		radiusTarget = CAM_BASE_RADIUS;
+		radiusTarget = baseRadius();
 		autoOrbit = false;
 		RunService.BindToRenderStep(STEP_NAME, Enum.RenderPriority.Camera.Value + 2, updateCamera);
 		mouseConn = UserInputService.InputChanged.Connect((input) => {
@@ -309,7 +362,7 @@ export function enterStage(charId: string): boolean {
 	ctxChar = charId;
 	const ok = spawnActors(charId);
 	if (!ok) warn(`[showroom] avatar for ${ctxChar} not available`);
-	radiusTarget = CAM_BASE_RADIUS;
+	radiusTarget = baseRadius();
 	return ok;
 }
 
@@ -331,6 +384,7 @@ export function leaveStage(): void {
 	dummy = undefined;
 	if (env !== undefined) env.folder.Parent = undefined;
 	fx.setTimeScale(1);
+	restoreLighting();
 	const cam = Workspace.CurrentCamera;
 	if (cam !== undefined) {
 		if (savedType !== undefined) cam.CameraType = savedType;

@@ -1,7 +1,7 @@
 // Showroom special moves of the Shu generals: zhangfei, guanyu, zhugeliang, machao, zhaoyun.
 import { moveTo, place } from "./actor";
 import * as fx from "./fx";
-import { Ctx, DUMMY_DIST, WHITE, chest, dizzyStars, dummyGetUp, dustAt, flinch, groundCF, impact, knockDummy, rel, ride, sheetFx, weaponTrail } from "./kit";
+import { Ctx, DUMMY_DIST, WHITE, chest, dizzyStars, dummyGetUp, dustAt, endSit, flinch, groundCF, impact, knockDummy, rel, ride, sheetFx, startSit, weaponTrail } from "./kit";
 import { Prop, makeProp, placeProp } from "./props";
 
 /** 張飛「當陽怒吼」: inhale, then a roar that sends triple shockwave rings, dust and a huge shake. */
@@ -45,10 +45,11 @@ export function zhangfei(c: Ctx): void {
 export function guanyu(c: Ctx): void {
 	const green = Color3.fromRGB(70, 255, 130);
 	const gold = Color3.fromRGB(255, 220, 80);
-	const bike = makeProp("guanyu_bike", "bike", Color3.fromRGB(220, 40, 40), c.actor.footOffset);
+	const bike = makeProp("guanyu_bike", "bike", Color3.fromRGB(220, 40, 40), c.actor.footOffset, new Vector3(0, 0.6, 0));
 	const start = rel(c, -16, 0);
 	const finish = rel(c, 28, 0);
 	ride(c, bike, groundCF(start, c.look));
+	const sit = startSit(c);
 	fx.ring(start.add(new Vector3(0, 0.4, 0)), 1, 9, 0.5, green, 1.2, 0.5);
 	fx.burst(start.add(new Vector3(0, 3, 0)), green, 30, { size: 2.4, speed: 26 });
 	sheetFx(c, "ring", start.add(new Vector3(0, 3, 0)), 12, 0.6, green);
@@ -93,6 +94,7 @@ export function guanyu(c: Ctx): void {
 	fx.dust(finish, 14, 6);
 	weaponTrail(c, false);
 	bike.model.Destroy();
+	endSit(sit);
 	place(c.actor);
 	fx.wait(0.9);
 	dummyGetUp(c);

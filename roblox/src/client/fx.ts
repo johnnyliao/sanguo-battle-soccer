@@ -11,6 +11,7 @@ const SPARKLE_TEXTURE = "rbxasset://textures/particles/sparkles_main.dds";
 const FIRE_TEXTURE = "rbxasset://textures/particles/fire_main.dds";
 const SMOKE_TEXTURE = "rbxasset://textures/particles/smoke_main.dds";
 /** Assumed pixel size of a (square) flipbook sheet; only the BillboardGui fallback needs it. */
+const MAX_SHEET = 9;
 const SHEET_PX = 512; // fx-upload sheets are 512x512 (2x2 grid of 256 cells)
 
 let timeScale = 1;
@@ -21,6 +22,7 @@ let shakeLeft = 0;
 let shakeTotal = 1;
 let flashGui: ScreenGui | undefined;
 let flashFrame: Frame | undefined;
+let flashToken = 0;
 
 export function setTimeScale(s: number): void {
 	timeScale = s;
@@ -48,6 +50,7 @@ export function reset(): void {
 	shakeAmp = 0;
 	shakeLeft = 0;
 	if (fxRoot !== undefined) fxRoot.ClearAllChildren();
+	flashToken += 1;
 	if (flashFrame !== undefined) flashFrame.BackgroundTransparency = 1;
 }
 
@@ -200,12 +203,22 @@ function ensureFlash(): Frame | undefined {
 export function flash(color: Color3, startTransparency: number, dur: number): void {
 	const f = ensureFlash();
 	if (f === undefined) return;
+	const start = math.max(startTransparency, 0.6);
+	flashToken += 1;
+	const mine = flashToken;
 	f.BackgroundColor3 = color;
-	f.BackgroundTransparency = startTransparency;
-	spawn(() => {
-		run(dur, (a) => {
-			f.BackgroundTransparency = lerp(startTransparency, 1, a);
-		});
+	f.BackgroundTransparency = start;
+	// Real-time fade (never stuck by time scale); latest flash wins; always ends fully transparent.
+	task.spawn(() => {
+		const t0 = os.clock();
+		const len = math.max(dur, 0.15) + 0.2;
+		while (mine === flashToken) {
+			const a = math.min(1, (os.clock() - t0) / len);
+			f.BackgroundTransparency = lerp(start, 1, a);
+			if (a >= 1) break;
+			task.wait();
+		}
+		if (mine === flashToken) f.BackgroundTransparency = 1;
 	});
 }
 
@@ -420,7 +433,8 @@ export interface FlipbookOpts {
 }
 
 /** Plays a flipbook sheet once at `cf` (position used) in `size` studs for `dur` scaled seconds. Particle version when the sheet is full, billboard otherwise. */
-export function flipbook(sheet: FxSheet, cf: CFrame, size: number, dur: number, o?: FlipbookOpts): void {
+export function flipbook(sheet: FxSheet, cf: CFrame, sizeIn: number, dur: number, o?: FlipbookOpts): void {
+	const size = math.min(sizeIn, MAX_SHEET); // huge sheets show their rectangular edges / white out the screen
 	const full = sheet.frames >= sheet.grid * sheet.grid;
 	if (o?.billboard === true || !full) {
 		flipbookBillboard(sheet, cf.Position, size, dur, o);

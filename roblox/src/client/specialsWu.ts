@@ -177,41 +177,88 @@ export function daqiao(c: Ctx): void {
 	fx.wait(0.6);
 }
 
-/** 周瑜「赤壁東風」: a fiery east-wind tornado rolls in and blows the dummy across the stage. */
-export function zhouyu(c: Ctx): void {
-	const red = Color3.fromRGB(255, 90, 60);
-	const wind = Color3.fromRGB(190, 255, 220);
-	const centre = c.dummy.foot;
-	fx.groundCircle(centre, 15, 4, red);
-	sheetFx(c, "slash", rel(c, 3, 0, 5), 12, 0.5, red);
-	fx.burst(c.actor.foot.add(new Vector3(0, 5, 0)), red, 24, { size: 2.4, speed: 24 });
-	fx.flash(red, 0.75, 0.4);
-	fx.wait(0.45);
-	let tc = rel(c, 1.5, 0, 0.5);
-	fx.spiral(() => tc, 6, 17, red, 2.4, 64, 1.2, false, wind);
-	fx.spiral(() => tc, 4, 17, WHITE, 2.4, 40, 0.8, false, red);
-	sheetFx(c, "tornado", rel(c, 3, 0, 8), 22, 1.6, WHITE);
-	const aim = rel(c, DUMMY_DIST, 0, 0.5);
-	const start = tc;
-	fx.run(0.9, (a) => {
-		tc = start.Lerp(aim, a);
-		if (math.random() > 0.7) fx.dust(tc, 2, 4);
+/** Tall translucent funnel: stacked discs with a spinning bar each, plus flat leaves swirling around it. */
+function tornado(centreFn: () => Vector3, height: number, dur: number, green: Color3, white: Color3): void {
+	const n = 9;
+	const discs: Part[] = [];
+	const bars: Part[] = [];
+	for (let i = 0; i < n; i++) {
+		const col = i % 2 === 0 ? white : green;
+		discs.push(fx.glow(Enum.PartType.Cylinder, new CFrame(centreFn()), new Vector3(0.35, 1, 1), col, 0.6));
+		bars.push(fx.glow(Enum.PartType.Block, new CFrame(centreFn()), new Vector3(1, 0.5, 1), white, 0.2));
+	}
+	fx.spiral(centreFn, 6.5, height, white, dur, 44, 1.3, true, green);
+	fx.spawn(() => {
+		fx.run(dur, (a) => {
+			const grow = math.min(1, a * 4) * math.min(1, (1 - a) * 4);
+			const base = centreFn();
+			for (let i = 0; i < n; i++) {
+				const f = i / (n - 1);
+				const d = (3 + 11 * f) * grow + 0.02;
+				const pos = base.add(new Vector3(0, 0.6 + f * height * grow, 0));
+				discs[i].Size = new Vector3(0.35, d, d);
+				discs[i].CFrame = new CFrame(pos).mul(CFrame.Angles(0, 0, math.pi / 2));
+				bars[i].Size = new Vector3(d * 0.96, 0.5, 1.1);
+				bars[i].CFrame = new CFrame(pos).mul(CFrame.Angles(0, a * 11 * (1 + f) + i, 0));
+			}
+		});
+		for (const p of discs) p.Destroy();
+		for (const p of bars) p.Destroy();
 	});
-	// Blast: dummy flies backward spinning.
-	sheetFx(c, "burst", chest(c), 15, 0.6, WHITE);
-	fx.ring(aim, 2, 20, 0.6, wind, 1.6, 0.7);
-	fx.ring(aim, 1, 14, 0.5, red, 1.2, 0.6);
-	fx.flash(WHITE, 0.4, 0.3);
-	fx.shake(1.0, 0.7);
-	impact(c, chest(c), red, 1.4);
+}
+
+/** Streaks of wind racing around a circle on the ground. */
+function windLines(centre: Vector3, radius: number, dur: number, color: Color3): void {
+	const n = 16;
+	const lines: Part[] = [];
+	for (let i = 0; i < n; i++) lines.push(fx.glow(Enum.PartType.Block, new CFrame(centre), new Vector3(0.3, 0.3, 6), color, 0.15));
+	fx.spawn(() => {
+		fx.run(dur, (a) => {
+			const fade = math.min(1, a * 5) * math.min(1, (1 - a) * 5);
+			for (let i = 0; i < n; i++) {
+				const ang = a * 9 + (i / n) * 2 * math.pi;
+				const r = radius * (0.55 + 0.45 * ((i * 7) % 5) / 4);
+				const pos = centre.add(new Vector3(math.cos(ang) * r, 0.8 + (i % 4) * 1.4, math.sin(ang) * r));
+				const tangent = new Vector3(-math.sin(ang), 0, math.cos(ang));
+				lines[i].CFrame = CFrame.lookAt(pos, pos.add(tangent));
+				lines[i].Transparency = 1 - fade * 0.85;
+			}
+		});
+		for (const p of lines) p.Destroy();
+	});
+}
+
+/** 周瑜「赤壁東風」: a giant east-wind tornado rises from a swirling wind circle, lifts the dummy, spins it and throws it far away. */
+export function zhouyu(c: Ctx): void {
+	const green = Color3.fromRGB(120, 255, 170);
+	const wind = Color3.fromRGB(230, 255, 240);
+	const centre = c.dummy.foot;
+	// 1) Sweep of the arms: a wind circle with racing streaks around the dummy.
+	fx.groundCircle(centre, 12, 5, green);
+	fx.ring(centre.add(new Vector3(0, 0.5, 0)), 14, 12, 0.6, wind, 1.5, 0.6);
+	windLines(centre, 11, 4.5, wind);
+	fx.burst(c.actor.foot.add(new Vector3(0, 5, 0)), green, 20, { size: 2, speed: 22 });
+	fx.wait(0.9);
+	// 2) The tornado rises.
+	tornado(() => centre, 20, 3.6, green, wind);
+	fx.shake(0.5, 1.2);
+	fx.wait(0.8);
+	sheetFx(c, "tornado", centre.add(new Vector3(0, 10, 0)), 24, 1.6, WHITE);
+	// 3) The dummy is lifted and spun, then thrown far out of the circle.
 	const d = c.dummy;
-	const from = d.foot;
-	const to = rel(c, DUMMY_DIST + 15, 0);
 	fx.run(0.9, (a) => {
-		tc = aim.Lerp(to, a);
-		d.foot = from.Lerp(to, fx.easeOut(a));
-		d.lift = math.sin(a * math.pi) * 5;
-		d.yawAdd = a * 14;
+		d.lift = fx.easeOut(a) * 8;
+		d.yawAdd = a * 18;
+		d.tilt = math.sin(a * 8) * 0.2;
+		place(d);
+	});
+	impact(c, chest(c), green, 1.2);
+	fx.flash(WHITE, 0.5, 0.3);
+	const to = rel(c, DUMMY_DIST + 17, 0);
+	fx.run(1.0, (a) => {
+		d.foot = centre.Lerp(to, fx.easeOut(a));
+		d.lift = 8 + math.sin(a * math.pi) * 3 * (1 - a);
+		d.yawAdd = 18 + a * 12;
 		d.tilt = math.min(1, a * 2) * (math.pi / 2);
 		place(d);
 	});
@@ -219,12 +266,10 @@ export function zhouyu(c: Ctx): void {
 	d.lift = 0;
 	place(d);
 	fx.dust(d.foot, 14, 6);
-	fx.shake(0.5, 0.3);
-	// The east-wind field stays where the dummy landed and slows it.
-	sheetFx(c, "active", d.foot.add(new Vector3(0, 2, 0)), 18, 1, WHITE);
-	fx.groundCircle(d.foot, 11, 1.8, red);
-	sheetFx(c, "slow", d.foot.add(new Vector3(0, 3, 0)), 12, 1.2, wind);
-	fx.wait(1.5);
+	fx.shake(0.6, 0.35);
+	// 4) The wind circle lingers with slow sparkles.
+	fx.burst(centre.add(new Vector3(0, 3, 0)), wind, 30, { size: 1.2, speed: 4, life: 2, gravity: 0, spread: 180 });
+	fx.wait(1.6);
 	dummyGetUp(c);
 }
 
@@ -245,8 +290,8 @@ export function xiaoqiao(c: Ctx): void {
 	fx.wait(1.0);
 	// Petal tornado.
 	fx.spiral(() => c.dummy.foot, 6.5, 16, pink, 2.5, 90, 1.3, true, WHITE);
-	sheetFx(c, "gust", centre.add(new Vector3(0, 6, 0)), 20, 1.4, WHITE);
-	sheetFx(c, "petals", centre.add(new Vector3(0, 9, 0)), 18, 1.6, WHITE);
+	sheetFx(c, "gust", centre.add(new Vector3(0, 6, 0)), 9, 1.4, pink);
+	sheetFx(c, "petals", centre.add(new Vector3(0, 9, 0)), 8, 1.6, pink);
 	fx.ring(centre.add(new Vector3(0, 0.5, 0)), 2, 14, 0.6, pink, 1.4, 0.6);
 	fx.flash(pink, 0.65, 0.4);
 	fx.shake(0.7, 0.6);
@@ -281,8 +326,8 @@ export function xiaoqiao(c: Ctx): void {
 /** 孫策「揚帆起航」: rides a boat across the stage on a wake of spray and smashes the dummy skyward. */
 export function sunce(c: Ctx): void {
 	const water = Color3.fromRGB(70, 210, 255);
-	const boat = makeProp("sunce_boat", "boat", Color3.fromRGB(40, 110, 220), c.actor.footOffset);
-	const startF = -24;
+	const boat = makeProp("sunce_boat", "boat", Color3.fromRGB(40, 110, 220), c.actor.footOffset, undefined, 1.8);
+	const startF = -17;
 	const endF = 11;
 	const start = rel(c, startF, 0);
 	const finish = rel(c, endF, 0);

@@ -1,5 +1,5 @@
 // Shared helpers for the showroom special moves: stage-relative coordinates, hit sparks, dummy reactions, riding props.
-import { Actor, place, playOnce, setTrails, tiltTo } from "./actor";
+import { Actor, getTrack, place, playOnce, setTrails, tiltTo } from "./actor";
 import * as fx from "./fx";
 import { FX } from "./fxIds";
 import { SHARED_ANIMS } from "./animIds";
@@ -176,4 +176,20 @@ export function shakeDummy(c: Ctx, dur: number, amp = 0.3): void {
 		d.foot = from;
 		place(d);
 	});
+}
+
+const SIT_ANIM = "rbxassetid://2506281703";
+
+/** Loops the R15 sit clip over everything else while mounted. Returns the track (stop it with endSit). */
+export function startSit(c: Ctx): AnimationTrack | undefined {
+	const t = getTrack(c.actor, SIT_ANIM, true, Enum.AnimationPriority.Action4);
+	if (t === undefined) return undefined;
+	t.Play(0.1);
+	t.AdjustSpeed(fx.getTimeScale());
+	if (!c.actor.active.includes(t)) c.actor.active.push(t);
+	return t;
+}
+
+export function endSit(t: AnimationTrack | undefined): void {
+	if (t !== undefined && t.IsPlaying) t.Stop(0.15);
 }

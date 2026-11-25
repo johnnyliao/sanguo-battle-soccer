@@ -365,8 +365,15 @@ function buildShowroom(): ShowroomHandle {
 		});
 	});
 
+	// The country-select screen lives in HudGui; hide it while the showroom is open (it would cover the 3D stage).
+	const setHud = (on: boolean): void => {
+		const hud = game.GetService("Players").LocalPlayer?.FindFirstChild("PlayerGui")?.FindFirstChild("HudGui");
+		if (hud !== undefined && hud.IsA("ScreenGui")) hud.Enabled = on;
+	};
+
 	const showScreen = (): void => {
 		showing = true;
+		setHud(false);
 		screen.Enabled = true;
 		refreshButtons();
 		applyAll();
@@ -376,6 +383,7 @@ function buildShowroom(): ShowroomHandle {
 		closeStage();
 		showing = false;
 		screen.Enabled = false;
+		setHud(true);
 		applyAll();
 	};
 

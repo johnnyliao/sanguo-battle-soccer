@@ -52,9 +52,9 @@ export function buildStageEnv(): StageEnv {
 	// Platform: dark base, lighter top, neon rim.
 	const flat = CFrame.Angles(0, 0, math.pi / 2);
 	part(Enum.PartType.Cylinder, new CFrame(c.add(new Vector3(0, -1.2, 0))).mul(flat), new Vector3(2.4, PLATFORM_R * 2 + 4, PLATFORM_R * 2 + 4), Color3.fromRGB(30, 26, 52), Enum.Material.SmoothPlastic, folder);
-	part(Enum.PartType.Cylinder, new CFrame(c.add(new Vector3(0, -0.05, 0))).mul(flat), new Vector3(0.2, PLATFORM_R * 2 - 4, PLATFORM_R * 2 - 4), Color3.fromRGB(78, 66, 130), Enum.Material.SmoothPlastic, folder);
-	part(Enum.PartType.Cylinder, new CFrame(c.add(new Vector3(0, 0.02, 0))).mul(flat), new Vector3(0.2, 14, 14), Color3.fromRGB(120, 100, 190), Enum.Material.Neon, folder);
-	part(Enum.PartType.Cylinder, new CFrame(c.add(new Vector3(0, 0.04, 0))).mul(flat), new Vector3(0.2, 12.4, 12.4), Color3.fromRGB(78, 66, 130), Enum.Material.SmoothPlastic, folder);
+	part(Enum.PartType.Cylinder, new CFrame(c.add(new Vector3(0, -0.05, 0))).mul(flat), new Vector3(0.2, PLATFORM_R * 2 - 4, PLATFORM_R * 2 - 4), Color3.fromRGB(52, 44, 84), Enum.Material.SmoothPlastic, folder);
+	part(Enum.PartType.Cylinder, new CFrame(c.add(new Vector3(0, 0.02, 0))).mul(flat), new Vector3(0.2, 14, 14), Color3.fromRGB(150, 70, 90), Enum.Material.SmoothPlastic, folder);
+	part(Enum.PartType.Cylinder, new CFrame(c.add(new Vector3(0, 0.04, 0))).mul(flat), new Vector3(0.2, 12.4, 12.4), Color3.fromRGB(46, 40, 76), Enum.Material.SmoothPlastic, folder);
 
 	const rim: Part[] = [];
 	for (let i = 0; i < RIM_COUNT; i++) {
@@ -84,7 +84,7 @@ export function buildStageEnv(): StageEnv {
 		const base = c.add(new Vector3(math.cos(ang) * (PLATFORM_R + 6), 0, math.sin(ang) * (PLATFORM_R + 6)));
 		part(Enum.PartType.Block, new CFrame(base.add(new Vector3(0, 6, 0))), new Vector3(1.4, 12, 1.4), Color3.fromRGB(40, 36, 70), Enum.Material.SmoothPlastic, folder);
 		const lamp = part(Enum.PartType.Ball, new CFrame(base.add(new Vector3(0, 13, 0))), new Vector3(3.6, 3.6, 3.6), fx.hue(i / LAMP_COUNT), Enum.Material.Neon, folder);
-		lampLights.push(addLight(lamp, lamp.Color, 3, 55));
+		lampLights.push(addLight(lamp, lamp.Color, 0.6, 30));
 		lamps.push(lamp);
 	}
 
@@ -95,15 +95,15 @@ export function buildStageEnv(): StageEnv {
 	spot.Face = Enum.NormalId.Bottom;
 	spot.Angle = 80;
 	spot.Range = 110;
-	spot.Brightness = 4;
+	spot.Brightness = 1.2;
 	spot.Color = Color3.fromRGB(255, 250, 235);
 	spot.Parent = spotHost;
 	const fillA = part(Enum.PartType.Block, new CFrame(c.add(new Vector3(-22, 16, 16))), new Vector3(1, 1, 1), WHITE_C, Enum.Material.SmoothPlastic, folder);
 	fillA.Transparency = 1;
-	addLight(fillA, Color3.fromRGB(255, 120, 200), 2, 60);
+	addLight(fillA, Color3.fromRGB(255, 120, 200), 0.5, 40);
 	const fillB = part(Enum.PartType.Block, new CFrame(c.add(new Vector3(22, 16, -16))), new Vector3(1, 1, 1), WHITE_C, Enum.Material.SmoothPlastic, folder);
 	fillB.Transparency = 1;
-	addLight(fillB, Color3.fromRGB(110, 200, 255), 2, 60);
+	addLight(fillB, Color3.fromRGB(110, 200, 255), 0.5, 40);
 
 	return {
 		folder,

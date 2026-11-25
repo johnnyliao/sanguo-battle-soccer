@@ -3,10 +3,11 @@
 import { CHAR_ANIMS } from "./animIds";
 import { DEFAULT_RUN_ID, getAvatarTemplate, makeAvatar } from "./avatars";
 import * as fx from "./fx";
+import { initWeaponPose, resetWeaponPose } from "./weaponPose";
 
 const AVATAR_HEIGHT = 8.8;
 const FADE = 0.12;
-const DUMMY_GREY = Color3.fromRGB(150, 152, 160);
+const DUMMY_GREY = Color3.fromRGB(120, 115, 108);
 
 export interface Actor {
 	charId: string;
@@ -103,6 +104,7 @@ export function makeGeneral(charId: string, parent: Instance, foot: Vector3, loo
 	const a = makeActor(charId, view.model, view.root, view.footOffset, true, view.animator, foot, look);
 	a.idle = view.idle;
 	buildTrails(a);
+	initWeaponPose(a.model, charId, a.root);
 	place(a);
 	return a;
 }
@@ -188,7 +190,7 @@ function partsDummy(parent: Instance, foot: Vector3, look: Vector3): Actor {
 
 /** Grey training dummy: a tinted avatar clone (can play the shared hit clips); parts dummy when no avatar is available. */
 export function makeDummy(parent: Instance, foot: Vector3, look: Vector3): Actor {
-	for (const id of ["zhangfei", "guanyu", "caocao", "xuchu", "zhaoyun"]) {
+	for (const id of ["zhaoyun", "caocao", "guanyu", "zhangfei", "xuchu"]) {
 		const template = getAvatarTemplate(id);
 		if (template === undefined) continue;
 		const view = makeAvatar(template, parent, AVATAR_HEIGHT, "dummy");
@@ -235,14 +237,15 @@ function buildTrails(a: Actor): void {
 			gripComp = d.Position.Z;
 		}
 		const tipSign = gripComp > 0 ? -1 : 1;
-		a.trails.push(fx.makeTrail(part, axis.mul(-tipSign * half * 0.2), axis.mul(tipSign * half), color));
+		a.trails.push(fx.makeTrail(part, axis.mul(tipSign * half * 0.7), axis.mul(tipSign * half), color));
 	}
 }
 
 export function setTrails(a: Actor, on: boolean): void {
 	for (const t of a.trails) {
 		t.Enabled = on;
-		t.Lifetime = 0.3 / fx.getTimeScale();
+		t.Lifetime = 0.18 / fx.getTimeScale();
+		t.Transparency = new NumberSequence([new NumberSequenceKeypoint(0, 0.35), new NumberSequenceKeypoint(1, 1)]);
 	}
 }
 
@@ -354,6 +357,7 @@ export function applySpeed(a: Actor): void {
 /** Back to the home pose: no action clips, no tilt / spin / lift, idle loop, trails off. */
 export function resetActor(a: Actor): void {
 	stopActions(a);
+	resetWeaponPose(a.model);
 	setTrails(a, false);
 	a.foot = a.homeFoot;
 	a.look = a.homeLook;
