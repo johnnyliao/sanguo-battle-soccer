@@ -331,3 +331,37 @@ src/sim（＋ai、data）用 roblox-ts 編譯成 Luau，在 Roblox 伺服器跑�
 - Luau 每個函式（含模組最外層）最多 200 個 local；roblox-ts 把每個具名 import 和頂層 const/function 都變成 local。大檔用 `import * as C`，常數檔拆小；build 加 check-locals（>180 報錯）。
 - Rojo 只能在 Studio 編輯模式 Connect（Play 中按會出現 "Http requests can only be executed by game server"）。
 - 整個刪掉被同步的資料夾會讓 rojo serve 當掉 → sync 用增量寫入。
+
+---
+# Goal R1a（2026-11-25）Roblox 單人可玩（2.5D：3D 場景＋色塊角色）
+在 Studio（含手機模擬）能 1 真人 vs AI 5v5 打完一場（含 PK）。R1b 再換 2D 看板角色圖。
+
+# Constraints / decisions
+- 使用者定案：3D 場景＋2D 看板角色（不做 3D 模型）；R1a 先用色塊＋名字。
+- 伺服器權威：server 60Hz 跑 step（Heartbeat 累積，單幀最多補 4 tick）；client 只送原始按鍵；server 端做按鍵 latch（兩 tick 間按下又放開不漏）。
+- 介面合約在 roblox/src/shared/net.ts（me 寫）：Remote 名稱、Setup/Snapshot/ClientInput/Command 型別、座標換算（1px = 0.2 stud；sim x→World X、y→World Z、z→World Y）。
+- 快照 30Hz（每 2 tick）用 RemoteEvent（可靠）；client 內插。事件（goal 等）跟快照一起送。
+- R1a 選國家：開場 GUI 選蜀／魏／吳，對手隨機另一國；真人操作前鋒（idx 4）。PK 順序兩隊都自動（autoPkOrders(state, -1)）。
+- R0 檢查改成只在 Workspace 屬性 RunR0=true 時跑。
+- 不加音效（R1b 以後）。共用規則不動 src/sim/ai/data。
+
+# Steps R1a
+- [x] 1. shared/net.ts 介面合約 — me
+- [x] 2. server：match.server.ts 比賽迴圈、Remote、輸入 latch、快照、R0 開關 — worker A — verify: cd roblox; npm run build
+- [x] 3. client：場地／球門／看台、色塊角色、球、特效區域、鏡頭、快照內插（render.ts、world.ts、camera.ts、main.client.ts）— worker B（與 2、4 平行）
+- [x] 4. client：鍵盤（WASD/方向鍵、J/K/L、雙擊衝刺＋Shift）、手機搖桿＋三按鈕、HUD（比分、時間、階段橫幅、大招冷卻、PK 提示）、選國家畫面（input.ts、touch.ts、hud.ts）— worker C
+- [ ] 5. 整合 build、審 diff、使用者 Studio 試玩 — me
+- [ ] 6. overrides/sim/hash.ts 改成 hashState＝stateDigest — worker
+
+# 下次接續（R1a，2026-11-25）
+- 步驟 1–4 完成、build 過。已修：world.ts colourOf 先用後定義；input.ts 等 PlayerModule 卡住；main.client.ts 關掉聊天視窗與玩家清單（蓋住國家卡）。
+- **Studio MCP 自動測試通過（邏輯面）**：選國家→開賽、快照 30Hz、WASD 移動（D 2 秒 +263px）、L 大招（遼來了）、AI 進球與各大招、上下半場換邊、平手進 PK、PK 打完（人類輪到時 5 秒自動踢）、結束畫面、再來一場 全部正常；輸出無錯誤（只有 Studio 預設的 rbxassetid://203785492 警告，非本專案）。
+- **待使用者肉眼確認**：screen_capture 在這台拍不到 3D 視窗（Edit 模式預設底板也是全白，GUI 拍得到），所以場地、鏡頭角度、色塊角色、球、特效圈要使用者看。另：J/K 手感、手機觸控（Device Simulator）未測。
+- rojo serve 在背景，新 session 要重開（cd roblox; rojo serve；若埠被占＝已在跑）。
+
+# Lessons learned（R1a）
+- roblox-ts：頂層 const 呼叫「後面才定義」的 function 會是 nil（JS 有提升、Luau 沒有）。helper 函式放在最上面。build 後可掃 out/ 找 `local X` 前置宣告後頂層先呼叫。
+- 沒有 avatar 時 PlayerScripts.PlayerModule 可能不出現，不要無限 WaitForChild 擋住啟動。
+- 不用 @rbxts/services（沒裝）；用 game.GetService("...")。
+- Studio MCP：user_mouse_input 的座標是 GUI 座標（扣掉頂欄 58px），截圖座標要減 58 才點得到；或先用 execute_luau 讀按鈕 AbsolutePosition。
+- Studio MCP：screen_capture 這台抓不到 3D（全白），只能驗 GUI；邏輯用 execute_luau 在 Client 掛 Snapshot 監聽讀數據驗證。

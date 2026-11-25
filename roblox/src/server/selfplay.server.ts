@@ -43,4 +43,6 @@ function runR0(): void {
 	print(`[R0] PASS (${n} checkpoints, ${secs}s)`);
 }
 
-runR0();
+if (game.Workspace.GetAttribute("RunR0") === true) {
+	runR0();
+}

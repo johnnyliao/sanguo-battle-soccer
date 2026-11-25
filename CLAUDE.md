@@ -28,7 +28,7 @@
 - 跨平台對答案：`WRITE_GOLDEN=1 npx vitest run src/ai/selfplay.test.ts` → roblox/src/server/golden.ts；Studio Play 後看 `[R0] PASS`。改了規則就重產 golden 再驗。
 - GitHub：public repo johnnyliao/sanguo-battle-soccer（branch main）。push 前先 git fetch。
   GitHub Pages：https://johnnyliao.github.io/sanguo-battle-soccer/ ，來源是 gh-pages 分支（npm run build 後把 dist 加 .nojekyll 強推到 gh-pages）。
-  這台電腦的 push 權限尚未設定（目前 remote 是 https 唯讀 clone）。
+  這台電腦 push 已可用（Git Credential Manager 已存 GitHub 憑證；沒裝 gh CLI）。
 
 ## 已定案的設計（2026-11-18 訪談，使用者全部同意）
 ### 技術
