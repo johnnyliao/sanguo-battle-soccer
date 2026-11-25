@@ -19,7 +19,10 @@ const CLASS_OF: Record<string, WClass> = {
 };
 
 /** Attack phase (0..1) at which the hit lands, per class. */
-const IMPACT: Record<WClass, number> = { spear: 0.5, glaive: 0.5, axes: 0.55, hammer: 0.55, whip: 0.5 };
+const IMPACT: Record<WClass, number> = { spear: 0.45, glaive: 0.5, axes: 0.55, hammer: 0.52, whip: 0.5 };
+
+/** Stage-only size multiplier for oversized weapons (grip attachments are scaled with the part). */
+const WSCALE: Record<string, number> = { xuchu: 0.62, sunce: 0.75 };
 
 interface Piece {
 	part: BasePart;
@@ -43,6 +46,10 @@ interface Ctl {
 	len: number;
 	elapsed: number;
 	attacking: boolean;
+	/** Forced forward-level pose (spear lunge in the special). */
+	hold: boolean;
+	/** Alternate rest pose (hand held high: weapon points forward-down, away from the face). */
+	alt: boolean;
 }
 
 const ctls = new Map<Model, Ctl>();
@@ -84,16 +91,20 @@ interface PoseOut {
 	off: Vector3;
 }
 
-function poseFor(cls: WClass, t: number, side: number, span: number, F: Vector3, U: Vector3, S: Vector3, attacking: boolean): PoseOut {
+function poseFor(cls: WClass, t: number, side: number, span: number, F: Vector3, U: Vector3, S: Vector3, attacking: boolean, alt = false): PoseOut {
 	const tt = attacking ? t : 0;
 	const rec = 1 - sm(0.75, 1, tt);
 	if (cls === "spear" || cls === "glaive") {
-		const rest = unit(U.mul(0.985).add(F.mul(0.174)));
+		const rest = cls === "spear" ? unit(U.mul(0.985).add(F.mul(0.174))) : unit(U.mul(0.5).add(F.mul(0.86)));
 		if (cls === "spear") {
-			const k = sm(0, 0.3, tt) * (1 - sm(0.7, 1, tt));
-			const d = nlerp(rest, F, k);
-			const offF = (-0.8 * sm(0, 0.3, tt) + 2.0 * sm(0.3, 0.55, tt)) * (1 - sm(0.7, 1, tt));
-			return { d, n: S, off: F.mul(offF) };
+			// Quick draw-back with the spear levelled at chest height, then a hard drive forward, hold, recover.
+			const pull = sm(0, 0.22, tt);
+			const drive = sm(0.22, 0.42, tt);
+			const keep = 1 - sm(0.68, 1, tt);
+			const lvl = unit(F.add(U.mul(0.02)));
+			const d = nlerp(rest, lvl, sm(0, 0.16, tt) * keep);
+			const offF = (-0.6 * pull * (1 - drive) + 2.4 * drive) * keep;
+			return { d, n: S, off: F.mul(offF).sub(U.mul(0.4 * pull * keep)) };
 		}
 		const behind = unit(F.mul(-0.6).add(U.mul(0.75)).add(S.mul(0.35)));
 		const phi = math.rad(135 - 200 * sm(0.3, 0.6, tt));
@@ -102,20 +113,23 @@ function poseFor(cls: WClass, t: number, side: number, span: number, F: Vector3,
 		d = nlerp(d, h, sm(0.3, 0.4, tt));
 		d = nlerp(d, rest, sm(0.75, 1, tt));
 		const n = S.Lerp(U, sm(0.3, 0.4, tt) * rec);
-		const gOff = S.mul(0.9 * (1 - sm(0, 0.3, tt) * rec));
-		return { d, n, off: gOff };
+		return { d, n, off: new Vector3(0, 0, 0) };
 	}
 	if (cls === "hammer") {
-		const rest = unit(U.mul(0.85).add(S.mul(0.5)).sub(F.mul(0.1)));
-		const back = U.mul(math.cos(math.rad(-40))).add(F.mul(math.sin(math.rad(-40))));
-		let d = nlerp(rest, back, sm(0, 0.4, tt));
-		const e = sm(0.4, 0.55, tt);
-		const psi = math.rad(-40 + 175 * e * e);
+		// Rest: shaft resting back over the shoulder (head behind / above, never in front of the face).
+		// Attack: lift high behind the head, then a full overhead slam down in front, hold, recover.
+		const rest = alt ? unit(F.mul(0.7).sub(U.mul(0.55)).add(S.mul(0.25))) : unit(U.mul(0.8).add(S.mul(0.55)).add(F.mul(0.1)));
+		const high = unit(U.mul(0.85).sub(F.mul(0.52)));
+		const wind = sm(0, 0.4, tt);
+		const slam = sm(0.4, 0.52, tt);
+		const rc = sm(0.78, 1, tt);
+		const psi = math.rad(-31 + 136 * slam * slam);
+		let d = nlerp(rest, high, wind);
 		if (tt >= 0.4) d = U.mul(math.cos(psi)).add(F.mul(math.sin(psi)));
-		d = nlerp(d, rest, sm(0.75, 1, tt));
-		const act = sm(0, 0.3, tt) * rec;
-		const down = sm(0.4, 0.55, tt) * rec;
-		const off = S.mul(math.max(1.0, span * 0.75) * (1 - act)).sub(U.mul(0.9 * down)).add(F.mul(0.6 * down));
+		d = nlerp(d, rest, rc);
+		const a = wind * (1 - slam);
+		const b = slam * (1 - rc);
+		const off = U.mul(0.15 * a - 0.2 * b).add(F.mul(-0.2 * a + 0.4 * b));
 		return { d, n: S, off };
 	}
 	if (cls === "axes") {
@@ -157,7 +171,8 @@ function step(model: Model, c: Ctl, dt: number): void {
 	for (const p of c.pieces) {
 		const hand = c.hands.get(p);
 		if (hand === undefined) continue;
-		const po = poseFor(c.cls, t, p.side, p.span, F, U, S, c.attacking);
+		let po = poseFor(c.cls, t, p.side, p.span, F, U, S, c.attacking, c.cls === "hammer" && c.alt);
+		if (c.hold) po = { d: unit(F.add(U.mul(0.02))), n: S, off: F.mul(1.6) };
 		const d = po.d;
 		let n = po.n.sub(d.mul(po.n.Dot(d)));
 		if (n.Magnitude < 0.05) n = U.sub(d.mul(U.Dot(d)));
@@ -177,7 +192,16 @@ export function initWeaponPose(model: Model, charId: string, root: BasePart): vo
 	if (cls === undefined) return;
 	const weapon = model.FindFirstChild("Weapon");
 	if (weapon === undefined) return;
-	const c: Ctl = { cls, root, pieces: [], hands: new Map<Piece, Attachment>(), conn: undefined, len: 1, elapsed: 0, attacking: false };
+	const c: Ctl = { cls, root, pieces: [], hands: new Map<Piece, Attachment>(), conn: undefined, len: 1, elapsed: 0, attacking: false, hold: false, alt: charId === "sunce" };
+	const k = WSCALE[charId];
+	if (k !== undefined) {
+		const all: Instance[] = [weapon];
+		for (const d of weapon.GetDescendants()) all.push(d);
+		for (const d of all) {
+			if (d.IsA("BasePart")) d.Size = d.Size.mul(k);
+			else if (d.IsA("Attachment")) d.Position = d.Position.mul(k);
+		}
+	}
 	for (const d of weapon.GetDescendants()) {
 		if (!d.IsA("Attachment") || (d.Name !== "RightGrip" && d.Name !== "LeftGrip")) continue;
 		const part = d.Parent;
@@ -242,9 +266,16 @@ export function startWeaponAttack(model: Model, len: number): void {
 	c.attacking = true;
 }
 
+/** Forces the weapon level and pointing forward (true) or back to the normal pose (false). */
+export function holdWeaponForward(model: Model, on: boolean): void {
+	const c = ctls.get(model);
+	if (c !== undefined) c.hold = on;
+}
+
 export function resetWeaponPose(model: Model): void {
 	const c = ctls.get(model);
 	if (c === undefined) return;
+	c.hold = false;
 	c.attacking = false;
 	c.elapsed = 0;
 }

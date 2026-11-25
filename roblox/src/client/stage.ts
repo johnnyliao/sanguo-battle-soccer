@@ -20,7 +20,7 @@ import {
 	warnOnce,
 } from "./actor";
 import * as fx from "./fx";
-import { Ctx, WHITE, chest, flinch, flinchActor, impact, sheetFx, starsOn } from "./kit";
+import { Ctx, WHITE, chest, dummyGetUp, flinch, flinchActor, groundCrack, impact, knockDummy, sheetFx, starsOn } from "./kit";
 import { SPECIALS } from "./specials";
 import { startWeaponAttack, weaponClassOf, weaponImpactPhase } from "./weaponPose";
 import { STAGE_CENTER, StageEnv, buildStageEnv } from "./stageEnv";
@@ -67,6 +67,7 @@ let savedFov = 70;
 let savedLight: Map<Instance, Map<string, unknown>> | undefined;
 let mouseConn: RBXScriptConnection | undefined;
 let actionToken = 0;
+let lastDebugSpeed = -1;
 
 function baseRadius(): number {
 	const m = CAM_RMUL[presetIdx];
@@ -84,6 +85,12 @@ function updateCamera(dt: number): void {
 	if (cam === undefined || env === undefined) return;
 	animTime += dt;
 	env.animate(animTime);
+	// Dev hook: Workspace attribute "DebugSpeed" (number) forces the demo speed, for frame-by-frame screenshots.
+	const dbg = Workspace.GetAttribute("DebugSpeed");
+	if (typeIs(dbg, "number") && dbg !== lastDebugSpeed) {
+		lastDebugSpeed = dbg;
+		stageSetSpeed(dbg);
+	}
 	if (autoOrbit) azimuth += ORBIT_RATE * dt;
 	if (UserInputService.IsKeyDown(Enum.KeyCode.Left)) azimuth -= 1.6 * dt;
 	if (UserInputService.IsKeyDown(Enum.KeyCode.Right)) azimuth += 1.6 * dt;
@@ -94,7 +101,8 @@ function updateCamera(dt: number): void {
 	focus += (wantFocus - focus) * (1 - math.exp(-4 * dt));
 	const target = midPoint().Lerp(STAGE_CENTER.add(LOOK.mul(1.2)), focus).add(new Vector3(0, 4.6, 0));
 	const dir = LOOK.mul(math.cos(azimuth)).add(RIGHT.mul(math.sin(azimuth)));
-	const eye = target.add(dir.mul(radius)).add(new Vector3(0, CAM_HEIGHT + (radius - CAM_BASE_RADIUS) * 0.3, 0));
+	const dcs = Workspace.GetAttribute("DebugCamScale");
+	const eye = target.add(dir.mul(radius * (typeIs(dcs, "number") ? dcs : 1))).add(new Vector3(0, CAM_HEIGHT + (radius - CAM_BASE_RADIUS) * 0.3, 0));
 	const shake = fx.shakeOffset(dt);
 	cam.CameraType = Enum.CameraType.Scriptable;
 	cam.FieldOfView = CAM_FOV;
@@ -115,6 +123,58 @@ function makeCtx(g: Actor, d: Actor): Ctx {
 
 // ---------------------------------------------------------------- actions (run inside a guarded thread)
 
+function smooth(a: number, b: number, t: number): number {
+	const x = math.clamp((t - a) / (b - a), 0, 1);
+	return x * x * (3 - 2 * x);
+}
+
+/** Scripted body motion for lunging / smashing attacks: wind-up lean back, step + lean forward on impact, recover. */
+function bodyMotion(g: Actor, len: number, it: number, heavy: boolean): void {
+	const home = g.homeFoot;
+	const t0 = it - (heavy ? 0.14 : 0.12);
+	fx.spawn(() => {
+		fx.run(len, (u) => {
+			const wind = smooth(0, t0, u);
+			const strike = smooth(t0, it, u);
+			const rec = smooth(it + 0.12, 1, u);
+			const fwd = ((heavy ? -0.5 : -0.4) * wind * (1 - strike) + (heavy ? 1.8 : 1.5) * strike) * (1 - rec);
+			const lean = ((heavy ? 0.24 : 0.1) * wind * (1 - strike) - 0.2 * strike) * (1 - rec);
+			g.foot = home.add(LOOK.mul(fwd));
+			g.tilt = lean;
+			place(g);
+		});
+		g.foot = home;
+		g.tilt = 0;
+		place(g);
+	});
+}
+
+/** Heavy overhead club smash (許褚 / 孫策): big wind-up, full-body slam in front of the dummy, ground crack, knock-back. */
+function doSmash(c: Ctx, len: number, it: number): void {
+	const g = c.actor;
+	const color = colorOf(g.charId);
+	fx.wait(len * (it - 0.1));
+	setTrails(g, true);
+	fx.wait(len * 0.1);
+	const gp = g.homeFoot.add(LOOK.mul(5.6));
+	fx.ring(gp.add(new Vector3(0, 0.4, 0)), 1, 13, 0.5, color, 1.4, 0.5);
+	fx.ring(gp.add(new Vector3(0, 0.5, 0)), 1, 8, 0.35, WHITE, 1, 0.4);
+	fx.dust(gp.add(new Vector3(0, 0.4, 0)), 12, 4.5);
+	groundCrack(gp, 9, 6, 1.2);
+	impact(c, gp.add(new Vector3(0, 1.4, 0)), color, 1.2);
+	sheetFx(c, "impact", gp.add(new Vector3(0, 2, 0)), 9, 0.4, color);
+	fx.shake(1.2, 0.4);
+	fx.flash(WHITE, 0.7, 0.15);
+	fx.spawn(() => {
+		knockDummy(c, 3.5, 0.4, undefined, 0.8);
+		fx.wait(0.4);
+		dummyGetUp(c);
+	});
+	fx.wait(len * 0.3);
+	setTrails(g, false);
+	fx.wait(len * math.max(0.05, 1 - it - 0.3));
+}
+
 function doAttack(c: Ctx): void {
 	const g = c.actor;
 	const clip = playOnce(g, CHAR_ANIMS[g.charId]?.attack);
@@ -127,7 +187,13 @@ function doAttack(c: Ctx): void {
 		if (clip.Length > 0) len = clip.Length;
 	}
 	const it = weaponImpactPhase(g.charId) ?? 0.4;
+	const cls = weaponClassOf(g.charId);
 	startWeaponAttack(g.model, len);
+	if (cls === "spear" || cls === "hammer") bodyMotion(g, len, it, cls === "hammer");
+	if (cls === "hammer") {
+		doSmash(c, len, it);
+		return;
+	}
 	fx.wait(len * 0.1);
 	setTrails(g, true);
 	if (clip === undefined) {
@@ -143,13 +209,22 @@ function doAttack(c: Ctx): void {
 	if (!sheetFx(c, "slash", pos, 9, 0.4, color)) {
 		sheetFx(c, "impact", pos, 9, 0.4, color);
 	}
-	impact(c, pos, color, 1);
-	flinch(c);
-	fx.shake(0.4, 0.25);
-	fx.flash(WHITE, 0.65, 0.18);
-	if (weaponClassOf(g.charId) === "hammer") {
-		fx.dust(g.foot.add(LOOK.mul(3)).add(new Vector3(0, 0.4, 0)), 16, 7);
-		fx.shake(0.8, 0.35);
+	if (cls === "spear") {
+		// Spark at the spear tip, dummy driven back.
+		impact(c, pos, color, 1.5);
+		sheetFx(c, "thrust", pos, 8, 0.3, color);
+		fx.shake(0.7, 0.25);
+		fx.flash(WHITE, 0.6, 0.15);
+		fx.spawn(() => {
+			knockDummy(c, 3, 0.35, undefined, 0.4);
+			fx.wait(0.35);
+			dummyGetUp(c);
+		});
+	} else {
+		impact(c, pos, color, 1);
+		flinch(c);
+		fx.shake(0.4, 0.25);
+		fx.flash(WHITE, 0.65, 0.18);
 	}
 	fx.wait(len * 0.3);
 	setTrails(g, false);

@@ -3,6 +3,7 @@ import { moveTo, place } from "./actor";
 import * as fx from "./fx";
 import { Ctx, DUMMY_DIST, WHITE, chest, dizzyStars, dummyGetUp, dustAt, endSit, flinch, groundCF, impact, knockDummy, rel, ride, sheetFx, startSit, weaponTrail } from "./kit";
 import { Prop, makeProp, placeProp } from "./props";
+import { holdWeaponForward } from "./weaponPose";
 
 /** 張飛「當陽怒吼」: inhale, then a roar that sends triple shockwave rings, dust and a huge shake. */
 export function zhangfei(c: Ctx): void {
@@ -100,47 +101,47 @@ export function guanyu(c: Ctx): void {
 	dummyGetUp(c);
 }
 
-/** 諸葛亮「破魔光彈」: half a second of charging, then a beam of light strikes down from the sky. */
+/** 諸葛亮「破魔光彈」: 0.5 s charge with an orb growing at his hand, then the orb flies horizontally to the dummy and explodes. */
 export function zhugeliang(c: Ctx): void {
 	const cyan = Color3.fromRGB(110, 235, 255);
-	const orbPos = rel(c, 1.8, 1.2, 6.6);
-	const orb = fx.ball(orbPos, 0.4, cyan, 0.1);
-	const core = fx.ball(orbPos, 0.2, WHITE, 0);
-	sheetFx(c, "charge", orbPos, 9, 0.6, cyan);
-	for (let i = 0; i < 3; i++) {
-		fx.spawn(() => {
-			fx.wait(i * 0.15);
-			fx.ring(orbPos, 9, 0.6, 0.45, i === 1 ? WHITE : cyan, 0.4, 0.4);
-		});
-	}
-	fx.run(0.55, (a) => {
-		const s = 0.4 + a * 3.8;
+	const handOf = (): Vector3 => {
+		const h = c.actor.model.FindFirstChild("RightHand");
+		if (h !== undefined && h.IsA("BasePart")) return h.Position.add(new Vector3(0, 0.6, 0)).add(c.look.mul(0.8));
+		return rel(c, 1.4, 1, 5.6);
+	};
+	const orb = fx.ball(handOf(), 0.4, cyan, 0.1);
+	const core = fx.ball(handOf(), 0.2, WHITE, 0);
+	sheetFx(c, "charge", handOf(), 7, 0.6, cyan);
+	fx.ring(c.actor.foot.add(new Vector3(0, 0.4, 0)), 6, 1, 0.5, cyan, 0.8, 0.4);
+	fx.run(0.5, (a) => {
+		const s = 0.4 + a * 2.6;
+		const p = handOf();
 		orb.Size = new Vector3(s, s, s);
 		core.Size = new Vector3(s * 0.5, s * 0.5, s * 0.5);
-		if (a > 0.3 && math.random() > 0.5) fx.burst(orbPos.add(fx.randDir().mul(6)), cyan, 1, { size: 1.4, speed: 1, life: 0.3 });
-	});
-	// Launch into the sky, then strike.
-	const sky = c.dummy.foot.add(new Vector3(0, 60, 0));
-	fx.bolt(orbPos, sky, cyan, 1.2, 0.35, 2.4, 10);
-	fx.flash(cyan, 0.7, 0.3);
-	fx.run(0.3, (a) => {
-		const p = orbPos.Lerp(sky, a);
 		orb.CFrame = new CFrame(p);
 		core.CFrame = new CFrame(p);
+		if (math.random() > 0.4) fx.burst(p.add(fx.randDir().mul(4)), cyan, 1, { size: 1, speed: -8, life: 0.3 });
+	});
+	// Flight: straight and level from the hand to the dummy's chest.
+	const start = handOf();
+	const target = chest(c).sub(c.look.mul(0.6));
+	const flat = new Vector3(target.X, start.Y, target.Z);
+	fx.flash(cyan, 0.8, 0.2);
+	fx.run(0.3, (a, dt) => {
+		const p = start.Lerp(flat, a);
+		orb.CFrame = new CFrame(p);
+		core.CFrame = new CFrame(p);
+		fx.burst(p, cyan, 1, { size: 1.2, speed: 3, life: 0.35 });
+		if (dt > 0) fx.laser(p.sub(c.look.mul(2.5)), p, cyan, 0.8, 0.15);
 	});
 	orb.Destroy();
 	core.Destroy();
-	fx.wait(0.15);
-	sheetFx(c, "ball", c.dummy.foot.add(new Vector3(0, 6, 0)), 14, 0.8, WHITE);
-	fx.pillar(c.dummy.foot, 3.8, 80, 0.9, cyan);
-	fx.laser(sky, c.dummy.foot, WHITE, 3, 0.7);
-	fx.bolt(sky.add(new Vector3(5, 0, 0)), chest(c), cyan, 0.8, 0.6, 2.4, 10);
-	fx.flash(WHITE, 0.1, 0.6);
-	fx.shake(1.1, 0.7);
-	impact(c, chest(c), cyan, 1.9);
-	sheetFx(c, "impact", chest(c), 14, 0.6, WHITE);
-	fx.ring(c.dummy.foot.add(new Vector3(0, 0.5, 0)), 2, 16, 0.6, cyan, 1.8, 0.7);
-	fx.ring(c.dummy.foot.add(new Vector3(0, 0.6, 0)), 1, 11, 0.5, WHITE, 1, 0.5);
+	sheetFx(c, "ball", flat, 7, 0.6, cyan);
+	impact(c, flat, cyan, 1.9);
+	sheetFx(c, "impact", flat, 7, 0.5, cyan);
+	fx.ring(c.dummy.foot.add(new Vector3(0, 0.5, 0)), 2, 14, 0.6, cyan, 1.6, 0.6);
+	fx.flash(cyan, 0.8, 0.25);
+	fx.shake(1.0, 0.5);
 	knockDummy(c, 3, 0.4, undefined, 1);
 	fx.wait(1.0);
 	dummyGetUp(c);
@@ -210,62 +211,58 @@ export function machao(c: Ctx): void {
 	dummyGetUp(c);
 }
 
-/** 趙雲「遊龍穿刺」: three quick dragon thrusts and a huge piercing lunge through the dummy. */
+/** 趙雲「遊龍穿刺」: instant lunge (no wind-up), spear level and forward, dragon helix trail, dummy sent flying. */
 export function zhaoyun(c: Ctx): void {
 	const gold = Color3.fromRGB(255, 225, 100);
 	const a = c.actor;
-	fx.ring(a.foot.add(new Vector3(0, 0.4, 0)), 8, 1, 0.4, gold, 0.8, 0.5);
-	fx.burst(a.foot.add(new Vector3(0, 4.5, 0)), gold, 24, { size: 2, speed: 16 });
-	fx.shake(0.2, 0.4);
 	weaponTrail(c, true);
-	fx.wait(0.4);
-	for (let i = 0; i < 3; i++) {
-		const tip = rel(c, 3.6, 0, 4.5);
-		fx.laser(rel(c, 0, 0, 4.5), tip, i === 1 ? WHITE : gold, 1.6, 0.3);
-		sheetFx(c, "thrust", tip, 8, 0.3, gold);
-		moveTo(a, rel(c, 3.4, 0), 0.1);
-		impact(c, chest(c), gold, 0.8);
-		flinch(c);
-		fx.shake(0.4, 0.2);
-		fx.wait(0.06);
-		moveTo(a, c.origin, 0.16);
-		fx.wait(0.07);
-	}
-	// Grand lunge: a dragon of gold orbs rushes through the dummy.
-	sheetFx(c, "lunge", rel(c, 6, 0, 5), 20, 0.7, WHITE);
-	fx.flash(gold, 0.6, 0.3);
+	holdWeaponForward(a.model, true);
+	sheetFx(c, "lunge", rel(c, 4, 0, 4.6), 8, 0.5, gold);
+	fx.flash(gold, 0.88, 0.15);
+	fx.ring(a.foot.add(new Vector3(0, 0.4, 0)), 1, 7, 0.3, gold, 1, 0.4);
 	const from = a.foot;
-	const to = rel(c, 12, 0);
+	const to = rel(c, 6.4, 0);
 	let hit = false;
-	let acc = 0;
-	fx.run(0.22, (t, dt) => {
-		acc += dt;
-		a.foot = from.Lerp(to, t);
+	let ang = 0;
+	fx.run(0.25, (t, dt) => {
+		a.foot = from.Lerp(to, fx.easeOut(t));
+		a.tilt = -0.25;
 		place(a);
-		const orb = fx.ball(a.foot.add(new Vector3(0, 4.5, 0)), 3.6 * (1 - t * 0.4), gold, 0.15);
-		fx.spawn(() => {
-			fx.run(0.4, (k) => {
-				const s = 3.6 * (1 - k);
-				orb.Size = new Vector3(s, s, s);
-				orb.Transparency = 0.15 + k * 0.85;
+		ang += dt * 60;
+		const mid = a.foot.add(new Vector3(0, 4.4, 0));
+		// Dragon helix: two gold orbs winding around the travel axis, left behind as a fading trail.
+		for (let k = 0; k < 2; k++) {
+			const th = ang + k * math.pi;
+			const p = mid.add(new Vector3(0, math.sin(th) * 1.8, 0)).add(c.right.mul(math.cos(th) * 1.8)).sub(c.look.mul(1.5));
+			const orb = fx.ball(p, 1.9, k === 0 ? gold : WHITE, 0.1);
+			fx.spawn(() => {
+				fx.run(0.4, (u) => {
+					const s = 1.9 * (1 - u);
+					orb.Size = new Vector3(s, s, s);
+					orb.Transparency = 0.1 + u * 0.9;
+				});
+				orb.Destroy();
 			});
-			orb.Destroy();
-		});
+		}
+		fx.dust(a.foot.add(new Vector3(0, 0.4, 0)), 1, 3);
 		if (!hit && t > 0.55) {
 			hit = true;
-			impact(c, chest(c), gold, 1.8);
-			sheetFx(c, "burst", chest(c), 14, 0.6, WHITE);
+			impact(c, chest(c), gold, 1.1);
+			sheetFx(c, "burst", chest(c), 8, 0.5, gold);
 			fx.shake(1.0, 0.5);
-			fx.flash(WHITE, 0.3, 0.35);
+			fx.flash(gold, 0.85, 0.2);
 			fx.spawn(() => {
-				knockDummy(c, 9, 0.55, undefined, 3);
+				knockDummy(c, 10, 0.6, undefined, 3.5);
 			});
 		}
 	});
-	fx.laser(rel(c, 0, 0, 4.5), rel(c, 14, 0, 4.5), gold, 3.2, 0.5);
+	a.tilt = 0;
+	place(a);
+	fx.laser(rel(c, 0, 0, 4.5), rel(c, 13, 0, 4.5), gold, 2.4, 0.4);
+	fx.wait(0.35);
+	holdWeaponForward(a.model, false);
 	weaponTrail(c, false);
-	fx.wait(0.4);
 	moveTo(a, c.origin, 0.4, 1);
-	fx.wait(0.4);
+	fx.wait(0.5);
 	dummyGetUp(c);
 }

@@ -1,5 +1,5 @@
 // 3D R15 avatar models for match players. Templates are cloned from ReplicatedStorage.Avatars (copied there by server/avatars.server.ts).
-import { CHAR_ANIMS } from "./animIds";
+import { CHAR_ANIMS, SHARED_ANIMS } from "./animIds";
 import { attachWeapons } from "./weapons";
 
 const ReplicatedStorage = game.GetService("ReplicatedStorage");
@@ -21,6 +21,9 @@ const RUN_REF_SPEED = 14;
 const FADE_TIME = 0.15;
 const LYING_LIFT = 0.6;
 const SHAKE_AMP = 0.25;
+/** Seconds in hitstun after which the avatar switches from the hit flinch to the stun loop. */
+const STUN_AFTER = 0.45;
+const SIT_ANIM = "rbxassetid://2506281703";
 
 export interface AvatarView {
 	model: Model;
@@ -50,6 +53,25 @@ export interface AvatarView {
 	runState: boolean;
 	/** Last horizontal facing (unit vector). Kept when a zero facing arrives. */
 	facing: Vector3;
+	charId: string;
+	/** Action clips (attack / special / hit / knockdown / ...) loaded once per asset id. */
+	tracks: Map<string, AnimationTrack>;
+	/** Current action key ("" = none): attack | hit | stun | down | dive | getup | charge | special. */
+	curKey: string;
+	curTrack: AnimationTrack | undefined;
+	curSince: number;
+	curSecs: number;
+	curHold: number;
+	curSpeedSet: boolean;
+	curHeld: boolean;
+	/** Bumped by the renderer on every attack event so the attack clip restarts. */
+	attackSeq: number;
+	seenAttack: number;
+	specialPending: boolean;
+	sit: AnimationTrack | undefined;
+	sitOn: boolean;
+	/** True when the shared knockdown clip exists, so the root is not rotated to fake lying down. */
+	hasClips: boolean;
 }
 
 let avatarFolder: Instance | undefined;
@@ -93,7 +115,12 @@ function preloadAnimations(): void {
 			if (anims !== undefined) {
 				if (anims.idle !== undefined) ids.push(anims.idle);
 				if (anims.run !== undefined) ids.push(anims.run);
+				if (anims.attack !== undefined) ids.push(anims.attack);
+				if (anims.special !== undefined) ids.push(anims.special);
 			}
+		}
+		for (const id of [SHARED_ANIMS.hit, SHARED_ANIMS.knockdown, SHARED_ANIMS.getup, SHARED_ANIMS.stun, SIT_ANIM]) {
+			if (id !== undefined) ids.push(id);
 		}
 		const assets: Instance[] = [];
 		for (const id of ids) {
@@ -241,6 +268,21 @@ export function makeAvatar(template: Model, parent: Instance, height: number, ch
 		stateSince: 0,
 		runState: false,
 		facing: new Vector3(1, 0, 0),
+		charId,
+		tracks: new Map<string, AnimationTrack>(),
+		curKey: "",
+		curTrack: undefined,
+		curSince: 0,
+		curSecs: 0,
+		curHold: 0,
+		curSpeedSet: false,
+		curHeld: false,
+		attackSeq: 0,
+		seenAttack: 0,
+		specialPending: false,
+		sit: undefined,
+		sitOn: false,
+		hasClips: animator !== undefined && SHARED_ANIMS.knockdown !== undefined,
 	};
 
 	if (animator !== undefined) {
@@ -256,7 +298,141 @@ export function makeAvatar(template: Model, parent: Instance, height: number, ch
 	return view;
 }
 
-export function drawAvatar(v: AvatarView, foot: Vector3, fx: number, fz: number, act: string, now: number): void {
+/** Loads (once) the action clip with this asset id. */
+function actTrack(v: AvatarView, id: string | undefined, looped: boolean): AnimationTrack | undefined {
+	if (id === undefined || v.animator === undefined) return undefined;
+	const cached = v.tracks.get(id);
+	if (cached !== undefined) return cached;
+	const t = loadTrack(v.animator, getAnim(id));
+	if (t === undefined) return undefined;
+	t.Looped = looped;
+	t.Priority = Enum.AnimationPriority.Action;
+	v.tracks.set(id, t);
+	return t;
+}
+
+function stopCur(v: AvatarView): void {
+	const t = v.curTrack;
+	if (t !== undefined && t.IsPlaying) t.Stop(0.12);
+	v.curTrack = undefined;
+	v.curKey = "";
+}
+
+/** Starts an action clip. secs > 0 stretches / squeezes it to that many seconds; hold > 0 freezes it at that fraction of its length. */
+function startCur(v: AvatarView, key: string, id: string | undefined, looped: boolean, secs: number, hold: number, now: number): void {
+	stopCur(v);
+	const t = actTrack(v, id, looped);
+	v.curKey = key;
+	v.curSince = now;
+	v.curSecs = secs;
+	v.curHold = hold;
+	v.curSpeedSet = false;
+	v.curHeld = false;
+	v.curTrack = t;
+	if (t === undefined) return;
+	t.Looped = looped;
+	if (t.IsPlaying) t.Stop(0);
+	t.Play(0.06);
+	t.AdjustSpeed(1);
+}
+
+function tickCur(v: AvatarView): void {
+	const t = v.curTrack;
+	if (t === undefined || t.Length <= 0) return;
+	if (!v.curSpeedSet) {
+		v.curSpeedSet = true;
+		if (v.curSecs > 0) t.AdjustSpeed(math.max(0.5, math.min(4, t.Length / v.curSecs)));
+	}
+	if (v.curHold > 0 && !v.curHeld && t.TimePosition >= t.Length * v.curHold) {
+		v.curHeld = true;
+		t.AdjustSpeed(0);
+	}
+}
+
+/** Longest time (s) a finished-action clip is allowed to linger after the sim action has ended. */
+function lingerFor(key: string): number {
+	if (key === "special") return 2.5;
+	if (key === "attack" || key === "hit" || key === "getup") return 0.5;
+	return 0;
+}
+
+/** Maps the snapshot action to an action clip (priority over idle / run) and starts / stops it on changes. */
+function updateAction(v: AvatarView, act: string, now: number): void {
+	const ca = CHAR_ANIMS[v.charId];
+	let want = "";
+	if (act === "down") want = "down";
+	else if (act === "hitstun") want = v.curKey === "stun" || (v.curKey === "hit" && now - v.curSince > STUN_AFTER) ? "stun" : "hit";
+	else if (act === "recover") want = "getup";
+	else if (act === "fear") want = "stun";
+	else if (act === "punch" || act === "tackle") want = "attack";
+	else if (act === "dive") want = "dive";
+	else if (act === "charge") want = "charge";
+	const reacting = act === "down" || act === "hitstun" || act === "recover" || act === "fear";
+	if (want === "" && v.specialPending && !reacting) {
+		want = "special";
+		v.specialPending = false;
+	} else if (reacting || want !== "") {
+		v.specialPending = false;
+	}
+	let force = false;
+	if (v.attackSeq !== v.seenAttack) {
+		v.seenAttack = v.attackSeq;
+		if (want === "attack" || want === "") {
+			want = "attack";
+			force = true;
+		}
+	}
+	if (want === "" && v.curKey !== "" && v.curTrack !== undefined) {
+		const lim = lingerFor(v.curKey);
+		if (lim > 0 && v.curTrack.IsPlaying && now - v.curSince < lim) want = v.curKey;
+	}
+	if (want === v.curKey && !force) {
+		tickCur(v);
+		return;
+	}
+	if (want === "") stopCur(v);
+	else if (want === "attack") startCur(v, "attack", ca?.attack, false, act === "tackle" ? 0.42 : 0.3, 0, now);
+	else if (want === "hit") startCur(v, "hit", SHARED_ANIMS.hit, false, 0.35, 0, now);
+	else if (want === "stun") startCur(v, "stun", SHARED_ANIMS.stun, true, 0, 0, now);
+	else if (want === "down") startCur(v, "down", SHARED_ANIMS.knockdown, false, 0.5, 0.94, now);
+	else if (want === "dive") startCur(v, "dive", SHARED_ANIMS.knockdown, false, 0.3, 0.94, now);
+	else if (want === "getup") startCur(v, "getup", SHARED_ANIMS.getup, false, 0.35, 0, now);
+	else if (want === "charge") startCur(v, "charge", ca?.attack, false, 0.3, 0.35, now);
+	else startCur(v, "special", ca?.special, false, 0, 0, now);
+	tickCur(v);
+}
+
+/** Loops the R15 sit clip over everything else while mounted. */
+function setSit(v: AvatarView, on: boolean): void {
+	if (on === v.sitOn) return;
+	v.sitOn = on;
+	if (on) {
+		let t = v.sit;
+		if (t === undefined && v.animator !== undefined) {
+			t = loadTrack(v.animator, getAnim(SIT_ANIM));
+			if (t !== undefined) {
+				t.Looped = true;
+				t.Priority = Enum.AnimationPriority.Action4;
+			}
+			v.sit = t;
+		}
+		if (t !== undefined) t.Play(0.1);
+	} else if (v.sit !== undefined && v.sit.IsPlaying) {
+		v.sit.Stop(0.15);
+	}
+}
+
+/** Restarts the attack clip on the next draw (call on every attack event). */
+export function triggerAttack(v: AvatarView): void {
+	v.attackSeq += 1;
+}
+
+/** Plays the character's special clip once on the next draw (when the sim action is not a reaction). */
+export function triggerSpecial(v: AvatarView): void {
+	v.specialPending = true;
+}
+
+export function drawAvatar(v: AvatarView, foot: Vector3, fx: number, fz: number, act: string, now: number, rootOverride?: CFrame, mount?: string): void {
 	const last = v.lastFoot;
 	if (last !== undefined) {
 		const dt = now - v.lastClock;
@@ -288,16 +464,20 @@ export function drawAvatar(v: AvatarView, foot: Vector3, fx: number, fz: number,
 	const base = CFrame.lookAt(foot, foot.add(v.facing));
 
 	let rootCF: CFrame;
-	if (act === "down") {
+	if (rootOverride !== undefined) {
+		rootCF = rootOverride;
+	} else if (act === "down" && !v.hasClips) {
 		rootCF = base.mul(new CFrame(0, LYING_LIFT, 0)).mul(CFrame.Angles(-math.pi / 2, 0, 0));
 	} else {
-		const shake = act === "hitstun" || act === "fear" ? math.sin(now * 40) * SHAKE_AMP : 0;
+		const shake = !v.hasClips && (act === "hitstun" || act === "fear") ? math.sin(now * 40) * SHAKE_AMP : 0;
 		rootCF = base.mul(new CFrame(0, v.footOffset, 0)).mul(new CFrame(shake, 0, 0));
 	}
 	v.root.CFrame = rootCF;
+	setSit(v, mount === "sit");
+	updateAction(v, act, now);
 
 	// Only touch the tracks when the desired state actually changes.
-	const wantRun = v.moving && act === "normal";
+	const wantRun = v.moving && act === "normal" && rootOverride === undefined;
 	if (wantRun !== v.runState) {
 		v.runState = wantRun;
 		if (wantRun) {

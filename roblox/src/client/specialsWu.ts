@@ -17,59 +17,72 @@ function flyArrow(arrow: Prop, a: Vector3, b: Vector3, dur: number, arcH: number
 	});
 }
 
-/** 孫權「受箭回舟」: a warship rises from the water, takes arrows, turns and looses a volley. */
+/** 孫權「受箭回舟」: a warship rises broadside in front of him, the ball bounces off and arrows stick in the hull, then it turns and looses a volley. */
 export function sunquan(c: Ctx): void {
 	const water = Color3.fromRGB(80, 200, 255);
 	const gold = Color3.fromRGB(255, 215, 90);
 	const warm = Color3.fromRGB(255, 120, 70);
-	const shipPos = rel(c, 3, 17);
-	const ship = makeProp("sunquan_ship", "ship", Color3.fromRGB(150, 50, 45), 0);
-	const down = new Vector3(0, -16, 0);
-	placeProp(ship, groundCF(shipPos.add(down), c.look));
-	fx.ring(shipPos.add(new Vector3(0, 0.4, 0)), 2, 17, 0.8, water, 1.6, 0.6);
-	fx.ring(shipPos.add(new Vector3(0, 0.5, 0)), 1, 12, 0.6, WHITE, 1, 0.5);
-	fx.burst(shipPos.add(new Vector3(0, 2, 0)), water, 50, { size: 3, speed: 36 });
-	sheetFx(c, "emerge", shipPos.add(new Vector3(0, 6, 0)), 22, 0.9, WHITE);
-	fx.shake(0.7, 0.8);
-	fx.flash(water, 0.75, 0.4);
+	const sc = 0.8;
+	const shipPos = rel(c, 3.4, 0);
+	const ship = makeProp("sunquan_ship", "ship", Color3.fromRGB(150, 50, 45), 0, undefined, sc);
+	const down = new Vector3(0, -13, 0);
+	// Broadside: the bow points to the general's right, the long hull spans the goal mouth.
+	const broadside = c.right;
+	placeProp(ship, groundCF(shipPos.add(down), broadside));
+	fx.ring(shipPos.add(new Vector3(0, 0.4, 0)), 2, 13, 0.8, water, 1.4, 0.6);
+	fx.burst(shipPos.add(new Vector3(0, 2, 0)), water, 40, { size: 2.6, speed: 30 });
+	fx.shake(0.6, 0.7);
+	fx.flash(water, 0.85, 0.3);
 	fx.run(0.7, (a) => {
-		placeProp(ship, groundCF(shipPos.add(down.mul(1 - fx.easeOut(a))), c.look));
+		placeProp(ship, groundCF(shipPos.add(down.mul(1 - fx.easeOut(a))), broadside));
 	});
-	fx.burst(shipPos.add(new Vector3(0, 3, 0)), WHITE, 30, { size: 2.4, speed: 24 });
-	fx.wait(0.2);
-	// Arrows stick into the hull.
+	fx.burst(shipPos.add(new Vector3(0, 3, 0)), WHITE, 20, { size: 2, speed: 20 });
+	// The ball flies at the ship, bounces off, and arrows thud into the hull.
+	const hullF = 3.4 + 3.3;
+	const ball = fx.ball(rel(c, 16, 3, 4), 2.4, WHITE, 0);
+	const b0 = ball.Position;
+	const hitP = rel(c, hullF, 1.5, 4.5);
+	fx.run(0.5, (a) => {
+		ball.CFrame = new CFrame(b0.Lerp(hitP, a));
+	});
+	fx.burst(hitP, WHITE, 14, { size: 1.6, speed: 18 });
+	fx.shake(0.4, 0.25);
 	const hullArrows: Prop[] = [];
 	for (let i = 0; i < 6; i++) {
-		const hull = shipPos.sub(c.right.mul(4.7)).add(c.look.mul((i - 2.5) * 3)).add(new Vector3(0, 4.4 + (i % 2) * 1.6, 0));
-		const from = rel(c, 3 + (i - 2.5) * 3 + 12, 4 + (i % 3), 7 + (i % 2) * 3);
+		const hull = rel(c, hullF - 0.2, (i - 2.5) * 1.7, 3.6 + (i % 2) * 1.7);
+		const from = rel(c, hullF + 11, (i - 2.5) * 1.7 + 2, 8 + (i % 2) * 3);
 		const arrow = makeProp("arrow", "arrow", gold, 0);
 		hullArrows.push(arrow);
 		fx.spawn(() => {
-			fx.wait(i * 0.11);
+			fx.wait(0.1 + i * 0.12);
 			flyArrow(arrow, from, hull, 0.3, 3);
-			fx.burst(hull, WHITE, 8, { size: 1.2, speed: 14 });
-			fx.shake(0.15, 0.12);
+			arrow.model.Parent = ship.model;
+			fx.burst(hull, WHITE, 6, { size: 1.1, speed: 12 });
+			fx.shake(0.15, 0.1);
 		});
 	}
-	fx.wait(1.1);
-	// Ship turns toward the dummy.
-	const aim = new Vector3(c.dummy.foot.X - shipPos.X, 0, c.dummy.foot.Z - shipPos.Z).Unit;
+	const bounceTo = rel(c, 19, 7, 0.8);
+	fx.run(0.8, (a) => {
+		ball.CFrame = new CFrame(hitP.Lerp(bounceTo, a).add(new Vector3(0, math.sin(a * math.pi) * 6, 0)));
+	});
+	ball.Destroy();
+	fx.wait(0.7);
+	// The ship turns bow-first toward the dummy.
 	fx.run(0.5, (a) => {
-		const dir = c.look.Lerp(aim, fx.easeOut(a));
+		const dir = broadside.Lerp(c.look, fx.easeOut(a)).Unit;
 		placeProp(ship, groundCF(shipPos, dir));
 	});
-	sheetFx(c, "volley", shipPos.add(new Vector3(0, 8, 0)), 18, 0.8, WHITE);
-	fx.flash(warm, 0.75, 0.3);
+	sheetFx(c, "volley", shipPos.add(new Vector3(0, 8, 0)), 12, 0.8, warm);
+	fx.flash(warm, 0.85, 0.25);
 	fx.shake(0.4, 0.4);
-	// Volley.
 	const n = 18;
 	for (let i = 0; i < n; i++) {
-		const from = shipPos.add(aim.mul(6)).add(c.look.mul((i % 6) - 2.5)).add(new Vector3(0, 6 + (i % 3), 0));
+		const from = shipPos.add(c.look.mul(5)).add(c.right.mul((i % 6) - 2.5)).add(new Vector3(0, 6 + (i % 3), 0));
 		const to = c.dummy.foot.add(new Vector3((math.random() - 0.5) * 3, 2 + math.random() * 5, (math.random() - 0.5) * 3));
 		const arrow = makeProp("arrow", "arrow", i % 2 === 0 ? gold : warm, 0);
 		fx.spawn(() => {
 			fx.wait(i * 0.04);
-			flyArrow(arrow, from, to, 0.55, 8);
+			flyArrow(arrow, from, to, 0.55, 5);
 			arrow.model.Destroy();
 			fx.burst(to, gold, 5, { size: 1.2, speed: 14 });
 			if (i % 4 === 0) {
@@ -79,49 +92,39 @@ export function sunquan(c: Ctx): void {
 		});
 	}
 	fx.wait(0.55 + n * 0.04);
-	sheetFx(c, "impact", chest(c), 13, 0.6, WHITE);
-	impact(c, chest(c), warm, 1.5);
-	fx.flash(WHITE, 0.4, 0.3);
-	knockDummy(c, 6, 0.5, aim, 2);
+	impact(c, chest(c), warm, 1.3);
+	knockDummy(c, 6, 0.5, c.look, 2);
 	fx.wait(0.4);
 	fx.run(0.5, (a) => {
-		placeProp(ship, groundCF(shipPos.add(down.mul(fx.easeIn(a))), aim));
+		placeProp(ship, groundCF(shipPos.add(down.mul(fx.easeIn(a))), c.look));
 	});
-	fx.ring(shipPos.add(new Vector3(0, 0.4, 0)), 2, 15, 0.6, water, 1.4, 0.5);
-	fx.burst(shipPos.add(new Vector3(0, 1, 0)), water, 30, { size: 2.6, speed: 28 });
+	fx.ring(shipPos.add(new Vector3(0, 0.4, 0)), 2, 13, 0.6, water, 1.4, 0.5);
+	fx.burst(shipPos.add(new Vector3(0, 1, 0)), water, 24, { size: 2.4, speed: 24 });
 	ship.model.Destroy();
 	for (const h of hullArrows) h.model.Destroy();
 	dummyGetUp(c);
 }
 
-/** 大喬「時空之門」: a rune circle and a vertical portal; chains of light drag the dummy toward the gate. */
+/** 大喬「時空之門」: a big rune circle under her, then allies arrive beside her as pillars of light; enemies in the circle are slowed and chained. */
 export function daqiao(c: Ctx): void {
 	const pink = Color3.fromRGB(255, 110, 235);
 	const cyan = Color3.fromRGB(110, 240, 255);
-	const centre = c.dummy.foot;
-	const portalPos = rel(c, DUMMY_DIST + 9, 0, 7.5);
-	fx.groundCircle(centre, 16, 3.2, pink);
-	sheetFx(c, "form", centre.add(new Vector3(0, 1.5, 0)), 30, 1.2, WHITE);
-	fx.ring(centre.add(new Vector3(0, 0.4, 0)), 2, 16, 0.6, cyan, 1.4, 0.5);
-	fx.flash(pink, 0.7, 0.4);
+	const centre = c.actor.foot;
+	fx.groundCircle(centre, 15, 3.4, pink);
+	sheetFx(c, "form", centre.add(new Vector3(0, 1.2, 0)), 22, 1.2, pink);
+	fx.ring(centre.add(new Vector3(0, 0.4, 0)), 2, 15, 0.6, cyan, 1.4, 0.5);
+	fx.flash(pink, 0.85, 0.3);
 	fx.shake(0.3, 0.4);
-	fx.wait(0.5);
-	// Rotating rune rings on the floor and the vertical portal.
-	const runeRadii = [14, 10, 6];
+	const runeRadii = [13, 9, 5];
 	const runes: Part[] = [];
 	for (let r = 0; r < 3; r++) {
 		for (let i = 0; i < 8; i++) {
 			runes.push(fx.block(new CFrame(centre), new Vector3(1.4, 0.3, 1.4), r === 1 ? cyan : pink));
 		}
 	}
-	const portalBits: Part[] = [];
-	for (let i = 0; i < 32; i++) {
-		portalBits.push(fx.block(new CFrame(portalPos), new Vector3(1.1, 1.1, 2.6), i % 2 === 0 ? pink : cyan));
-	}
-	const disc = fx.glow(Enum.PartType.Cylinder, CFrame.lookAt(portalPos, portalPos.add(c.look)).mul(CFrame.Angles(0, math.pi / 2, 0)), new Vector3(0.3, 12, 12), pink, 0.5);
 	fx.spawn(() => {
-		fx.run(3, (a) => {
-			const grow = math.min(1, a * 5) * math.min(1, (1 - a) * 6);
+		fx.run(3.4, (a) => {
+			const grow = math.min(1, a * 6) * math.min(1, (1 - a) * 6);
 			for (let r = 0; r < 3; r++) {
 				for (let i = 0; i < 8; i++) {
 					const ang = (i / 8) * 2 * math.pi + a * (r % 2 === 0 ? 5 : -5);
@@ -129,52 +132,53 @@ export function daqiao(c: Ctx): void {
 					runes[r * 8 + i].CFrame = new CFrame(p).mul(CFrame.Angles(0, ang * 2, 0));
 				}
 			}
-			for (let i = 0; i < 32; i++) {
-				const ang = (i / 32) * 2 * math.pi + a * 3;
-				const rad = 6.2 * grow;
-				const p = portalPos.add(c.right.mul(math.cos(ang) * rad)).add(UP.mul(math.sin(ang) * rad));
-				const tangent = c.right.mul(-math.sin(ang)).add(UP.mul(math.cos(ang)));
-				portalBits[i].CFrame = CFrame.lookAt(p, p.add(tangent));
-			}
-			const ds = 12 * grow * (1 + 0.06 * math.sin(a * 40));
-			disc.Size = new Vector3(0.3, ds, ds);
-			disc.Transparency = 0.45 + 0.15 * math.sin(a * 30);
 		});
 		for (const p of runes) p.Destroy();
-		for (const p of portalBits) p.Destroy();
-		disc.Destroy();
 	});
-	sheetFx(c, "active", portalPos, 16, 1.4, WHITE);
-	fx.burst(portalPos, pink, 40, { size: 2.6, speed: 24, life: 1.2 });
-	fx.wait(0.4);
-	// Chains from the portal drag the dummy.
-	sheetFx(c, "chain", chest(c), 12, 1.4, WHITE);
-	for (let k = 0; k < 4; k++) {
+	fx.wait(0.5);
+	// Allies teleport in beside her: pillars of light.
+	const spots: [number, number][] = [
+		[-3, 4.5],
+		[-3, -4.5],
+		[-6, 2],
+		[-6, -2],
+		[1.5, 6.5],
+	];
+	for (let i = 0; i < spots.size(); i++) {
+		const p = rel(c, spots[i][0], spots[i][1]);
 		fx.spawn(() => {
-			fx.wait(k * 0.35);
+			fx.wait(i * 0.12);
+			fx.pillar(p, 1.0, 16, 0.8, i % 2 === 0 ? pink : cyan);
+			fx.burst(p.add(new Vector3(0, 1, 0)), i % 2 === 0 ? pink : cyan, 12, { size: 1.6, speed: 12 });
+			fx.ring(p.add(new Vector3(0, 0.4, 0)), 1, 5, 0.4, WHITE, 0.8, 0.4);
+		});
+	}
+	sheetFx(c, "summon", centre.add(new Vector3(0, 4, 0)), 12, 0.7, pink);
+	fx.wait(0.6);
+	// Enemies inside the circle: chains wrap the dummy, it moves sluggishly.
+	sheetFx(c, "chain", chest(c), 9, 1.4, pink);
+	for (let k = 0; k < 3; k++) {
+		fx.spawn(() => {
+			fx.wait(k * 0.3);
 			for (let i = 0; i < 4; i++) {
 				const ang = (i / 4) * 2 * math.pi + k;
-				const src = portalPos.add(c.right.mul(math.cos(ang) * 5.5)).add(UP.mul(math.sin(ang) * 5.5));
+				const src = centre.add(new Vector3(math.cos(ang) * 13, 0.5, math.sin(ang) * 13));
 				fx.bolt(src, chest(c), i % 2 === 0 ? pink : cyan, 0.5, 0.35, 1.0, 8);
 			}
 		});
 	}
-	shakeDummy(c, 1.6, 0.3);
+	shakeDummy(c, 1.8, 0.25);
 	const d = c.dummy;
 	const home = d.foot;
-	fx.run(1.6, (a) => {
-		d.foot = home.add(c.look.mul(fx.easeOut(a) * 5));
-		d.tilt = math.sin(a * 6) * 0.15;
+	fx.run(1.8, (a) => {
+		d.foot = home.sub(c.look.mul(fx.easeOut(a) * 1.5));
+		d.tilt = math.sin(a * 6) * 0.1;
 		place(d);
 	});
-	sheetFx(c, "summon", centre.add(new Vector3(0, 4, 0)), 14, 0.7, WHITE);
-	sheetFx(c, "burst", chest(c), 14, 0.6, WHITE);
-	impact(c, chest(c), pink, 1.5);
-	fx.flash(WHITE, 0.45, 0.35);
-	fx.shake(0.9, 0.5);
+	impact(c, chest(c), pink, 0.9);
 	d.tilt = 0;
 	place(d);
-	fx.wait(0.6);
+	fx.wait(0.8);
 }
 
 /** Tall translucent funnel: stacked discs with a spinning bar each, plus flat leaves swirling around it. */
@@ -228,49 +232,42 @@ function windLines(centre: Vector3, radius: number, dur: number, color: Color3):
 	});
 }
 
-/** 周瑜「赤壁東風」: a giant east-wind tornado rises from a swirling wind circle, lifts the dummy, spins it and throws it far away. */
+/** 周瑜「赤壁東風」: a wind circle around the cast point blows the dummy out of the circle, then the wind zone keeps swirling for 3 s. */
 export function zhouyu(c: Ctx): void {
 	const green = Color3.fromRGB(120, 255, 170);
 	const wind = Color3.fromRGB(230, 255, 240);
-	const centre = c.dummy.foot;
-	// 1) Sweep of the arms: a wind circle with racing streaks around the dummy.
-	fx.groundCircle(centre, 12, 5, green);
-	fx.ring(centre.add(new Vector3(0, 0.5, 0)), 14, 12, 0.6, wind, 1.5, 0.6);
-	windLines(centre, 11, 4.5, wind);
+	const centre = rel(c, 4, 0);
+	const radius = 11;
+	fx.groundCircle(centre, radius, 5.2, green);
+	fx.ring(centre.add(new Vector3(0, 0.5, 0)), 3, radius, 0.6, wind, 1.5, 0.6);
+	fx.ring(centre.add(new Vector3(0, 0.5, 0)), 2, radius - 2, 0.9, green, 1.2, 0.6);
+	windLines(centre, radius - 1, 5, wind);
 	fx.burst(c.actor.foot.add(new Vector3(0, 5, 0)), green, 20, { size: 2, speed: 22 });
-	fx.wait(0.9);
-	// 2) The tornado rises.
-	tornado(() => centre, 20, 3.6, green, wind);
-	fx.shake(0.5, 1.2);
-	fx.wait(0.8);
-	sheetFx(c, "tornado", centre.add(new Vector3(0, 10, 0)), 24, 1.6, WHITE);
-	// 3) The dummy is lifted and spun, then thrown far out of the circle.
+	fx.shake(0.4, 0.6);
+	fx.wait(0.6);
+	// The dummy is blown out of the circle.
 	const d = c.dummy;
-	fx.run(0.9, (a) => {
-		d.lift = fx.easeOut(a) * 8;
-		d.yawAdd = a * 18;
-		d.tilt = math.sin(a * 8) * 0.2;
-		place(d);
-	});
-	impact(c, chest(c), green, 1.2);
-	fx.flash(WHITE, 0.5, 0.3);
-	const to = rel(c, DUMMY_DIST + 17, 0);
-	fx.run(1.0, (a) => {
-		d.foot = centre.Lerp(to, fx.easeOut(a));
-		d.lift = 8 + math.sin(a * math.pi) * 3 * (1 - a);
-		d.yawAdd = 18 + a * 12;
-		d.tilt = math.min(1, a * 2) * (math.pi / 2);
+	const from = d.foot;
+	const to = rel(c, 4 + radius + 5, 0);
+	impact(c, chest(c), green, 0.9);
+	sheetFx(c, "tornado", centre.add(new Vector3(0, 6, 0)), 10, 1.2, green);
+	fx.run(0.7, (a) => {
+		d.foot = from.Lerp(to, fx.easeOut(a));
+		d.lift = math.sin(a * math.pi) * 3;
+		d.yawAdd = a * 8;
+		d.tilt = math.min(1, a * 2) * 1.2;
 		place(d);
 	});
 	d.yawAdd = 0;
 	d.lift = 0;
 	place(d);
-	fx.dust(d.foot, 14, 6);
-	fx.shake(0.6, 0.35);
-	// 4) The wind circle lingers with slow sparkles.
+	fx.dust(d.foot, 10, 5);
+	fx.shake(0.5, 0.3);
+	// The wind zone stays (swirl keeps racing); sparkles drift.
 	fx.burst(centre.add(new Vector3(0, 3, 0)), wind, 30, { size: 1.2, speed: 4, life: 2, gravity: 0, spread: 180 });
-	fx.wait(1.6);
+	fx.wait(2.2);
 	dummyGetUp(c);
+	fx.wait(1.0);
 }
 
 /** 小喬「吹飛」: a sakura mark appears under the dummy, then a petal tornado lifts and spins it away. */
@@ -289,7 +286,7 @@ export function xiaoqiao(c: Ctx): void {
 	fx.burst(centre.add(new Vector3(0, 8, 0)), pink, 30, { size: 1.8, speed: 4, life: 1.4, gravity: 6, spread: 180 });
 	fx.wait(1.0);
 	// Petal tornado.
-	fx.spiral(() => c.dummy.foot, 6.5, 16, pink, 2.5, 90, 1.3, true, WHITE);
+	tornado(() => c.dummy.foot, 14, 2.6, pink, WHITE);
 	sheetFx(c, "gust", centre.add(new Vector3(0, 6, 0)), 9, 1.4, pink);
 	sheetFx(c, "petals", centre.add(new Vector3(0, 9, 0)), 8, 1.6, pink);
 	fx.ring(centre.add(new Vector3(0, 0.5, 0)), 2, 14, 0.6, pink, 1.4, 0.6);

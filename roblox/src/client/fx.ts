@@ -357,10 +357,10 @@ export function groundCircle(pos: Vector3, radius: number, dur: number, color: C
 }
 
 /** Vertical neon column (pillar of light) that pulses and fades. */
-export function pillar(pos: Vector3, radius: number, height: number, dur: number, color: Color3): void {
+export function pillar(pos: Vector3, radius: number, height: number, dur: number, color: Color3, soft = false): void {
 	const cf = new CFrame(pos.add(new Vector3(0, height / 2, 0))).mul(CFrame.Angles(0, 0, math.pi / 2));
-	const outer = glow(Enum.PartType.Cylinder, cf, new Vector3(height, radius * 2, radius * 2), color, 0.4);
-	const core = glow(Enum.PartType.Cylinder, cf, new Vector3(height, radius, radius), Color3.fromRGB(255, 255, 255), 0.05);
+	const outer = glow(Enum.PartType.Cylinder, cf, new Vector3(height, radius * 2, radius * 2), color, soft ? 0.8 : 0.4);
+	const core = glow(Enum.PartType.Cylinder, cf, new Vector3(height, radius, radius), Color3.fromRGB(255, 255, 255), soft ? 0.65 : 0.05);
 	spawn(() => {
 		run(dur, (a) => {
 			const k = 1 + 0.15 * math.sin(a * 40);
@@ -430,6 +430,8 @@ export interface FlipbookOpts {
 	grow?: number;
 	/** Force the BillboardGui fallback. */
 	billboard?: boolean;
+	/** Match mode: starts semi-transparent so players stay visible behind it. */
+	soft?: boolean;
 }
 
 /** Plays a flipbook sheet once at `cf` (position used) in `size` studs for `dur` scaled seconds. Particle version when the sheet is full, billboard otherwise. */
@@ -448,7 +450,8 @@ export function flipbook(sheet: FxSheet, cf: CFrame, sizeIn: number, dur: number
 	e.LightEmission = 1;
 	e.Color = new ColorSequence(o?.color ?? Color3.fromRGB(255, 255, 255));
 	e.Size = new NumberSequence([new NumberSequenceKeypoint(0, size * 0.7), new NumberSequenceKeypoint(1, size * (o?.grow ?? 1.3))]);
-	e.Transparency = new NumberSequence([new NumberSequenceKeypoint(0, 0), new NumberSequenceKeypoint(0.8, 0), new NumberSequenceKeypoint(1, 0.6)]);
+	const t0 = o?.soft === true ? 0.45 : 0;
+	e.Transparency = new NumberSequence([new NumberSequenceKeypoint(0, t0), new NumberSequenceKeypoint(0.8, t0), new NumberSequenceKeypoint(1, 0.8)]);
 	e.Lifetime = new NumberRange(dur, dur);
 	e.Speed = new NumberRange(0, 0);
 	e.Rate = 0;

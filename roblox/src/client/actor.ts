@@ -103,8 +103,8 @@ export function makeGeneral(charId: string, parent: Instance, foot: Vector3, loo
 	const view = makeAvatar(template, parent, AVATAR_HEIGHT, charId);
 	const a = makeActor(charId, view.model, view.root, view.footOffset, true, view.animator, foot, look);
 	a.idle = view.idle;
-	buildTrails(a);
 	initWeaponPose(a.model, charId, a.root);
+	buildTrails(a);
 	place(a);
 	return a;
 }

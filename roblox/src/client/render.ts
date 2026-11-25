@@ -1,9 +1,12 @@
 // Client-side 3D renderer. Builds player / ball / zone instances from server snapshots and draws them
 // about 100 ms behind the newest snapshot, interpolated by tick. Call update(dt) from RenderStepped.
-import { Country, SetupPlayer, Setup, SnapBall, SnapPlayer, SnapZone, Snapshot, STUDS_PER_PX, TICK_RATE, simToWorld } from "shared/net";
+import { Country, SetupPlayer, Setup, SimEventLite, SnapBall, SnapPlayer, Snapshot, STUDS_PER_PX, TICK_RATE, simToWorld } from "shared/net";
 import { colourOf } from "./world";
 import { SPRITES, SpriteSheet, animFor } from "./sprites";
-import { AvatarView, drawAvatar, getAvatarTemplate, makeAvatar } from "./avatars";
+import { AvatarView, drawAvatar, getAvatarTemplate, makeAvatar, triggerAttack, triggerSpecial } from "./avatars";
+import { MatchFx } from "./matchFx";
+import type { MatchCtx } from "./matchUtil";
+import { initMatchWeapon, setMatchTrails, swingMatchWeapon } from "./matchWeapons";
 
 /** Render this many ticks (100 ms at 60 Hz) behind the newest snapshot. */
 const INTERP_DELAY_TICKS = 6;
@@ -26,7 +29,12 @@ const GK_SHADE = 0.65;
 const HEAD_SHADE = 1.35;
 const HUMAN_RING_COLOUR = 0xffd700;
 const BALL_TRAIL_COLOUR = 0xffb020;
-const ZONE_COLOUR: Record<string, number> = { ice: 0x9fdcff, gust: 0xff8ac8, portal: 0x9b59ff, eastwind: 0xb8f5b0 };
+/** Seconds in hitstun after which a stunned player gets the orbiting stars. */
+const STUN_STARS_AFTER = 0.45;
+/** Weapon swing lengths (s) handed to the procedural weapon pose. */
+const PUNCH_SWING = 0.3;
+const TACKLE_SWING = 0.42;
+const SPECIAL_SWING = 0.45;
 const PATCH_OFFSETS: Vector3[] = [new Vector3(0.74, 0, 0), new Vector3(0, 0.74, 0), new Vector3(-0.3, -0.25, 0.66)];
 
 const Workspace = game.GetService("Workspace");
@@ -48,6 +56,16 @@ interface PlayerView {
 	sprite: SpriteView | undefined;
 	/** Set only for characters with a 3D avatar model; takes priority over the sprite. */
 	avatar: AvatarView | undefined;
+	/** Last drawn foot position (world studs) and sim action, read by the effect modules. */
+	foot: Vector3;
+	act: string;
+	hitSince: number;
+	stunned: boolean;
+	trails: Trail[];
+	trailsOn: boolean;
+	trailUntil: number;
+	charId: string;
+	team: number;
 }
 
 interface SpriteView {
@@ -68,15 +86,6 @@ interface BallView {
 	patches: Part[];
 	shadow: Part;
 	trail: Trail;
-}
-
-interface ZoneView {
-	disc: Part;
-	boat: Part;
-	bow: Part;
-	horse: Part;
-	horseHead: Part;
-	wave: Part;
 }
 
 function lerp(a: number, b: number, t: number): number {
@@ -199,7 +208,8 @@ export class Renderer {
 	private clockReady = false;
 	private players: PlayerView[] = [];
 	private ball: BallView | undefined;
-	private zones: ZoneView[] = [];
+	private mfx: MatchFx;
+	private evq: { tick: number; events: SimEventLite[] }[] = [];
 	private focusX = 0;
 	private focusZ = 26;
 	private ballSpin = 0;
@@ -214,6 +224,40 @@ export class Renderer {
 			folder = created;
 		}
 		this.actors = folder;
+		this.mfx = new MatchFx(this.makeCtx());
+	}
+
+	/** Live view of the players for the effect modules. */
+	private makeCtx(): MatchCtx {
+		const none = new Vector3(0, 0, 0);
+		return {
+			foot: (i) => this.players[i]?.foot ?? none,
+			facing: (i) => {
+				const v = this.players[i];
+				return v === undefined ? new Vector3(1, 0, 0) : new Vector3(v.fx, 0, v.fz);
+			},
+			chest: (i) => (this.players[i]?.foot ?? none).add(new Vector3(0, 4.6, 0)),
+			hand: (i) => {
+				const v = this.players[i];
+				if (v === undefined) return none;
+				const hand = v.avatar?.model.FindFirstChild("RightHand");
+				if (hand !== undefined && hand.IsA("BasePart")) return hand.Position;
+				return v.foot.add(new Vector3(v.fx * 1.5, 5.5, v.fz * 1.5));
+			},
+			charOf: (i) => this.players[i]?.charId ?? "",
+			teamOf: (i) => this.players[i]?.team ?? -1,
+			actOf: (i) => this.players[i]?.act ?? "normal",
+			stunned: (i) => this.players[i]?.stunned ?? false,
+			footOffset: (i) => this.players[i]?.avatar?.footOffset ?? 3,
+			trails: (i, dur) => {
+				const v = this.players[i];
+				if (v === undefined || v.trails.size() === 0) return;
+				v.trailUntil = math.max(v.trailUntil, os.clock() + dur);
+			},
+			focusX: () => this.focusX,
+			focusZ: () => this.focusZ,
+			count: () => this.players.size(),
+		};
 	}
 
 	/** (Re)creates the 10 player actors and the ball. Old actors are removed. */
@@ -227,12 +271,17 @@ export class Renderer {
 			this.players[p.idx] = this.makePlayer(p, s);
 		}
 		this.ball = this.makeBall();
-		this.zones = [];
+		this.evq = [];
+		this.mfx.reset();
 	}
 
 	/** Pushes a snapshot into the interpolation buffer. */
 	onSnapshot(s: Snapshot): void {
 		this.buffer.push(s);
+		if (s.events.size() > 0) {
+			this.evq.push({ tick: s.tick, events: s.events });
+			while (this.evq.size() > 120) this.evq.shift();
+		}
 		while (this.buffer.size() > MAX_BUFFER) {
 			this.buffer.shift();
 		}
@@ -260,21 +309,65 @@ export class Renderer {
 			this.buffer.shift();
 		}
 
+		const showroom = Workspace.GetAttribute("ShowroomActive") === true;
+		if (!showroom) this.flushEvents();
 		const [a, b, t] = this.segment(this.renderTick);
 		const cur = t < 0.5 ? a : b;
 		this.drawPlayers(a, b, t);
 		this.drawBall(a, b, t);
-		this.drawZones(cur.zones);
+		if (!showroom) this.mfx.frame(dt, cur.zones, this.lastBallPos, cur.ball.special);
+	}
+
+	/** Applies the sim events of every snapshot the render clock has reached. */
+	private flushEvents(): void {
+		while (this.evq.size() > 0 && this.evq[0].tick <= this.renderTick) {
+			const q = this.evq.shift();
+			if (q === undefined) break;
+			for (const e of q.events) {
+				const [ok, err] = pcall(() => this.applyEvent(e));
+				if (!ok) warn(`[render] event ${e.type}: ${tostring(err)}`);
+			}
+		}
+	}
+
+	private applyEvent(e: SimEventLite): void {
+		const t = e.type;
+		const idx = (e["playerIdx"] as number | undefined) ?? -1;
+		const pv = idx >= 0 ? this.players[idx] : undefined;
+		const av = pv?.avatar;
+		if (pv !== undefined && av !== undefined) {
+			if (t === "attack" || t === "slashSwing") {
+				const tackle = t === "attack" && (e["kind"] as string | undefined) === "tackle";
+				triggerAttack(av);
+				swingMatchWeapon(av.model, tackle ? TACKLE_SWING : PUNCH_SWING);
+				pv.trailUntil = math.max(pv.trailUntil, os.clock() + (tackle ? TACKLE_SWING : PUNCH_SWING) + 0.12);
+			} else if (t === "special") {
+				triggerSpecial(av);
+				// Spear / glaive / axes / hammer: one scripted swing at the start of the special (Zhao Yun's thrust, the war cry chop...).
+				swingMatchWeapon(av.model, SPECIAL_SWING);
+				pv.trailUntil = math.max(pv.trailUntil, os.clock() + SPECIAL_SWING + 0.15);
+			}
+		}
+		this.mfx.onEvent(e);
 	}
 
 	/** Interpolated ball world X (studs), used by the camera. */
 	getFocusX(): number {
-		return this.focusX;
+		const dv = this.debugFocus();
+		return dv !== undefined ? dv.foot.X : this.focusX;
+	}
+
+	/** Dev hook (off unless Workspace attribute DebugCamFocusIdx is set): follow that player instead of the ball. */
+	private debugFocus(): PlayerView | undefined {
+		const idx = game.GetService("Workspace").GetAttribute("DebugCamFocusIdx");
+		if (!typeIs(idx, "number")) return undefined;
+		return this.players[math.floor(idx)];
 	}
 
 	/** Interpolated ball world Z (studs), used by the camera. */
 	getFocusZ(): number {
-		return this.focusZ;
+		const dv = this.debugFocus();
+		return dv !== undefined ? dv.foot.Z : this.focusZ;
 	}
 
 	private segment(rt: number): [Snapshot, Snapshot, number] {
@@ -329,8 +422,26 @@ export class Renderer {
 			const foot = simToWorld(x, y, z);
 			const act = cur.a;
 			const av = v.avatar;
+			v.foot = foot;
+			v.act = act;
+			if (act === "hitstun") {
+				if (v.hitSince < 0) v.hitSince = now;
+			} else {
+				v.hitSince = -1;
+			}
+			const stunned = act === "hitstun" && v.hitSince >= 0 && now - v.hitSince > STUN_STARS_AFTER;
+			if (stunned && !v.stunned) this.mfx.stars(i);
+			v.stunned = stunned;
+			if (v.trails.size() > 0) {
+				const on = now < v.trailUntil;
+				if (on !== v.trailsOn) {
+					v.trailsOn = on;
+					setMatchTrails(v.trails, on);
+				}
+			}
 			if (av !== undefined) {
-				drawAvatar(av, foot, v.fx, v.fz, act, now);
+				const mo = this.mfx.mount(i, foot, new Vector3(v.fx, 0, v.fz), cur.sp);
+				drawAvatar(av, foot, v.fx, v.fz, act, now, mo?.cf, mo?.pose);
 				v.head.CFrame = new CFrame(foot.add(new Vector3(0, v.height + 0.2, 0)));
 				v.aura.CFrame = new CFrame(foot.add(new Vector3(0, v.height / 2, 0)));
 			} else {
@@ -355,7 +466,8 @@ export class Renderer {
 				}
 				v.aura.CFrame = bodyCF;
 			}
-			v.aura.Transparency = cur.sp === "" ? 1 : 0.6;
+			const showAura = cur.sp !== "" && (av === undefined || cur.sp === "rampage");
+			v.aura.Transparency = showAura ? (av === undefined ? 0.6 : 0.78) : 1;
 			v.aura.Color = auraColour(cur.sp);
 			v.glow.Enabled = cur.inv;
 			v.shadow.CFrame = groundCF(foot.X, 0.08, foot.Z);
@@ -394,61 +506,6 @@ export class Renderer {
 		this.focusZ = pos.Z;
 	}
 
-	private drawZones(zs: SnapZone[]): void {
-		while (this.zones.size() < zs.size()) {
-			this.zones.push(this.makeZone());
-		}
-		for (let i = 0; i < this.zones.size(); i++) {
-			const v = this.zones[i];
-			const z = zs[i];
-			if (z === undefined) {
-				this.hideZone(v);
-			} else {
-				this.showZone(v, z);
-			}
-		}
-	}
-
-	private hideZone(v: ZoneView): void {
-		v.disc.Transparency = 1;
-		v.boat.Transparency = 1;
-		v.bow.Transparency = 1;
-		v.horse.Transparency = 1;
-		v.horseHead.Transparency = 1;
-		v.wave.Transparency = 1;
-	}
-
-	private showZone(v: ZoneView, z: SnapZone): void {
-		this.hideZone(v);
-		const cx = z.x * STUDS_PER_PX;
-		const cz = z.y * STUDS_PER_PX;
-		const r = z.r * STUDS_PER_PX;
-		const dir = z.dir === 0 ? 1 : z.dir;
-		if (z.k === "arrowship") {
-			v.boat.Size = new Vector3(3.2, 1.4, math.max(2 * r, 6));
-			v.boat.CFrame = new CFrame(cx, 0.7, cz);
-			v.boat.Transparency = 0;
-			v.bow.Size = new Vector3(1.6, 1.4, 1.6);
-			v.bow.CFrame = new CFrame(cx + dir * 2.1, 0.7, cz);
-			v.bow.Transparency = 0;
-		} else if (z.k === "rider") {
-			v.horse.CFrame = new CFrame(cx, 1.8, cz);
-			v.horse.Transparency = 0;
-			v.horseHead.CFrame = new CFrame(cx + dir * 1.8, 2.5, cz);
-			v.horseHead.Transparency = 0;
-		} else if (z.k === "wave") {
-			v.wave.Size = new Vector3(0.6, 2.4, math.max(2 * r, 8));
-			v.wave.CFrame = new CFrame(cx, 1.2, cz);
-			v.wave.Transparency = 0.2;
-		} else {
-			const d = math.max(r, 0.5) * 2;
-			v.disc.Size = new Vector3(0.1, d, d);
-			v.disc.CFrame = groundCF(cx, 0.12, cz);
-			v.disc.Color = colourOf(ZONE_COLOUR[z.k] ?? 0xffffff);
-			v.disc.Transparency = 0.5;
-		}
-	}
-
 	private makePlayer(p: SetupPlayer, s: Setup): PlayerView {
 		const country: Country = p.team === 0 ? s.home : s.away;
 		const hex = TEAM_COLOUR[country];
@@ -476,6 +533,9 @@ export class Renderer {
 			ring.Color = colourOf(human ? HUMAN_RING_COLOUR : hex);
 			ring.Transparency = human ? 0.3 : 0.4;
 		}
+
+		let trails: Trail[] = [];
+		if (avatar !== undefined) trails = initMatchWeapon(avatar.model, p.charId, avatar.root);
 
 		const sheet = SPRITES[p.charId];
 		let sprite: SpriteView | undefined;
@@ -531,7 +591,31 @@ export class Renderer {
 
 		model.PrimaryPart = body;
 		model.Parent = this.actors;
-		return { model, body, head, aura, shadow, ring, glow, barBack, barFill, height, fx: 1, fz: 0, sprite, avatar };
+		return {
+			model,
+			body,
+			head,
+			aura,
+			shadow,
+			ring,
+			glow,
+			barBack,
+			barFill,
+			height,
+			fx: 1,
+			fz: 0,
+			sprite,
+			avatar,
+			foot: new Vector3(0, 0, 0),
+			act: "normal",
+			hitSince: -1,
+			stunned: false,
+			trails,
+			trailsOn: false,
+			trailUntil: 0,
+			charId: p.charId,
+			team: p.team,
+		};
 	}
 
 	private makeBall(): BallView {
@@ -559,16 +643,5 @@ export class Renderer {
 
 		this.lastBallPos = new Vector3(0, 0, 0);
 		return { part, patches, shadow, trail };
-	}
-
-	private makeZone(): ZoneView {
-		const disc = makePart(this.actors, "ZoneDisc", Enum.PartType.Cylinder, new Vector3(0.1, 1, 1), colourOf(0xffffff), 1);
-		const boat = makePart(this.actors, "ZoneBoat", Enum.PartType.Block, new Vector3(3.2, 1.4, 6), colourOf(0x6b4423), 1);
-		const bow = makePart(this.actors, "ZoneBow", Enum.PartType.Block, new Vector3(1.6, 1.4, 1.6), colourOf(0x6b4423), 1);
-		const horse = makePart(this.actors, "ZoneHorse", Enum.PartType.Block, new Vector3(3, 1.6, 1.2), colourOf(0x4a2e15), 1);
-		const horseHead = makePart(this.actors, "ZoneHorseHead", Enum.PartType.Block, new Vector3(0.9, 1, 0.9), colourOf(0x4a2e15), 1);
-		const wave = makePart(this.actors, "ZoneWave", Enum.PartType.Block, new Vector3(0.6, 2.4, 8), colourOf(0xbff6ff), 1);
-		wave.Material = Enum.Material.Neon;
-		return { disc, boat, bow, horse, horseHead, wave };
 	}
 }

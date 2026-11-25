@@ -45,16 +45,16 @@ export function sheetFx(c: Ctx, name: string, pos: Vector3, size: number, dur: n
 
 /** Punchy impact: white flash core, colour burst, shards, ring, optional shake. */
 export function impact(c: Ctx, pos: Vector3, color: Color3, big = 1): void {
-	const flashBall = fx.ball(pos, 3 * big, WHITE, 0.2);
+	const flashBall = fx.ball(pos, 2 * big, WHITE, 0.5);
 	fx.expire(flashBall, 0.25);
-	const core = fx.ball(pos, 4 * big, color, 0.3);
+	const core = fx.ball(pos, 3 * big, color, 0.45);
 	fx.expire(core, 0.25);
 	fx.spawn(() => {
 		fx.run(0.25, (a) => {
-			const s = (3 + a * 6) * big;
+			const s = (2.5 + a * 4.5) * big;
 			core.Size = new Vector3(s, s, s);
-			core.Transparency = 0.3 + a * 0.7;
-			flashBall.Transparency = 0.2 + a * 0.8;
+			core.Transparency = 0.45 + a * 0.55;
+			flashBall.Transparency = 0.5 + a * 0.5;
 		});
 		core.Destroy();
 		flashBall.Destroy();
@@ -65,6 +65,26 @@ export function impact(c: Ctx, pos: Vector3, color: Color3, big = 1): void {
 	fx.ring(new Vector3(pos.X, c.dummy.foot.Y + 0.4, pos.Z), 1, 7 * big, 0.35, color, 0.9, 0.4);
 	if (!sheetFx(c, "impact", pos, 9 * big, 0.5, color)) sheetFx(c, "hit.spark", pos, 8 * big, 0.4);
 	fx.shake(0.25 * big, 0.25);
+}
+
+/** Dark cracks radiating from `center` on the floor (thin blocks), fading out after `dur` scaled seconds. */
+export function groundCrack(center: Vector3, n: number, len: number, dur: number): void {
+	const parts: Part[] = [];
+	for (let i = 0; i < n; i++) {
+		const ang = (i / n) * 2 * math.pi + (math.random() - 0.5) * 0.4;
+		const l = len * (0.6 + math.random() * 0.6);
+		const dir = new Vector3(math.cos(ang), 0, math.sin(ang));
+		const a = center.add(new Vector3(0, 0.14, 0));
+		const cf = CFrame.lookAt(a.add(dir.mul(l / 2)), a.add(dir.mul(l)));
+		parts.push(fx.block(cf, new Vector3(0.3, 0.1, l), Color3.fromRGB(25, 20, 18)));
+	}
+	fx.spawn(() => {
+		fx.wait(dur * 0.6);
+		fx.run(dur * 0.4, (a) => {
+			for (const p of parts) p.Transparency = a;
+		});
+		for (const p of parts) p.Destroy();
+	});
 }
 
 /** Hit wobble on `target`, pushed back along `back` (uses the shared hit clip when it exists). Does not yield. */
@@ -134,10 +154,11 @@ export function dizzyStars(c: Ctx, dur: number): void {
 
 /** Dummy-sized frozen / glowing shell (ice, curse, aura) that follows the dummy. */
 export function dummyShell(c: Ctx, color: Color3, dur: number, transparency = 0.55): void {
-	const shell = fx.glow(Enum.PartType.Block, new CFrame(c.dummy.foot), new Vector3(5.2, 9.6, 3.6), color, transparency);
+	const upright = CFrame.Angles(0, 0, math.pi / 2);
+	const shell = fx.glow(Enum.PartType.Cylinder, new CFrame(c.dummy.foot).mul(upright), new Vector3(9.4, 5, 5), color, transparency);
 	fx.spawn(() => {
 		fx.run(dur, (a) => {
-			shell.CFrame = new CFrame(c.dummy.foot.add(new Vector3(0, 4.6 + c.dummy.lift, 0)));
+			shell.CFrame = new CFrame(c.dummy.foot.add(new Vector3(0, 4.6 + c.dummy.lift, 0))).mul(upright);
 			shell.Transparency = a > 0.8 ? transparency + (1 - transparency) * ((a - 0.8) / 0.2) : transparency + math.sin(a * 25) * 0.08;
 		});
 		shell.Destroy();

@@ -125,6 +125,63 @@ function runTick(s: GameState, a: AIState): void {
 	latch.k = false;
 	latch.l = false;
 
+	// Dev hook (off unless attribute set): press special for player idx 0-9 for one tick.
+	if (game.GetService("Workspace").GetAttribute("DebugNoAISpecial") === true) {
+		for (let i = 0; i < inputs.size(); i++) {
+			if (i !== HUMAN_IDX) inputs[i] = { ...inputs[i], l: false };
+		}
+	}
+	const dbg = game.GetService("Workspace").GetAttribute("DebugSpecialIdx");
+	if (typeIs(dbg, "number")) {
+		const di = math.floor(dbg);
+		if (di >= 0 && di < inputs.size()) {
+			inputs[di] = { ...inputs[di], l: true };
+		}
+		game.GetService("Workspace").SetAttribute("DebugSpecialIdx", undefined);
+	}
+
+	// Dev hook (off unless attribute set): DebugShootAtGoal = team (0/1) -> an opponent fires a shot at that team's goal.
+	const dbgShoot = game.GetService("Workspace").GetAttribute("DebugShootAtGoal");
+	if (typeIs(dbgShoot, "number")) {
+		game.GetService("Workspace").SetAttribute("DebugShootAtGoal", undefined);
+		const gk = s.players[dbgShoot === 0 ? 0 : 5];
+		let shooter = s.players[dbgShoot === 0 ? 9 : 4];
+		let bestD = 1e9;
+		for (const q of s.players) {
+			if (q.team === gk.team || q.role === "GK") continue;
+			const dd = math.abs(q.x - gk.x);
+			if (dd < bestD) {
+				bestD = dd;
+				shooter = q;
+			}
+		}
+		const dirX = gk.x < 600 ? 1 : -1;
+		const goalX = gk.x < 600 ? 0 : 1200;
+		shooter.x = goalX + dirX * 130;
+		shooter.y = 130;
+		shooter.vx = 0;
+		shooter.vy = 0;
+		const b = s.ball;
+		b.x = goalX + dirX * 100;
+		b.y = 130;
+		b.z = 8;
+		b.vx = -dirX * 260;
+		b.vy = 0;
+		b.vz = 0;
+		b.ownerIdx = -1;
+		b.lastTouchIdx = shooter.idx;
+		b.special = undefined;
+		// Put one more opponent in the lob's landing zone so a tiger ball has someone to hit.
+		for (const q of s.players) {
+			if (q.team === gk.team || q.role === "GK" || q === shooter) continue;
+			q.x = goalX + dirX * 400;
+			q.y = 130;
+			q.vx = 0;
+			q.vy = 0;
+			break;
+		}
+	}
+
 	step(s, inputs);
 	const pk = s.match.pk;
 	if (s.match.phase === "pk" && pk !== undefined && pk.stage === "order") {
@@ -182,7 +239,8 @@ RunService.Heartbeat.Connect((dt: number) => {
 		return;
 	}
 
-	acc += dt;
+	const dbgSpeed = game.GetService("Workspace").GetAttribute("DebugMatchSpeed");
+	acc += typeIs(dbgSpeed, "number") && dbgSpeed > 0 ? dt * dbgSpeed : dt;
 	let ticks = 0;
 	while (acc >= TICK_DT && ticks < MAX_TICKS_PER_FRAME && !isFulltime(s)) {
 		runTick(s, a);
