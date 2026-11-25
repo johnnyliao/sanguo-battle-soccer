@@ -1,12 +1,15 @@
-// Copies the ServerStorage.Avatars folder (R15 avatar models, one per charId) into ReplicatedStorage so clients can clone them.
+// Copies the ServerStorage.Avatars / Weapons / Props folders into ReplicatedStorage so clients can clone them.
+// Avatars: R15 avatar models, one per charId. Weapons: one Model per charId. Props: showroom special-move props.
 const ServerStorage = game.GetService("ServerStorage");
 const ReplicatedStorage = game.GetService("ReplicatedStorage");
 
-const source = ServerStorage.FindFirstChild("Avatars");
-if (source !== undefined) {
-	const copy = source.Clone();
-	copy.Name = "Avatars";
-	copy.Parent = ReplicatedStorage;
-} else {
-	warn("[avatars] ServerStorage.Avatars missing");
+for (const name of ["Avatars", "Weapons", "Props"]) {
+	const source = ServerStorage.FindFirstChild(name);
+	if (source !== undefined) {
+		const copy = source.Clone();
+		copy.Name = name;
+		copy.Parent = ReplicatedStorage;
+	} else {
+		warn(`[avatars] ServerStorage.${name} missing`);
+	}
 }

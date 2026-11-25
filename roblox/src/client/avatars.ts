@@ -1,12 +1,13 @@
 // 3D R15 avatar models for match players. Templates are cloned from ReplicatedStorage.Avatars (copied there by server/avatars.server.ts).
 import { CHAR_ANIMS } from "./animIds";
+import { attachWeapons } from "./weapons";
 
 const ReplicatedStorage = game.GetService("ReplicatedStorage");
 const ContentProvider = game.GetService("ContentProvider");
 
 /** Fallback idle/run clips for characters without their own CHAR_ANIMS entry. */
-const DEFAULT_IDLE_ID = "rbxassetid://507766388";
-const DEFAULT_RUN_ID = "rbxassetid://913376220";
+export const DEFAULT_IDLE_ID = "rbxassetid://507766388";
+export const DEFAULT_RUN_ID = "rbxassetid://913376220";
 /** Smoothed horizontal foot speed (studs/s) above which an avatar switches to run. */
 const MOVE_ON_SPEED = 4;
 /** Smoothed speed (studs/s) below which an avatar switches back to idle. */
@@ -217,6 +218,9 @@ export function makeAvatar(template: Model, parent: Instance, height: number, ch
 
 	const [boxCF, boxSize] = model.GetBoundingBox();
 	const footOffset = root.Position.Y - (boxCF.Y - boxSize.Y / 2);
+	// Weapons go on after the body measurements so the sword/spear does not change the foot offset.
+	const templateScale = template.GetScale();
+	attachWeapons(model, charId, templateScale > 0 ? model.GetScale() / templateScale : 1);
 
 	const view: AvatarView = {
 		model,

@@ -29,6 +29,7 @@ export class FollowCamera {
 
 	/** focusX / focusZ = ball World X, Z in studs (Renderer.getFocusX() / getFocusZ()). Call every frame after Renderer.update. */
 	update(dt: number, focusX: number, focusZ: number): void {
+		if (game.Workspace.GetAttribute("ShowroomActive") === true) return;
 		const targetX = math.max(CAM_MIN_X, math.min(CAM_MAX_X, focusX));
 		const targetZ = math.max(CAM_MIN_Z, math.min(CAM_MAX_Z, focusZ));
 		if (!this.ready) {
