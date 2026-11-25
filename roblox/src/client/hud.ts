@@ -1,6 +1,7 @@
 import type { Command, Country, Remotes, Setup, SnapPk, Snapshot } from "../shared/net";
 import { TICK_RATE } from "../shared/net";
 import { setInputEnabled, setPkMode } from "./input";
+import { openShowroom } from "./showroom";
 
 const Players = game.GetService("Players");
 const UserInputService = game.GetService("UserInputService");
@@ -249,6 +250,10 @@ export function createHud(
 		});
 	});
 	text(countrySelect, "你操控前鋒", UDim2.fromScale(0.8, 0.08), UDim2.fromScale(0.1, 0.84));
+	const showroomBtn = button(countrySelect, "武將展示", UDim2.fromScale(0.3, 0.06), UDim2.fromScale(0.35, 0.755), GREY);
+	showroomBtn.Activated.Connect(() => {
+		openShowroom();
+	});
 	setInputEnabled(false);
 
 	rematchBtn.Activated.Connect(() => {
