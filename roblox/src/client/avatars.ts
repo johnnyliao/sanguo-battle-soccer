@@ -13,12 +13,16 @@ const MOVE_ON_SPEED = 4;
 /** Smoothed speed (studs/s) below which an avatar switches back to idle. */
 const MOVE_OFF_SPEED = 1.5;
 /** Time constant (s) of the foot-speed low-pass filter. */
-const SPEED_TAU = 0.12;
-/** Minimum time (s) a moving/idle state must hold before it can flip. */
+const SPEED_TAU = 0.05;
+/** Minimum time (s) the run state must hold before it can flip back to idle. */
 const STATE_HOLD = 0.25;
+/** Minimum time (s) the idle state must hold before it can flip to run (short so starts feel instant). */
+const START_HOLD = 0.04;
 /** Foot speed (studs/s) at which the run animation plays at normal speed. */
-const RUN_REF_SPEED = 14;
+const RUN_REF_SPEED = 7;
 const FADE_TIME = 0.15;
+/** Cross-fade (s) when an idle avatar starts running: short so the feet don't slide before the run clip takes over. */
+const RUN_START_FADE = 0.05;
 const LYING_LIFT = 0.6;
 const SHAKE_AMP = 0.25;
 /** Seconds in hitstun after which the avatar switches from the hit flinch to the stun loop. */
@@ -447,14 +451,13 @@ export function drawAvatar(v: AvatarView, foot: Vector3, fx: number, fz: number,
 	v.lastClock = now;
 
 	// Hysteresis with a minimum hold time so the state cannot chatter frame to frame.
-	if (now - v.stateSince >= STATE_HOLD) {
-		if (!v.moving && v.speed > MOVE_ON_SPEED) {
-			v.moving = true;
-			v.stateSince = now;
-		} else if (v.moving && v.speed < MOVE_OFF_SPEED) {
-			v.moving = false;
-			v.stateSince = now;
-		}
+	const held = now - v.stateSince;
+	if (!v.moving && held >= START_HOLD && v.speed > MOVE_ON_SPEED) {
+		v.moving = true;
+		v.stateSince = now;
+	} else if (v.moving && held >= STATE_HOLD && v.speed < MOVE_OFF_SPEED) {
+		v.moving = false;
+		v.stateSince = now;
 	}
 
 	const len = math.sqrt(fx * fx + fz * fz);
@@ -483,12 +486,12 @@ export function drawAvatar(v: AvatarView, foot: Vector3, fx: number, fz: number,
 		if (wantRun) {
 			const runAtSwitch = ensureRun(v);
 			if (runAtSwitch !== undefined && !runAtSwitch.IsPlaying) {
-				runAtSwitch.Play(FADE_TIME);
+				runAtSwitch.Play(RUN_START_FADE);
 				v.runLoadedAt = os.clock();
 			}
 			const idleAtSwitch = v.idle;
 			if (idleAtSwitch !== undefined && idleAtSwitch.IsPlaying) {
-				idleAtSwitch.Stop(FADE_TIME);
+				idleAtSwitch.Stop(RUN_START_FADE);
 			}
 		} else {
 			const runAtSwitch = v.run;
@@ -511,7 +514,7 @@ export function drawAvatar(v: AvatarView, foot: Vector3, fx: number, fz: number,
 			v.runLoadedAt = os.clock();
 		}
 		if (run !== undefined) {
-			run.AdjustSpeed(math.max(0.8, math.min(1.4, v.speed / RUN_REF_SPEED)));
+			run.AdjustSpeed(math.max(1.6, math.min(2.8, v.speed / RUN_REF_SPEED)));
 		}
 	} else {
 		const idleBefore = v.idle;
