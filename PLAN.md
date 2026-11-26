@@ -488,3 +488,9 @@ Roblox 版遊戲場地真的放大 1.5 倍（sim FIELD 1200×260 → 1800×390�
 - [x] 3. 背景裝飾＋燈光 — files: roblox/src/client/worldDecor.ts（新） — verify: build — worker C
 - [ ] 4. 接線（world.ts 呼叫 B/C、render 進球觸發歡呼）、Studio 截圖檢查、commit — me
 - 2026-11-26：接線完成、build OK、Play 無錯誤（場景 8086 parts）。左球門截圖 OK；之後 Studio 畫面全白（編輯模式也白，判斷是電腦不出圖），其餘畫面待使用者在場時再檢查。楔形高邊在本地 +Z（射線實測），營帳屋頂與龍嘴方向已用數值確認。
+
+# R1h BGM（Roblox，2026-11-26）
+- roblox/src/client/bgm.ts：setBgm(menu|match|pk|victory|none)，1 秒淡入淡出；hud.ts 在選國家/比賽/PK/結束（我方贏才播勝利）切換。
+- 已選：menu=Echoes of the Great Wall (112388981050505)、pk=Territory Conquest Alternate 2 (9041879299)、victory=Winning Spirit (1836860398)。
+- match 第一輪全不要；第二輪（武俠曲）待選：https://claude.ai/artifact/SKjWoEKt1GPWAzrWRgyitp ，同頁附馬超馬叫聲 3 選 1。
+- 場地放大後進球變少：使用者決定不調（2026-11-26）。

@@ -2,6 +2,7 @@ import type { Command, Country, Remotes, Setup, SnapPk, Snapshot } from "../shar
 import { TICK_RATE } from "../shared/net";
 import { setInputEnabled, setPkMode } from "./input";
 import { openShowroom } from "./showroom";
+import { setBgm } from "./bgm";
 
 const Players = game.GetService("Players");
 const UserInputService = game.GetService("UserInputService");
@@ -239,6 +240,7 @@ export function createHud(
 		hint.Visible = false;
 		countrySelect.Visible = true;
 		setInputEnabled(false);
+		setBgm("menu");
 	};
 
 	COUNTRIES.forEach((c, i) => {
@@ -255,6 +257,7 @@ export function createHud(
 		openShowroom();
 	});
 	setInputEnabled(false);
+	setBgm("menu");
 
 	rematchBtn.Activated.Connect(() => {
 		startMatch(lastCountry);
@@ -278,6 +281,7 @@ export function createHud(
 		awayName.TextColor3 = COUNTRY_COLOR[s.away];
 		hint.Visible = !UserInputService.TouchEnabled;
 		setInputEnabled(true);
+		setBgm("match");
 	};
 
 	const onSnapshot = (s: Snapshot): void => {
@@ -287,6 +291,14 @@ export function createHud(
 		if (s.phase !== prevPhase) {
 			prevPhase = s.phase;
 			onPhase(s);
+			if (s.phase === "pk") setBgm("pk");
+			else if (s.phase === "fulltime") {
+				// Victory jingle only when the human's team won (regulation score, then PK score); otherwise fade out.
+				const myTeam = setup !== undefined && setup.humanIdx >= 5 ? 1 : 0;
+				const sc = s.score[0] !== s.score[1] || s.pk === undefined ? s.score : s.pk.score;
+				const won = sc[myTeam] > sc[1 - myTeam];
+				setBgm(won ? "victory" : "none");
+			}
 		}
 		updatePk(s.pk);
 		const over = s.phase === "fulltime";
