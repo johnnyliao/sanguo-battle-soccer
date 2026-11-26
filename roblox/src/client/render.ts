@@ -9,6 +9,7 @@ import * as sfx from "./sfx";
 import { cheer } from "./worldCrowd";
 import type { MatchCtx } from "./matchUtil";
 import { initMatchWeapon, setMatchTrails, swingMatchWeapon } from "./matchWeapons";
+import { makeStaminaBar, StaminaBar } from "./staminaBar";
 
 /** Render this many ticks (100 ms at 60 Hz) behind the newest snapshot. */
 const INTERP_DELAY_TICKS = 6;
@@ -49,8 +50,7 @@ interface PlayerView {
 	shadow: Part;
 	ring: Part;
 	glow: Highlight;
-	barBack: Frame;
-	barFill: Frame;
+	bar: StaminaBar;
 	height: number;
 	fx: number;
 	fz: number;
@@ -106,12 +106,6 @@ function auraColour(sp: string): Color3 {
 	if (sp === "sail") return colourOf(0x4fc3f7);
 	if (sp === "ride") return colourOf(0x8d6e63);
 	return colourOf(0xffd700);
-}
-
-function staminaColour(st: number): Color3 {
-	if (st > 0.6) return colourOf(0x3ddc4f);
-	if (st >= 0.3) return colourOf(0xffd23a);
-	return colourOf(0xff3b30);
 }
 
 function makePart(parent: Instance, name: string, shape: Enum.PartType, size: Vector3, colour: Color3, transparency: number): Part {
@@ -316,7 +310,7 @@ export class Renderer {
 		if (!showroom) this.flushEvents();
 		const [a, b, t] = this.segment(this.renderTick);
 		const cur = t < 0.5 ? a : b;
-		this.drawPlayers(a, b, t);
+		this.drawPlayers(a, b, t, dt);
 		this.drawBall(a, b, t);
 		if (!showroom) this.mfx.frame(dt, cur.zones, this.lastBallPos, cur.ball.special);
 	}
@@ -391,7 +385,7 @@ export class Renderer {
 		return [buf[last], buf[last], 0];
 	}
 
-	private drawPlayers(a: Snapshot, b: Snapshot, t: number): void {
+	private drawPlayers(a: Snapshot, b: Snapshot, t: number, dt: number): void {
 		const now = os.clock();
 		const useB = t >= 0.5;
 		for (let i = 0; i < this.players.size(); i++) {
@@ -478,9 +472,7 @@ export class Renderer {
 			v.shadow.CFrame = groundCF(foot.X, 0.08, foot.Z);
 			v.ring.CFrame = groundCF(foot.X, 0.12, foot.Z);
 
-			const fill = math.max(0, math.min(1, st));
-			v.barFill.Size = UDim2.fromScale(fill, 1);
-			v.barFill.BackgroundColor3 = staminaColour(fill);
+			v.bar.update(st, dt);
 		}
 	}
 
@@ -562,37 +554,25 @@ export class Renderer {
 
 		const tag = new Instance("BillboardGui");
 		tag.Name = "Tag";
-		tag.Size = UDim2.fromOffset(120, 36);
+		tag.Size = UDim2.fromOffset(130, 40);
 		tag.StudsOffset = new Vector3(0, 1.4, 0);
 		tag.AlwaysOnTop = true;
 		tag.Adornee = head;
 		tag.Parent = head;
 
 		const name = new Instance("TextLabel");
-		name.Size = UDim2.fromOffset(120, 18);
+		name.Size = UDim2.fromOffset(130, 18);
 		name.BackgroundTransparency = 1;
 		name.Text = p.name;
 		name.TextColor3 = colourOf(0xffffff);
 		name.TextStrokeTransparency = 0;
-		name.TextStrokeColor3 = colourOf(0x000000);
-		name.Font = Enum.Font.GothamBold;
+		name.TextStrokeColor3 = colourOf(hex, 0.3);
+		name.Font = Enum.Font.GothamBlack;
 		name.TextSize = 14;
 		name.Parent = tag;
 
-		const barBack = new Instance("Frame");
-		barBack.Position = UDim2.fromOffset(30, 22);
-		barBack.Size = UDim2.fromOffset(60, 6);
-		barBack.BackgroundColor3 = colourOf(0x000000);
-		barBack.BackgroundTransparency = 0.4;
-		barBack.BorderSizePixel = 0;
-		barBack.Visible = p.team === 0;
-		barBack.Parent = tag;
-
-		const barFill = new Instance("Frame");
-		barFill.Size = UDim2.fromScale(1, 1);
-		barFill.BackgroundColor3 = staminaColour(1);
-		barFill.BorderSizePixel = 0;
-		barFill.Parent = barBack;
+		const bar = makeStaminaBar(tag, colourOf(hex));
+		bar.root.Visible = p.team === 0;
 
 		model.PrimaryPart = body;
 		model.Parent = this.actors;
@@ -604,8 +584,7 @@ export class Renderer {
 			shadow,
 			ring,
 			glow,
-			barBack,
-			barFill,
+			bar,
 			height,
 			fx: 1,
 			fz: 0,

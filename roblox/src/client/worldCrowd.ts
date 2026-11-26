@@ -1,17 +1,24 @@
 // Tiered stands filled with Three-Kingdoms soldier spectators (coloured by faction), flag bearers on the top tier,
 // and a cheer (hop) animation. Pure decoration; the near side (+Z) stays open for the camera.
-// Parts budget (FIELD_LEN 360, FIELD_WID 78 studs): far stand 5 tiers x 160 soldiers, each end 5 tiers x 35 soldiers
-// = 1150 soldiers x 5 parts = 5750; risers 2 x 15 = 30; seat trims 15; 29 flags x 3 parts = 87. Total = 5882 (<= 6000).
+// Parts budget (FIELD_LEN 360, FIELD_WID 78 studs): every soldier has 11 parts (10 body parts + 1 variant prop).
+// Far stand 5 tiers x 147 soldiers, each end 5 tiers x 33 soldiers = 1065 soldiers x 11 = 11715; tiers 30; flags 29 x 3 = 87.
+// Total = 11832 (<= 12000).
 import { FIELD_LEN, FIELD_WID, colourOf, part } from "./worldParts";
 
 const TIERS = 5;
 const TIER_DEPTH = 3;
 const TIER_BASE = 2.5;
 const TIER_RISE = 2.2;
-const SEAT_SPACING = 2.4;
+const SEAT_SPACING = 2.6;
 const LEG_H = 1.2; // legs part height; the template pivot is the legs centre
 const SEED = 2026;
-const SPEAR_CHANCE = 1 / 3;
+const FACTIONS = 3;
+const VARIANTS = 3; // one template per faction and variant
+const VARIANT_SPEAR = 0;
+const VARIANT_SHIELD = 1;
+const VARIANT_OFFICER = 2;
+const SPEAR_CHANCE = 0.45;
+const SHIELD_CHANCE = 0.35; // officers take the remaining 20%
 const HOP_H = 0.8;
 const HOP_SPEED = 10;
 const FLAG_SPACING = 18;
@@ -24,6 +31,13 @@ const RISER_B = colourOf(0x5e5347);
 const TRIM_COLOUR = colourOf(0x7a5230);
 const GOLD = colourOf(0xd9a21b);
 const DARK_METAL = colourOf(0x3a3a3a);
+const TROUSERS = colourOf(0x2b2b2b);
+const SKIN = colourOf(0xe0b48a);
+const PAULDRON = colourOf(0x8c6a2c, 0.7);
+const HELMET_METAL = colourOf(0x6e6e6e);
+const LACQUER = colourOf(0x2f2622);
+const RED_PLUME = colourOf(0xc0392b);
+const WOOD = colourOf(0x6b4a2b);
 
 let rng = new Random(SEED);
 let crowdParts: BasePart[] = [];
@@ -37,20 +51,62 @@ function at(alongX: boolean, a: number, p: number, y: number): Vector3 {
 	return alongX ? new Vector3(a, y, p) : new Vector3(p, y, a);
 }
 
+/** Crowd body part inside a template. Templates are cloned, so CastShadow is cleared here for every clone. */
+function bodyPart(m: Model, name: string, size: Vector3, cf: CFrame, colour: Color3): Part {
+	const p = part(m, name, size, cf, colour);
+	p.CastShadow = false;
+	return p;
+}
+
 /**
- * One soldier template per faction, 5 parts: legs (PrimaryPart, centre at LEG_H/2), torso, head, helmet,
- * and an accessory that is a red tassel or, for spear soldiers, a wooden spear (resized per clone).
+ * One soldier template per faction and variant, facing -Z (toward the pitch). PrimaryPart = Legs (centre at LEG_H/2).
+ * Base (10 parts): Legs, Torso (faction robe), Plate (bronze chest armour), Belt (gold), Pauldron, ArmL, ArmR,
+ * Head (SpecialMesh Head + face Decal), Helmet (flattened sphere mesh), Plume (red; gold for officers).
+ * Variant prop (1 part): spear pole (spearman, raised right arm), round shield (shieldman, left arm), cape (officer).
  */
-function buildTemplate(faction: number): Model {
+function buildTemplate(faction: number, variant: number): Model {
 	const m = new Instance("Model");
 	m.Name = "Soldier";
-	const legs = part(m, "Legs", new Vector3(1.2, LEG_H, 0.8), new CFrame(0, LEG_H / 2, 0), colourOf(0x2b2b2b));
-	const torso = part(m, "Torso", new Vector3(1.6, 1.2, 0.9), new CFrame(0, 1.8, 0), colourOf(FACTION_COLOURS[faction]));
+	const robe = colourOf(FACTION_COLOURS[faction]);
+	const legs = bodyPart(m, "Legs", new Vector3(1.0, LEG_H, 0.7), new CFrame(0, LEG_H / 2, 0), TROUSERS);
+	const torso = bodyPart(m, "Torso", new Vector3(1.2, 1.1, 0.8), new CFrame(0, 1.7, 0), robe);
 	torso.Material = Enum.Material.Fabric;
-	part(m, "Head", new Vector3(0.8, 0.7, 0.8), new CFrame(0, 2.7, 0), colourOf(0xe0b48a));
-	const helmet = part(m, "Helmet", new Vector3(0.9, 0.35, 0.9), new CFrame(0, 3.2, 0), DARK_METAL);
+	const plate = bodyPart(m, "Plate", new Vector3(0.62, 0.7, 0.15), new CFrame(0, 1.78, -0.45), LACQUER);
+	plate.Material = Enum.Material.Metal;
+	bodyPart(m, "Belt", new Vector3(1.25, 0.16, 0.85), new CFrame(0, 1.3, 0), GOLD);
+	const pauldron = bodyPart(m, "Pauldron", new Vector3(1.7, 0.32, 0.9), new CFrame(0, 2.15, 0), PAULDRON);
+	pauldron.Material = Enum.Material.Metal;
+	const armL = bodyPart(m, "ArmL", new Vector3(0.34, 1.2, 0.34), new CFrame(-0.74, 1.6, 0), robe);
+	armL.Material = Enum.Material.Fabric;
+	const armR = bodyPart(m, "ArmR", new Vector3(0.34, 1.2, 0.34), new CFrame(0.74, 1.6, 0), robe);
+	armR.Material = Enum.Material.Fabric;
+	const head = bodyPart(m, "Head", new Vector3(0.7, 0.7, 0.7), new CFrame(0, 2.6, 0), SKIN);
+	const headMesh = new Instance("SpecialMesh");
+	headMesh.MeshType = Enum.MeshType.Head;
+	headMesh.Parent = head;
+	const face = new Instance("Decal");
+	face.Name = "Face";
+	face.Texture = "rbxasset://textures/face.png";
+	face.Face = Enum.NormalId.Front;
+	face.Parent = head;
+	const helmet = bodyPart(m, "Helmet", new Vector3(0.84, 0.62, 0.84), new CFrame(0, 2.9, 0.04), HELMET_METAL);
 	helmet.Material = Enum.Material.Metal;
-	part(m, "Accessory", new Vector3(0.15, 0.5, 0.3), new CFrame(0, 3.6, 0), colourOf(0xb3261e));
+	const helmetMesh = new Instance("SpecialMesh");
+	helmetMesh.MeshType = Enum.MeshType.Sphere;
+	helmetMesh.Parent = helmet;
+	bodyPart(m, "Plume", new Vector3(0.12, 0.45, 0.3), new CFrame(0, 3.38, 0.05), variant === VARIANT_OFFICER ? GOLD : RED_PLUME);
+
+	if (variant === VARIANT_SPEAR) {
+		armR.CFrame = new CFrame(0.74, 1.75, -0.3).mul(CFrame.Angles(-0.35, 0, 0));
+		const spear = bodyPart(m, "Spear", new Vector3(0.12, 3.0, 0.12), new CFrame(0.9, 1.9, -0.4), WOOD);
+		spear.Material = Enum.Material.Wood;
+	} else if (variant === VARIANT_SHIELD) {
+		const shield = bodyPart(m, "Shield", new Vector3(0.1, 1.0, 1.0), new CFrame(-1.0, 1.45, -0.4).mul(CFrame.Angles(0, math.pi / 2, 0)), robe);
+		shield.Shape = Enum.PartType.Cylinder;
+	} else {
+		const cape = bodyPart(m, "Cape", new Vector3(1.3, 1.9, 0.08), new CFrame(0, 1.45, 0.48), colourOf(FACTION_COLOURS[faction], 0.55));
+		cape.Material = Enum.Material.Fabric;
+	}
 	m.PrimaryPart = legs;
 	return m;
 }
@@ -62,16 +118,8 @@ function factionAt(mode: number, f: number): number {
 	return rng.NextInteger(1, 2);
 }
 
-function spawnSoldier(folder: Instance, template: Model, alongX: boolean, along: number, perp: number, top: number, spear: boolean): void {
+function spawnSoldier(folder: Instance, template: Model, alongX: boolean, along: number, perp: number, top: number): void {
 	const m = template.Clone();
-	const acc = m.FindFirstChild("Accessory") as BasePart;
-	if (spear) {
-		acc.Name = "Spear";
-		acc.Size = new Vector3(0.12, 3.2, 0.12);
-		acc.CFrame = new CFrame(0.95, 2.2, 0);
-		acc.Color = colourOf(0x6b4a2b);
-		acc.Material = Enum.Material.Wood;
-	}
 	const pos = at(alongX, along, perp, top + LEG_H / 2);
 	m.PivotTo(CFrame.lookAt(pos, new Vector3(FIELD_LEN / 2, pos.Y, FIELD_WID / 2)));
 	m.Parent = folder;
@@ -107,8 +155,9 @@ function buildStand(folder: Instance, templates: Model[], mode: number, alongX: 
 			const along = centre - length / 2 + (i + 0.5) * step + (rng.NextNumber() - 0.5) * 0.5;
 			const depth = perp + (rng.NextNumber() - 0.5) * 0.3;
 			const faction = factionAt(mode, (i + 0.5) / count);
-			const spear = rng.NextNumber() < SPEAR_CHANCE;
-			spawnSoldier(folder, templates[faction], alongX, along, depth, top, spear);
+			const roll = rng.NextNumber();
+			const variant = roll < SPEAR_CHANCE ? VARIANT_SPEAR : roll < SPEAR_CHANCE + SHIELD_CHANCE ? VARIANT_SHIELD : VARIANT_OFFICER;
+			spawnSoldier(folder, templates[faction * VARIANTS + variant], alongX, along, depth, top);
 		}
 	}
 }
@@ -165,7 +214,12 @@ export function buildCrowd(parent: Instance): void {
 	folder.Name = "Crowd";
 	folder.Parent = parent;
 
-	const templates: Model[] = [buildTemplate(0), buildTemplate(1), buildTemplate(2)];
+	const templates: Model[] = [];
+	for (let f = 0; f < FACTIONS; f++) {
+		for (let v = 0; v < VARIANTS; v++) {
+			templates.push(buildTemplate(f, v));
+		}
+	}
 
 	// Far stand (-Z) and both ends; the near side stays open for the camera.
 	buildStand(folder, templates, 0, true, FIELD_LEN / 2, FIELD_LEN + 24, -1.8, -1);
