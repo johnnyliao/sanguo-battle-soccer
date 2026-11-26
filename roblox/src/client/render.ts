@@ -333,7 +333,7 @@ export class Renderer {
 	}
 
 	private applyEvent(e: SimEventLite): void {
-		sfx.onEvent(e);
+		sfx.onEvent(e, (i) => this.players[i]?.charId);
 		const t = e.type;
 		const idx = (e["playerIdx"] as number | undefined) ?? -1;
 		const pv = idx >= 0 ? this.players[idx] : undefined;
