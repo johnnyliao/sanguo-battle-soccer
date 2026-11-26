@@ -278,7 +278,7 @@ describe('ride into the goal', () => {
 });
 
 describe('ride lane hits', () => {
-  it('an opponent 40 px off the line is hit', () => {
+  it('an opponent 40 px off the line (inside RIDE_LANE_HALF) is hit', () => {
     const state = riderState(300);
     parkAway(state, [0, 5]);
     placeVictim(state, 100, 40);
@@ -289,7 +289,7 @@ describe('ride lane hits', () => {
     expect(events).toContainEqual(expect.objectContaining({ type: 'hit', attackerIdx: 0, victimIdx: 5, kind: 'special' }));
   });
 
-  it('an opponent 60 px off the line is not hit', () => {
+  it('an opponent just outside RIDE_LANE_HALF off the line is not hit', () => {
     const state = riderState(300);
     parkAway(state, [0, 5]);
     placeVictim(state, 100, RIDE_LANE_HALF + 15);
@@ -387,9 +387,14 @@ describe('ride lane hits', () => {
     state.ball.lastTouchIdx = 5;
     pressSpecial(state);
 
-    const events = run(state, RIDE_TICKS);
+    // Checked on the tick the ball comes loose: the pushed victim can pick the ball up again later in the longer dash.
+    let looseAt = -1;
+    for (let t = 0; t < RIDE_TICKS && looseAt < 0; t++) {
+      step(state, []);
+      if (state.events.some((e) => e.type === 'looseBall' && e.playerIdx === 5)) looseAt = t;
+    }
 
-    expect(events).toContainEqual({ type: 'looseBall', playerIdx: 5 });
+    expect(looseAt).toBeGreaterThanOrEqual(0);
     expect(state.ball.ownerIdx).toBe(-1);
     expect(state.ball.lastTouchIdx).toBe(0);
   });

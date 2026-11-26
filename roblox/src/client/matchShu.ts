@@ -20,6 +20,7 @@ interface Beam {
 interface Bike {
 	prop: Prop;
 	acc: number;
+	wave: number;
 }
 
 interface RiderView extends ZView {
@@ -105,8 +106,8 @@ export class ShuFx implements SpecialModule {
 	private rideStart(e: SimEventLite): void {
 		const idx = en(e, "playerIdx");
 		const me = this.c.foot(idx);
-		fx.ring(higher(me, 0.4), 1, 8, 0.45, GREEN, 1.2, 0.5);
-		fx.burst(higher(me, 3), GREEN, 20, { size: 2, speed: 22 });
+		fx.ring(higher(me, 0.4), 2, 16, 0.6, GREEN, 2.4, 0.5);
+		fx.burst(higher(me, 3), GREEN, 40, { size: 3, speed: 22 });
 		sheet("guanyu.ring", higher(me, 3), 9, 0.6, GREEN);
 		sheet("guanyu.dragon", higher(me, 4), 9, 0.9, WHITE);
 		this.c.trails(idx, 0.7);
@@ -118,13 +119,13 @@ export class ShuFx implements SpecialModule {
 	private rideHit(e: SimEventLite): void {
 		const v = en(e, "victimIdx");
 		const p = this.c.chest(v);
-		impactFx(p, GREEN, 1.3, "guanyu.impact");
-		shakeNear(this.c, p, 0.8, 0.4);
+		impactFx(p, GREEN, 2.0, "guanyu.impact");
+		shakeNear(this.c, p, 1.4, 0.6);
 	}
 
 	private rideEnd(e: SimEventLite): void {
 		const me = this.c.foot(en(e, "playerIdx"));
-		fx.burst(higher(me, 2), GOLD, 18, { size: 2, speed: 22 });
+		fx.burst(higher(me, 2), GOLD, 27, { size: 3, speed: 22 });
 		fx.dust(higher(me, 0.4), 8, 5);
 	}
 
@@ -323,6 +324,16 @@ export class ShuFx implements SpecialModule {
 				bike.acc = 0;
 				fx.dust(higher(c.foot(idx), 0.4), 2, 3);
 			}
+			// Wide energy wake: two side bursts 12 studs either side of the bike, matching the 14-stud ride lane.
+			bike.wave += dt;
+			if (bike.wave > 0.08) {
+				bike.wave = 0;
+				const foot = c.foot(idx);
+				const face = c.facing(idx);
+				const side = new Vector3(-face.Z, 0, face.X).mul(12);
+				fx.burst(higher(foot.add(side), 1), GREEN, 6, { size: 2.2, speed: 6, life: 0.35 });
+				fx.burst(higher(foot.sub(side), 1), GOLD, 6, { size: 2.2, speed: 6, life: 0.35 });
+			}
 		}
 	}
 
@@ -337,7 +348,7 @@ export class ShuFx implements SpecialModule {
 			return undefined;
 		}
 		if (bike === undefined) {
-			bike = { prop: makeProp("guanyu_bike", "bike", Color3.fromRGB(220, 40, 40), this.c.footOffset(idx), new Vector3(0, 0.6, 0)), acc: 0 };
+			bike = { prop: makeProp("guanyu_bike", "bike", Color3.fromRGB(220, 40, 40), this.c.footOffset(idx), new Vector3(0, 0.6, 0)), acc: 0, wave: 0 };
 			this.bikes.set(idx, bike);
 		}
 		const rootCF = placeProp(bike.prop, CFrame.lookAt(foot, foot.add(facing)));

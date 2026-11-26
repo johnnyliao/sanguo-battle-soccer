@@ -494,3 +494,5 @@ Roblox 版遊戲場地真的放大 1.5 倍（sim FIELD 1200×260 → 1800×390�
 - 已選：menu=Echoes of the Great Wall (112388981050505)、pk=Territory Conquest Alternate 2 (9041879299)、victory=Winning Spirit (1836860398)。
 - match 第一輪全不要；第二輪（武俠曲）待選：https://claude.ai/artifact/SKjWoEKt1GPWAzrWRgyitp ，同頁附馬超馬叫聲 3 選 1。
 - 場地放大後進球變少：使用者決定不調（2026-11-26）。
+- 2026-11-26：match BGM＝A/D/F 三首隨機（晨风剑影破长空、以鋒對鋒、峰頂之敵）；馬超 summonStart＝Horse Neigh 2 (117237268224853)。
+- 關羽騎士衝擊（共用 sim，網頁同步）：0.75 秒、判定 ±70px、接觸 35px、前推 300；Roblox 特效放大（光環 16 studs、兩側能量粒子）。Studio 實測 OK。

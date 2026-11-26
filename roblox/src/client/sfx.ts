@@ -55,6 +55,7 @@ const CUES: Record<string, Cue> = {
 	zhangliao_fear: cue(9113980319, 0.55, 2.0, 0.3), // Creature Mix Giant Crab Monster Roar 1
 	xiaoqiao_gust: cue(9120718279, 0.5, 0, 0.3), // Whoosh Fast Swish By 1
 	zhaoyun_lunge: cue(9126229255, 0.5, 0, 0.3), // Whoosh By Fast Airy Swooshing 2
+	machao_cavalry: cue(117237268224853, 0.6, 0, 0.3), // Horse Neigh 2 (player upload, picked 2026-11-26)
 	xuchu_guard: cue(9120048719, 0.55, 2.2, 0.3), // Tiger Roars 10
 	xuchu_swallow: cue(9114688489, 0.6, 0, 0.3), // Gulping Slurp 4
 	xuchu_spit: cue(9114810804, 0.6, 0, 0.3), // Spitting 1
@@ -110,6 +111,7 @@ const BY_TYPE: Record<string, string> = {
 	fear: "zhangliao_fear",
 	gustBlow: "xiaoqiao_gust",
 	lungeStart: "zhaoyun_lunge",
+	summonStart: "machao_cavalry",
 	tigerStart: "xuchu_guard",
 	tigerRoar: "xuchu_guard",
 	tigerSwallow: "xuchu_swallow",
