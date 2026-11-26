@@ -366,11 +366,6 @@ function tickCur(v: AvatarView): void {
 		v.curHeld = true;
 		t.AdjustSpeed(0);
 	}
-	// Charging a shot while dribbling: let the run clip show instead of a frozen wind-up pose sliding across the pitch.
-	if (v.curKey === "charge") {
-		const w = v.moving ? 0.001 : 1;
-		if (math.abs(t.WeightTarget - w) > 0.01) t.AdjustWeight(w, 0.1);
-	}
 }
 
 /** Longest time (s) a finished-action clip is allowed to linger after the sim action has ended. */
@@ -406,7 +401,15 @@ function updateAction(v: AvatarView, act: string, now: number): void {
 			force = true;
 		}
 	}
-	if (want === "" && v.curKey !== "" && v.curTrack !== undefined) {
+	// Moving with free legs (plain running / dribbling / charging a shot) always shows the run: drop any lingering or
+	// leftover action clip right away instead of letting it finish while the avatar slides.
+	const runOver = v.moving && (act === "normal" || act === "charge");
+	if (runOver) {
+		want = "";
+		force = false;
+		v.specialPending = false;
+	}
+	if (want === "" && !runOver && v.curKey !== "" && v.curTrack !== undefined) {
 		const lim = lingerFor(v.curKey);
 		if (lim > 0 && v.curTrack.IsPlaying && now - v.curSince < lim) want = v.curKey;
 	}
