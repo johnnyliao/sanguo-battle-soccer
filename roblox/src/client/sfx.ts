@@ -38,7 +38,7 @@ const BY_TYPE: Record<string, string> = {
 	save: "save",
 	down: "down",
 	attack: "swing",
-	special: "special",
+	// special: "special", // gong muted 2026-11-26 (too loud/busy); cue kept for later
 	goal: "goal",
 	rideHit: "heavy",
 	riderHit: "heavy",
