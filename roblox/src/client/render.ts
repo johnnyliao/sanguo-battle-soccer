@@ -10,6 +10,7 @@ import { cheer } from "./worldCrowd";
 import type { MatchCtx } from "./matchUtil";
 import { initMatchWeapon, setMatchTrails, swingMatchWeapon } from "./matchWeapons";
 import { makeStaminaBar, StaminaBar } from "./staminaBar";
+import { createOffscreenArrow, OffscreenArrow } from "./offscreenArrow";
 
 /** Render this many ticks (100 ms at 60 Hz) behind the newest snapshot. */
 const INTERP_DELAY_TICKS = 6;
@@ -21,6 +22,16 @@ const SNAP_DIST_PX = 60;
 const MAX_BUFFER = 90;
 /** Horizontal foot speed (studs/s) above which a sprite character plays its run animation. */
 const SPRITE_MOVE_SPEED = 3;
+/**
+ * Sound culling window around the camera look-at point (studs, World X / Z). Roughly the view half-width on the
+ * ground (~28) plus a ~12 stud margin, so sounds from just off screen still play.
+ */
+const AUDIBLE_HALF_X = 40;
+const AUDIBLE_HALF_Z = 40;
+/** Event types whose sound plays wherever they happen. */
+const GLOBAL_SFX: Record<string, boolean> = { whistle: true, goal: true, pkKick: true, pkResult: true };
+/** Event fields that name a player, in the order they are tried for an event position. */
+const POS_IDX_KEYS = ["playerIdx", "attackerIdx", "victimIdx", "idx"];
 
 const TEAM_COLOUR: Record<Country, number> = { shu: 0x2fa84f, wei: 0x2f6fd8, wu: 0xd83a2f };
 const SIZE_HEIGHT: Record<string, number> = { S: 4.5, M: 5.5, L: 6.5 };
@@ -210,6 +221,7 @@ export class Renderer {
 	private focusZ = 26;
 	private ballSpin = 0;
 	private lastBallPos = new Vector3(0, 0, 0);
+	private arrow: OffscreenArrow | undefined;
 
 	constructor() {
 		sfx.preload();
@@ -260,6 +272,8 @@ export class Renderer {
 	/** (Re)creates the 10 player actors and the ball. Old actors are removed. */
 	onSetup(s: Setup): void {
 		this.actors.ClearAllChildren();
+		this.arrow?.destroy();
+		this.arrow = createOffscreenArrow();
 		this.setup = s;
 		this.buffer = [];
 		this.clockReady = false;
@@ -312,7 +326,16 @@ export class Renderer {
 		const cur = t < 0.5 ? a : b;
 		this.drawPlayers(a, b, t, dt);
 		this.drawBall(a, b, t);
+		this.updateArrow(cur.phase, showroom);
 		if (!showroom) this.mfx.frame(dt, cur.zones, this.lastBallPos, cur.ball.special);
+	}
+
+	/** Off-screen arrow to the human (hidden during the shootout, full time and the showroom). */
+	private updateArrow(phase: string, showroom: boolean): void {
+		if (this.arrow === undefined) return;
+		const hv = this.players[this.setup?.humanIdx ?? -1];
+		const hidden = showroom || phase === "pk" || phase === "fulltime";
+		this.arrow.update(!hidden && hv !== undefined ? hv.foot.add(new Vector3(0, 4, 0)) : undefined);
 	}
 
 	/** Applies the sim events of every snapshot the render clock has reached. */
@@ -327,8 +350,33 @@ export class Renderer {
 		}
 	}
 
+	/** World position (studs) of a sim event: its x/y, else the first player it names. Undefined = no position. */
+	private eventWorldPos(e: SimEventLite): Vector3 | undefined {
+		const ex = e["x"];
+		const ey = e["y"];
+		if (typeIs(ex, "number") && typeIs(ey, "number")) return simToWorld(ex, ey, 0);
+		for (const key of POS_IDX_KEYS) {
+			const i = e[key];
+			if (typeIs(i, "number")) {
+				const v = this.players[math.floor(i)];
+				if (v !== undefined) return v.foot;
+			}
+		}
+		return undefined;
+	}
+
+	/** Global events always sound; positional ones only inside the audible window around the camera look-at point. */
+	private isAudible(e: SimEventLite): boolean {
+		if (GLOBAL_SFX[e.type] === true) return true;
+		const pos = this.eventWorldPos(e);
+		if (pos === undefined) return true;
+		const dx = math.abs(pos.X - this.getFocusX());
+		const dz = math.abs(pos.Z - this.getFocusZ());
+		return dx <= AUDIBLE_HALF_X && dz <= AUDIBLE_HALF_Z;
+	}
+
 	private applyEvent(e: SimEventLite): void {
-		sfx.onEvent(e, (i) => this.players[i]?.charId);
+		if (this.isAudible(e)) sfx.onEvent(e, (i) => this.players[i]?.charId);
 		if (e.type === "goal" || (e.type === "pkResult" && e["outcome"] === "goal")) cheer(3);
 		const t = e.type;
 		const idx = (e["playerIdx"] as number | undefined) ?? -1;

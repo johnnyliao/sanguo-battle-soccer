@@ -3,13 +3,20 @@
 // Parts budget (FIELD_LEN 360, FIELD_WID 78 studs): every soldier has 11 parts (10 body parts + 1 variant prop).
 // Far stand 5 tiers x 147 soldiers, each end 5 tiers x 33 soldiers = 1065 soldiers x 11 = 11715; tiers 30; flags 29 x 3 = 87.
 // Total = 11832 (<= 12000).
+// Mesh path (ReplicatedStorage.CrowdTemplates with shu/wei/wu MeshParts present): one MeshPart per soldier,
+// SEAT_SPACING_MESH 2.4 -> 1150 soldier parts; with tiers 30 and flags 87 the crowd is 1267 parts.
 import { FIELD_LEN, FIELD_WID, colourOf, part } from "./worldParts";
 
 const TIERS = 5;
 const TIER_DEPTH = 3;
 const TIER_BASE = 2.5;
 const TIER_RISE = 2.2;
-const SEAT_SPACING = 2.6;
+const SEAT_SPACING = 2.6; // fallback path (primitive soldiers)
+const SEAT_SPACING_MESH = 2.4; // mesh path (one MeshPart per soldier)
+const MESH_HEIGHT = 3.4;
+const MESH_SCALE_MIN = 0.93;
+const MESH_SCALE_MAX = 1.07;
+const MESH_YAW = (12 * math.pi) / 180;
 const LEG_H = 1.2; // legs part height; the template pivot is the legs centre
 const SEED = 2026;
 const FACTIONS = 3;
@@ -45,6 +52,7 @@ let baseCFrames: CFrame[] = [];
 let phases: number[] = [];
 let cheerEnd = 0;
 let heartbeat: RBXScriptConnection | undefined;
+let meshTemplates: MeshPart[] | undefined; // per faction (shu, wei, wu); undefined = primitive fallback
 
 /** Position from along/perp/height coordinates (along = X for far stand, Z for ends). */
 function at(alongX: boolean, a: number, p: number, y: number): Vector3 {
@@ -133,8 +141,42 @@ function spawnSoldier(folder: Instance, template: Model, alongX: boolean, along:
 	}
 }
 
-function buildStand(folder: Instance, templates: Model[], mode: number, alongX: boolean, centre: number, length: number, edge: number, out: number): void {
-	const count = math.floor(length / SEAT_SPACING);
+/** Loads the shu/wei/wu MeshParts from ReplicatedStorage.CrowdTemplates, scaled to MESH_HEIGHT. undefined if any is missing. */
+function loadMeshTemplates(): MeshPart[] | undefined {
+	const rs = game.GetService("ReplicatedStorage");
+	const folder = rs.FindFirstChild("CrowdTemplates") ?? rs.WaitForChild("CrowdTemplates", 5);
+	if (folder === undefined) return undefined;
+	const out: MeshPart[] = [];
+	for (const name of ["shu", "wei", "wu"]) {
+		const src = folder.FindFirstChild(name);
+		if (src === undefined || !src.IsA("MeshPart")) return undefined;
+		const t = src.Clone();
+		t.Size = src.Size.mul(MESH_HEIGHT / src.Size.Y);
+		t.Anchored = true;
+		t.CanCollide = false;
+		t.CanQuery = false;
+		t.CanTouch = false;
+		t.CastShadow = false;
+		out.push(t);
+	}
+	return out;
+}
+
+/** One MeshPart soldier: feet on top, facing the pitch like the primitive soldiers, with seeded scale and yaw variation. */
+function spawnMeshSoldier(folder: Instance, template: MeshPart, alongX: boolean, along: number, perp: number, top: number): void {
+	const p = template.Clone();
+	p.Size = template.Size.mul(rng.NextNumber(MESH_SCALE_MIN, MESH_SCALE_MAX));
+	const pos = at(alongX, along, perp, top + p.Size.Y / 2);
+	const yaw = rng.NextNumber(-MESH_YAW, MESH_YAW);
+	p.CFrame = CFrame.lookAt(pos, new Vector3(FIELD_LEN / 2, pos.Y, FIELD_WID / 2)).mul(CFrame.Angles(0, yaw, 0));
+	p.Parent = folder;
+	crowdParts.push(p);
+	baseCFrames.push(p.CFrame);
+	phases.push(rng.NextNumber(0, math.pi * 2));
+}
+
+function buildStand(folder: Instance, templates: Model[], spacing: number, mode: number, alongX: boolean, centre: number, length: number, edge: number, out: number): void {
+	const count = math.floor(length / spacing);
 	const step = length / count;
 	for (let k = 0; k < TIERS; k++) {
 		const top = TIER_BASE + k * TIER_RISE;
@@ -157,7 +199,11 @@ function buildStand(folder: Instance, templates: Model[], mode: number, alongX: 
 			const faction = factionAt(mode, (i + 0.5) / count);
 			const roll = rng.NextNumber();
 			const variant = roll < SPEAR_CHANCE ? VARIANT_SPEAR : roll < SPEAR_CHANCE + SHIELD_CHANCE ? VARIANT_SHIELD : VARIANT_OFFICER;
-			spawnSoldier(folder, templates[faction * VARIANTS + variant], alongX, along, depth, top);
+			if (meshTemplates !== undefined) {
+				spawnMeshSoldier(folder, meshTemplates[faction], alongX, along, depth, top);
+			} else {
+				spawnSoldier(folder, templates[faction * VARIANTS + variant], alongX, along, depth, top);
+			}
 		}
 	}
 }
@@ -209,22 +255,26 @@ export function buildCrowd(parent: Instance): void {
 	baseCFrames = [];
 	phases = [];
 	rng = new Random(SEED);
+	meshTemplates = loadMeshTemplates();
 
 	const folder = new Instance("Folder");
 	folder.Name = "Crowd";
 	folder.Parent = parent;
 
 	const templates: Model[] = [];
-	for (let f = 0; f < FACTIONS; f++) {
-		for (let v = 0; v < VARIANTS; v++) {
-			templates.push(buildTemplate(f, v));
+	if (meshTemplates === undefined) {
+		for (let f = 0; f < FACTIONS; f++) {
+			for (let v = 0; v < VARIANTS; v++) {
+				templates.push(buildTemplate(f, v));
+			}
 		}
 	}
+	const spacing = meshTemplates !== undefined ? SEAT_SPACING_MESH : SEAT_SPACING;
 
 	// Far stand (-Z) and both ends; the near side stays open for the camera.
-	buildStand(folder, templates, 0, true, FIELD_LEN / 2, FIELD_LEN + 24, -1.8, -1);
-	buildStand(folder, templates, 1, false, FIELD_WID / 2, FIELD_WID + 8, -8.3, -1);
-	buildStand(folder, templates, 2, false, FIELD_WID / 2, FIELD_WID + 8, FIELD_LEN + 8.3, 1);
+	buildStand(folder, templates, spacing, 0, true, FIELD_LEN / 2, FIELD_LEN + 24, -1.8, -1);
+	buildStand(folder, templates, spacing, 1, false, FIELD_WID / 2, FIELD_WID + 8, -8.3, -1);
+	buildStand(folder, templates, spacing, 2, false, FIELD_WID / 2, FIELD_WID + 8, FIELD_LEN + 8.3, 1);
 
 	buildFlags(folder, 0, true, FIELD_LEN / 2, FIELD_LEN + 24, -1.8, -1);
 	buildFlags(folder, 1, false, FIELD_WID / 2, FIELD_WID + 8, -8.3, -1);
