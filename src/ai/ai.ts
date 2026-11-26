@@ -4,6 +4,7 @@ import {
   EMPTY_INPUT,
   FEAR_RADIUS,
   FIELD_D,
+  FIELD_SCALE,
   FIELD_W,
   GK_AREA_DEPTH,
   GOAL_HALF_W,
@@ -148,7 +149,7 @@ const FW_AHEAD = 150;
 const MF_AHEAD = 60;
 const MF_BEHIND = 40;
 const MF_LANE = 70;
-const DF_BEHIND = 180;
+const DF_BEHIND = 180 * FIELD_SCALE;
 const DEFEND_LANE = 50;
 const DEFEND_FRAC: Record<'DF' | 'MF' | 'FW', number> = { DF: 0.35, MF: 0.6, FW: 0.75 };
 

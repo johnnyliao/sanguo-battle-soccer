@@ -1,5 +1,5 @@
 import { abs } from './num';
-import { FIELD_D, FIELD_W, GK_AREA_DEPTH, GOAL_H, GOAL_HALF_W } from './constants';
+import { FIELD_D, FIELD_SCALE, FIELD_W, GK_AREA_DEPTH, GOAL_H, GOAL_HALF_W } from './constants';
 import type { GameState, Player } from './types';
 
 const MOUTH_Y_MIN = FIELD_D / 2 - GOAL_HALF_W;
@@ -51,10 +51,10 @@ export function inOwnArea(state: GameState, p: Player): boolean {
 // Formation offsets measured from the team's own goal line (x), for a team attacking +x. slot order GK,DF,MF,MF,FW.
 const FORMATION: ReadonlyArray<{ x: number; y: number }> = [
   { x: 40, y: FIELD_D / 2 }, // GK
-  { x: 250, y: FIELD_D / 2 }, // DF
-  { x: 420, y: FIELD_D / 2 - 60 }, // MF
-  { x: 420, y: FIELD_D / 2 + 60 }, // MF
-  { x: 540, y: FIELD_D / 2 }, // FW
+  { x: 250 * FIELD_SCALE, y: FIELD_D / 2 }, // DF
+  { x: 420 * FIELD_SCALE, y: FIELD_D / 2 - 60 }, // MF
+  { x: 420 * FIELD_SCALE, y: FIELD_D / 2 + 60 }, // MF
+  { x: 540 * FIELD_SCALE, y: FIELD_D / 2 }, // FW
 ];
 
 /** Formation spot for a slot, mirrored when the team attacks -x (dir -1). */

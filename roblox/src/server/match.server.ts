@@ -4,6 +4,8 @@ import { getTeam, SIZE_PARAMS } from "shared/game/data";
 import {
 	autoPkOrders,
 	createInitialState,
+	FIELD_D,
+	FIELD_W,
 	step,
 	type GameState,
 	type InputFrame,
@@ -155,15 +157,15 @@ function runTick(s: GameState, a: AIState): void {
 				shooter = q;
 			}
 		}
-		const dirX = gk.x < 600 ? 1 : -1;
-		const goalX = gk.x < 600 ? 0 : 1200;
+		const dirX = gk.x < FIELD_W / 2 ? 1 : -1;
+		const goalX = gk.x < FIELD_W / 2 ? 0 : FIELD_W;
 		shooter.x = goalX + dirX * 130;
-		shooter.y = 130;
+		shooter.y = FIELD_D / 2;
 		shooter.vx = 0;
 		shooter.vy = 0;
 		const b = s.ball;
 		b.x = goalX + dirX * 100;
-		b.y = 130;
+		b.y = FIELD_D / 2;
 		b.z = 8;
 		b.vx = -dirX * 260;
 		b.vy = 0;
@@ -175,7 +177,7 @@ function runTick(s: GameState, a: AIState): void {
 		for (const q of s.players) {
 			if (q.team === gk.team || q.role === "GK" || q === shooter) continue;
 			q.x = goalX + dirX * 400;
-			q.y = 130;
+			q.y = FIELD_D / 2;
 			q.vx = 0;
 			q.vy = 0;
 			break;

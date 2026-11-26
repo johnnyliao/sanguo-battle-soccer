@@ -468,6 +468,8 @@ Roblox 版遊戲場地真的放大 1.5 倍（sim FIELD 1200×260 → 1800×390�
 - 只放大「位置／區域」：FIELD_W/D、隊形 DF/MF/FW 的 x（GK 不動）、AI DF_BEHIND。射程、傳球、大招範圍、GK_AREA_DEPTH、PK 站位都不放大（跟球速／招式有關）。
 - R0 golden（roblox/src/server/golden.ts，只給 Roblox 用）改用 FIELD_SCALE 1.5 產生（vitest vi.mock constants-core）。
 ## Steps
-- [ ] 1. sim/ai 倍率＋sync patch＋Roblox golden — files: src/sim/constants-core.ts, src/sim/field.ts, src/ai/ai.ts, roblox/scripts/sync-game.mjs, src/ai/selfplay*.test.ts — verify: npx vitest run; cd roblox && npm run build — worker A
-- [ ] 2. Roblox 畫面端 — files: roblox/src/shared/net.ts, client/world.ts, client/camera.ts, server/match.server.ts — verify: cd roblox && npm run build — worker B
+- [x] 1. sim/ai 倍率＋sync patch＋Roblox golden — files: src/sim/constants-core.ts, src/sim/field.ts, src/ai/ai.ts, roblox/scripts/sync-game.mjs, src/ai/selfplay*.test.ts — verify: npx vitest run; cd roblox && npm run build — worker A
+- [x] 2. Roblox 畫面端 — files: roblox/src/shared/net.ts, client/world.ts, client/camera.ts, server/match.server.ts — verify: cd roblox && npm run build — worker B
 - [ ] 3. 審 diff、Studio 實測（需使用者重連 Rojo）、commit — me
+- 平衡快檢（2026-11-26，AI 對 AI 各 30 場、只算正規時間）：網頁場地 84 球（2.8/場），Roblox 1.5 倍場地 34 球（1.1/場、10 場 0:0）。待使用者決定要不要調（半場加長、AI 射門距離等）。
+- 注意：selfplay 不會呼叫 autoPkOrders，平手會卡在 PK order 階段；量平衡時只跑正規時間（tick < 14600）。遊戲本身（MatchScene／match.server）有呼叫，沒問題。

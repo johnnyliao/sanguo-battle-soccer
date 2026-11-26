@@ -1,26 +1,27 @@
 // Static 3D pitch for the 2.5D soccer match: grass, lines, goals, walls, stands, lighting.
 // buildWorld() is idempotent: it destroys the old "Pitch" folder before building a new one.
-// Coordinates: sim px * STUDS_PER_PX. Sim x -> World X (0..240 studs), sim y -> World Z (0..52), height -> Y.
+// Coordinates: sim px * STUDS_PER_PX. Sim x -> World X (0..FIELD_LEN studs), sim y -> World Z (0..FIELD_WID), height -> Y.
 import { STUDS_PER_PX } from "shared/net";
+import { FIELD_D, FIELD_W } from "shared/game/sim/constants";
 
-const FIELD_W_PX = 1200;
-const FIELD_D_PX = 260;
-const GOAL_MID_PX = 130;
+const FIELD_W_PX = FIELD_W;
+const FIELD_D_PX = FIELD_D;
+const GOAL_MID_PX = FIELD_D / 2;
 const GOAL_HALF_W_PX = 40;
 const GOAL_H_PX = 36;
 const GOAL_DEPTH_PX = 24;
 const KEEPER_LINE_PX = 140;
 const KEEPER_HALF_D_PX = 40;
 
-const FIELD_LEN = FIELD_W_PX * STUDS_PER_PX; // 240 studs along X
-const FIELD_WID = FIELD_D_PX * STUDS_PER_PX; // 52 studs along Z
-const MOUTH_Z0 = (GOAL_MID_PX - GOAL_HALF_W_PX) * STUDS_PER_PX; // 18
-const MOUTH_Z1 = (GOAL_MID_PX + GOAL_HALF_W_PX) * STUDS_PER_PX; // 34
-const GOAL_H = GOAL_H_PX * STUDS_PER_PX; // 7.2
-const GOAL_DEPTH = GOAL_DEPTH_PX * STUDS_PER_PX; // 4.8
-const KEEPER_X = KEEPER_LINE_PX * STUDS_PER_PX; // 28
-const KEEPER_Z0 = (GOAL_MID_PX - KEEPER_HALF_D_PX) * STUDS_PER_PX; // 10
-const KEEPER_Z1 = (GOAL_MID_PX + KEEPER_HALF_D_PX) * STUDS_PER_PX; // 42
+const FIELD_LEN = FIELD_W_PX * STUDS_PER_PX; // along X
+const FIELD_WID = FIELD_D_PX * STUDS_PER_PX; // along Z
+const MOUTH_Z0 = (GOAL_MID_PX - GOAL_HALF_W_PX) * STUDS_PER_PX;
+const MOUTH_Z1 = (GOAL_MID_PX + GOAL_HALF_W_PX) * STUDS_PER_PX;
+const GOAL_H = GOAL_H_PX * STUDS_PER_PX;
+const GOAL_DEPTH = GOAL_DEPTH_PX * STUDS_PER_PX;
+const KEEPER_X = KEEPER_LINE_PX * STUDS_PER_PX;
+const KEEPER_Z0 = (GOAL_MID_PX - KEEPER_HALF_D_PX) * STUDS_PER_PX;
+const KEEPER_Z1 = (GOAL_MID_PX + KEEPER_HALF_D_PX) * STUDS_PER_PX;
 
 export function colourOf(hex: number, shade = 1): Color3 {
 	const r = math.min(255, math.floor((math.floor(hex / 65536) % 256) * shade));

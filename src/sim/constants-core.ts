@@ -3,8 +3,10 @@
 export const TICK_HZ = 60;
 export const DT = 1 / TICK_HZ;
 
-export const FIELD_W = 1200;
-export const FIELD_D = 260;
+/** Field size multiplier. Web = 1; roblox/scripts/sync-game.mjs rewrites it to 1.5 for the Roblox port. */
+export const FIELD_SCALE = 1;
+export const FIELD_W = 1200 * FIELD_SCALE;
+export const FIELD_D = 260 * FIELD_SCALE;
 
 export const GOAL_HALF_W = 40;
 export const GOAL_H = 36;
