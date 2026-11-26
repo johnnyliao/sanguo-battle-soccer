@@ -1,6 +1,6 @@
 // Shared building blocks for the in-match combat effects (matchFx / matchShu / matchWei / matchWu): the context the
 // effect modules read the live players through, event field readers, zone syncing and a few small effect helpers.
-import type { SimEventLite, SnapZone } from "shared/net";
+import { STUDS_PER_PX, type SimEventLite, type SnapZone } from "shared/net";
 import * as fx from "./fx";
 import { FX, FX_BAD } from "./fxIds";
 
@@ -52,7 +52,7 @@ export function ea(e: SimEventLite, k: string): number[] {
 
 /** Sim px position -> world ground / height position. */
 export function W(x: number, y: number, h = 0): Vector3 {
-	return new Vector3(x * 0.2, h, y * 0.2);
+	return new Vector3(x * STUDS_PER_PX, h, y * STUDS_PER_PX);
 }
 
 export function higher(v: Vector3, h: number): Vector3 {

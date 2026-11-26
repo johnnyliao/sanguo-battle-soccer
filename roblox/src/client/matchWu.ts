@@ -1,5 +1,5 @@
 // Match effects for the Wu generals: Sun Ce sail, Xiao Qiao gust, Da Qiao portal, Zhou Yu eastwind, Sun Quan arrowship.
-import type { SimEventLite, SnapZone } from "shared/net";
+import { STUDS_PER_PX, type SimEventLite, type SnapZone } from "shared/net";
 import * as fx from "./fx";
 import { Handler, MatchCtx, Mount, RingSet, SpecialModule, W, WHITE, ZView, discPart, ea, emitterHost, en, expOut, higher, impactFx, setDisc, shakeNear, sheet, spawnLoop, syncZones } from "./matchUtil";
 import { Prop, makeProp, placeProp } from "./props";
@@ -169,7 +169,7 @@ export class WuFx implements SpecialModule {
 
 	private makeGust(z: SnapZone): GustView {
 		const centre = W(z.x, z.y);
-		const r = z.r * 0.2;
+		const r = z.r * STUDS_PER_PX;
 		const disc = discPart(higher(centre, 0.12), r, PINK, 0.8);
 		const ring = new RingSet(28, 1, 0.4, PINK);
 		const petals: Part[] = [];
@@ -183,7 +183,7 @@ export class WuFx implements SpecialModule {
 
 	private portalStart(e: SimEventLite): void {
 		const centre = W(en(e, "x"), en(e, "y"));
-		const r = en(e, "radius") * 0.2;
+		const r = en(e, "radius") * STUDS_PER_PX;
 		sheet("daqiao.form", higher(centre, 1.5), 9, 1.2, WHITE);
 		fx.ring(higher(centre, 0.4), 2, r, 0.6, CYAN, 1.4, 0.5);
 		fx.burst(higher(centre, 3), MAGENTA, 24, { size: 2.2, speed: 22, life: 1 });
@@ -213,7 +213,7 @@ export class WuFx implements SpecialModule {
 
 	private makePortal(z: SnapZone): PortalView {
 		const centre = W(z.x, z.y);
-		const r = z.r * 0.2;
+		const r = z.r * STUDS_PER_PX;
 		const disc = discPart(higher(centre, 0.12), r, MAGENTA, 0.8);
 		const ring = new RingSet(32, 1.2, 0.4, MAGENTA);
 		const runes: Part[] = [];
@@ -227,7 +227,7 @@ export class WuFx implements SpecialModule {
 
 	private eastwindStart(e: SimEventLite): void {
 		const centre = W(en(e, "x"), en(e, "y"));
-		const r = en(e, "radius") * 0.2;
+		const r = en(e, "radius") * STUDS_PER_PX;
 		fx.ring(higher(centre, 0.5), 3, r * 1.15, 0.5, WIND, 1.6, 0.6);
 		fx.ring(higher(centre, 0.6), 2, r, 0.7, GREEN, 1.2, 0.5);
 		fx.spiral(() => centre, 9, 14, GREEN, 1.2, 44, 1.2, true, WIND);
@@ -244,7 +244,7 @@ export class WuFx implements SpecialModule {
 
 	private makeWind(z: SnapZone): WindView {
 		const centre = W(z.x, z.y);
-		const r = z.r * 0.2;
+		const r = z.r * STUDS_PER_PX;
 		const disc = discPart(higher(centre, 0.12), r, GREEN, 0.82);
 		const ring = new RingSet(32, 1.2, 0.4, WIND);
 		const lines: Part[] = [];
@@ -302,8 +302,8 @@ export class WuFx implements SpecialModule {
 	private arrowshipVolley(e: SimEventLite): void {
 		const ship = this.ships[0];
 		const dir = en(e, "dir") >= 0 ? 1 : -1;
-		const len = en(e, "len") * 0.2;
-		const halfW = en(e, "halfW") * 0.2;
+		const len = en(e, "len") * STUDS_PER_PX;
+		const halfW = en(e, "halfW") * STUDS_PER_PX;
 		const base = ship !== undefined ? ship.base : W(en(e, "x"), en(e, "y"));
 		sheet("sunquan.volley", higher(base, 8), 9, 0.8, WHITE);
 		shakeNear(this.c, base, 0.5, 0.4);

@@ -5,7 +5,7 @@ const ReplicatedStorage = game.GetService("ReplicatedStorage");
 const RunService = game.GetService("RunService");
 
 /** Studs per sim pixel. Sim x -> World X, sim y (depth) -> World Z, sim z (height) -> World Y. */
-export const STUDS_PER_PX = 0.2;
+export const STUDS_PER_PX = 0.3; // 2026-11-26: 0.2 -> 0.3 = pitch looks 1.5x bigger (avatars keep their stud size)
 
 /** Sim pixel coords -> world position (ground at Y = 0). */
 export function simToWorld(x: number, y: number, z: number): Vector3 {

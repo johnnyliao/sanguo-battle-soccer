@@ -1,5 +1,5 @@
 // Match effects for the Shu generals: Zhang Fei roar, Guan Yu bike ride, Zhuge Liang orb, Ma Chao riders, Zhao Yun lunge.
-import type { SimEventLite, SnapZone } from "shared/net";
+import { STUDS_PER_PX, type SimEventLite, type SnapZone } from "shared/net";
 import * as fx from "./fx";
 import { Handler, MatchCtx, Mount, SpecialModule, W, WHITE, ZView, en, expOut, higher, impactFx, shakeNear, sheet, spawnLoop, syncZones, trailOrbs } from "./matchUtil";
 import { Prop, makeProp, placeProp } from "./props";
@@ -78,7 +78,7 @@ export class ShuFx implements SpecialModule {
 	private roar(e: SimEventLite): void {
 		const idx = en(e, "playerIdx");
 		const centre = W(en(e, "x"), en(e, "y"));
-		const r = math.max(en(e, "radius") * 0.2, 8);
+		const r = math.max(en(e, "radius") * STUDS_PER_PX, 8);
 		const cols = [ORANGE, YELLOW, WHITE];
 		for (let i = 0; i < 3; i++) {
 			const col = cols[i];

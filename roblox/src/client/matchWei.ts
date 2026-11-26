@@ -1,5 +1,5 @@
 // Match effects for the Wei generals: Zhang Liao fear, Sima Yi leap, Xu Chu tiger, Cao Cao slash waves, Zhen Ji ice field.
-import type { SimEventLite, SnapZone } from "shared/net";
+import { STUDS_PER_PX, type SimEventLite, type SnapZone } from "shared/net";
 import * as fx from "./fx";
 import { Handler, MatchCtx, Mount, RingSet, SpecialModule, W, WHITE, ZView, discPart, ea, emitterHost, en, expOut, higher, impactFx, setDisc, shakeNear, sheet, spawnLoop, syncZones } from "./matchUtil";
 import { Prop, makeProp, placeProp } from "./props";
@@ -301,7 +301,7 @@ export class WeiFx implements SpecialModule {
 	private iceStart(e: SimEventLite): void {
 		const idx = en(e, "playerIdx");
 		const centre = W(en(e, "x"), en(e, "y"));
-		const r = en(e, "radius") * 0.2;
+		const r = en(e, "radius") * STUDS_PER_PX;
 		fx.ring(higher(centre, 0.4), 3, r, 0.7, WHITE, 1.4, 0.5);
 		fx.burst(higher(this.c.foot(idx), 5), ICE, 20, { size: 2, speed: 20 });
 		sheet("zhenji.snow", higher(centre, 6), 9, 1.6, WHITE);
@@ -328,7 +328,7 @@ export class WeiFx implements SpecialModule {
 
 	private makeIce(z: SnapZone): IceView {
 		const centre = W(z.x, z.y);
-		const r = z.r * 0.2;
+		const r = z.r * STUDS_PER_PX;
 		const disc = discPart(higher(centre, 0.12), r, ICE, 0.75);
 		const ring = new RingSet(32, 1, 0.4, ICE);
 		const spikes: Part[] = [];
