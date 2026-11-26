@@ -438,3 +438,22 @@ src/sim（＋ai、data）用 roblox-ts 編譯成 Luau，在 Roblox 伺服器跑�
 - 比賽：普攻／受傷動作、15 大招特效與載具全部接進正式比賽；整場含 PK 無錯誤、60 FPS、特效清理正常。
 - 測試開關（Workspace 屬性，預設關）：DebugSpecialIdx、DebugMatchSpeed、DebugNoAISpecial、DebugShootAtGoal（server）、DebugCamFocusIdx（client）；展示場 DebugSpeed、DebugCamScale。
 - 教訓：新上傳圖片要等 Roblox 處理完（期間畫成方框／空白），測特效前先確認 ImageLabel 能顯示；程式產生的大光球、平板是蓋住球員的主因。
+
+# 交接（2026-11-26，開新對話從這裡接）
+## 現況
+- 正式比賽可玩：普攻／受傷／15 大招／載具都在比賽裡；整場到 PK 無錯誤、60 FPS。
+- 普攻已加快 2 倍（a8496d8）：比賽普攻 0.15 秒、鏟球 0.21 秒（avatars.ts startCur、render.ts PUNCH_SWING/TACKLE_SWING，速度上限 8）；展示場 stage.ts doAttack 以 2 倍播放。等使用者試玩回饋。
+- 本機 commit 領先 origin 4 個（93c0b27、7f04102、60a9caf、a8496d8），**未 push**；使用者在同一則訊息說「推上去」才 push。
+- Studio id 重開會變，先 list_roblox_studios。Rojo serve 埠 34872；改完 build 後要「停止再 Play」才會載到新程式（Play 中的副本是舊的）。
+- 已知無害訊息：ContentId rbxassetid://203785492 "Asset type does not match"。
+
+## 省 token 規則（使用者要求）
+- 截圖檢查一律派 `studio-checker`（Haiku，~/.claude/agents/studio-checker.md）：給它「怎麼進到畫面」＋逐條 YES/NO 檢查單，它只回文字。我只對 NO/UNSURE 自己截圖。
+- 能用 execute_luau 量數字就不截圖（例：量 AnimationTrack Length/Speed）。
+- 幾行的數值調整自己改，大量修改才派 implementer。
+
+## 待確認（還沒親眼看過）
+1. 大招後段：張飛暈眩星星、張遼鎖鏈＋「!」、司馬懿落地「沉默」、周瑜把敵人吹出圈、孫權萬箭箭矢飛行。
+2. 比賽中：錘／狼牙棒砸地、劍扇揮擊、倒地起身的特寫。
+3. 大喬展示場只有光柱沒有隊友模型；趙雲大招借用普攻突刺動作。
+→ 下一步：派 studio-checker 逐條檢查，NO 的再修。
