@@ -444,6 +444,7 @@ src/sim（＋ai、data）用 roblox-ts 編譯成 Luau，在 Roblox 伺服器跑�
 - 正式比賽可玩：普攻／受傷／15 大招／載具都在比賽裡；整場到 PK 無錯誤、60 FPS。
 - 普攻已加快 2 倍（a8496d8）：比賽普攻 0.15 秒、鏟球 0.21 秒（avatars.ts startCur、render.ts PUNCH_SWING/TACKLE_SWING，速度上限 8）；展示場 stage.ts doAttack 以 2 倍播放。等使用者試玩回饋。
 - 2026-11-26 下午：起跑滑步修正＋跑步動畫約 2 倍（84037d0，avatars.ts START_HOLD/RUN_START_FADE/RUN_REF_SPEED）；場地畫面放大 1.5 倍（dab20d2，STUDS_PER_PX 0.2→0.3，只改畫面不改 sim；大招範圍、鏡頭邊界跟著換算）。待使用者試玩：普攻／大招會不會看起來隔空打人；不行再考慮真的改 sim 場地（會影響網頁版與 AI 平衡）。
+- 跑步動畫注意：8 個角色的跑步 clip 約 5.9 秒，頭尾有起跑／減速靜止段 → avatars.ts RUN_LOOP 只循環中段（接點用 KeyframeSequence 比對姿勢算出）。換新跑步動畫要重算接點。
 - 本機 commit 領先 origin 5 個（93c0b27、7f04102、60a9caf、a8496d8、063ba64 交接文件），**未 push**；使用者在同一則訊息說「推上去」才 push。
 - Studio id 重開會變，先 list_roblox_studios。Rojo serve 埠 34872；改完 build 後要「停止再 Play」才會載到新程式（Play 中的副本是舊的）。
 - 已知無害訊息：ContentId rbxassetid://203785492 "Asset type does not match"。
