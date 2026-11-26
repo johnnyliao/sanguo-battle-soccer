@@ -459,3 +459,15 @@ src/sim（＋ai、data）用 roblox-ts 編譯成 Luau，在 Roblox 伺服器跑�
 2. 比賽中：錘／狼牙棒砸地、劍扇揮擊、倒地起身的特寫。
 3. 大喬展示場只有光柱沒有隊友模型；趙雲大招借用普攻突刺動作。
 → 下一步：派 studio-checker 逐條檢查，NO 的再修。
+
+# R1f 場地放大 1.5 倍（Roblox only，2026-11-26）
+## Goal
+Roblox 版遊戲場地真的放大 1.5 倍（sim FIELD 1200×260 → 1800×390），速度不變；畫面比例改回 STUDS_PER_PX 0.2。網頁版不變。
+## Decisions
+- src/sim/constants-core.ts 加 `FIELD_SCALE = 1`；FIELD_W/FIELD_D 由它算。sync-game.mjs 複製時把這一行改成 1.5（找不到就讓 sync 失敗）。網頁版 ×1 結果完全不變。
+- 只放大「位置／區域」：FIELD_W/D、隊形 DF/MF/FW 的 x（GK 不動）、AI DF_BEHIND。射程、傳球、大招範圍、GK_AREA_DEPTH、PK 站位都不放大（跟球速／招式有關）。
+- R0 golden（roblox/src/server/golden.ts，只給 Roblox 用）改用 FIELD_SCALE 1.5 產生（vitest vi.mock constants-core）。
+## Steps
+- [ ] 1. sim/ai 倍率＋sync patch＋Roblox golden — files: src/sim/constants-core.ts, src/sim/field.ts, src/ai/ai.ts, roblox/scripts/sync-game.mjs, src/ai/selfplay*.test.ts — verify: npx vitest run; cd roblox && npm run build — worker A
+- [ ] 2. Roblox 畫面端 — files: roblox/src/shared/net.ts, client/world.ts, client/camera.ts, server/match.server.ts — verify: cd roblox && npm run build — worker B
+- [ ] 3. 審 diff、Studio 實測（需使用者重連 Rojo）、commit — me
