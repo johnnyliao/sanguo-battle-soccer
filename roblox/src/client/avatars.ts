@@ -23,6 +23,21 @@ const RUN_REF_SPEED = 7;
 const FADE_TIME = 0.15;
 /** Cross-fade (s) when an idle avatar starts running: short so the feet don't slide before the run clip takes over. */
 const RUN_START_FADE = 0.05;
+/**
+ * Run clips with a built-in start-up and wind-down (legs nearly still for ~0.5-1.5 s at each end): loop only the
+ * full-stride middle [start, end] (seconds), else the avatar freezes and slides each time the clip wraps.
+ * Loop points were picked where leg/arm poses (and their motion) match, measured from the KeyframeSequences.
+ */
+const RUN_LOOP: Record<string, [number, number]> = {
+	"rbxassetid://95464768606214": [0.567, 4.1], // caocao
+	"rbxassetid://103448790801455": [0.9, 3.567], // guanyu
+	"rbxassetid://134081281871778": [1.4, 4.067], // sunce
+	"rbxassetid://85893275626604": [1.067, 3.833], // sunquan
+	"rbxassetid://72455011180662": [0.8, 4.633], // xiaoqiao
+	"rbxassetid://71478303740848": [1.5, 3.967], // zhangfei
+	"rbxassetid://104333416659621": [1.633, 4.7], // zhangliao
+	"rbxassetid://101320311313061": [0.967, 3.833], // zhouyu + zhugeliang
+};
 const LYING_LIFT = 0.6;
 const SHAKE_AMP = 0.25;
 /** Seconds in hitstun after which the avatar switches from the hit flinch to the stun loop. */
@@ -351,6 +366,11 @@ function tickCur(v: AvatarView): void {
 		v.curHeld = true;
 		t.AdjustSpeed(0);
 	}
+	// Charging a shot while dribbling: let the run clip show instead of a frozen wind-up pose sliding across the pitch.
+	if (v.curKey === "charge") {
+		const w = v.moving ? 0.001 : 1;
+		if (math.abs(t.WeightTarget - w) > 0.01) t.AdjustWeight(w, 0.1);
+	}
 }
 
 /** Longest time (s) a finished-action clip is allowed to linger after the sim action has ended. */
@@ -518,6 +538,13 @@ export function drawAvatar(v: AvatarView, foot: Vector3, fx: number, fz: number,
 		}
 		if (run !== undefined) {
 			run.AdjustSpeed(math.max(1.6, math.min(2.8, v.speed / RUN_REF_SPEED)));
+			const loop = RUN_LOOP[v.runId];
+			if (loop !== undefined && run.IsPlaying && run.Length > 0) {
+				const [l0, l1] = loop;
+				const tp = run.TimePosition;
+				if (tp < l0 - 0.01) run.TimePosition = l0;
+				else if (tp >= l1) run.TimePosition = l0 + ((tp - l1) % (l1 - l0));
+			}
 		}
 	} else {
 		const idleBefore = v.idle;
