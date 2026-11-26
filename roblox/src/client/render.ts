@@ -6,6 +6,7 @@ import { SPRITES, SpriteSheet, animFor } from "./sprites";
 import { AvatarView, drawAvatar, getAvatarTemplate, makeAvatar, triggerAttack, triggerSpecial } from "./avatars";
 import { MatchFx } from "./matchFx";
 import * as sfx from "./sfx";
+import { cheer } from "./worldCrowd";
 import type { MatchCtx } from "./matchUtil";
 import { initMatchWeapon, setMatchTrails, swingMatchWeapon } from "./matchWeapons";
 
@@ -334,6 +335,7 @@ export class Renderer {
 
 	private applyEvent(e: SimEventLite): void {
 		sfx.onEvent(e, (i) => this.players[i]?.charId);
+		if (e.type === "goal" || (e.type === "pkResult" && e["outcome"] === "goal")) cheer(3);
 		const t = e.type;
 		const idx = (e["playerIdx"] as number | undefined) ?? -1;
 		const pv = idx >= 0 ? this.players[idx] : undefined;

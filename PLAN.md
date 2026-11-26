@@ -473,3 +473,18 @@ Roblox 版遊戲場地真的放大 1.5 倍（sim FIELD 1200×260 → 1800×390�
 - [ ] 3. 審 diff、Studio 實測（需使用者重連 Rojo）、commit — me
 - 平衡快檢（2026-11-26，AI 對 AI 各 30 場、只算正規時間）：網頁場地 84 球（2.8/場），Roblox 1.5 倍場地 34 球（1.1/場、10 場 0:0）。待使用者決定要不要調（半場加長、AI 射門距離等）。
 - 注意：selfplay 不會呼叫 autoPkOrders，平手會卡在 PK order 階段；量平衡時只跑正規時間（tick < 14600）。遊戲本身（MatchScene／match.server）有呼叫，沒問題。
+
+# R1g 場地與觀眾美術（Roblox，2026-11-26）
+## Goal
+比賽場地從色塊升級成三國戰場風（沿用網頁版主題）：遠景營帳、士兵觀眾、軍旗、拒馬、金龍門柱、火盆。
+## Decisions
+- 鏡頭在近側（+Z）往 -Z 看、俯角 38°：近側（Z > FIELD_WID）只放 ≤2.5 studs 的矮物（拒馬），遠側與兩端可高。
+- 只用 Part/Wedge/材質/ParticleEmitter，不上傳素材。共用 worldParts.ts（part、colourOf、FIELD_LEN/WID）。
+- 觀眾用 template Model Clone，降低建構成本；進球時歡呼（跳動 2 秒），平常靜止（省效能）。
+- 檔案分工：world.ts＝草地／線／球門／圍欄（worker A）；worldCrowd.ts＝看台＋士兵觀眾＋歡呼（worker B）；worldDecor.ts＝營帳、軍旗、火盆、燈光（worker C）；接線 me。
+## Steps
+- [x] 1. 場地本體 — files: roblox/src/client/world.ts — verify: cd roblox && npm run build — worker A
+- [x] 2. 看台觀眾 — files: roblox/src/client/worldCrowd.ts（新） — verify: build — worker B
+- [x] 3. 背景裝飾＋燈光 — files: roblox/src/client/worldDecor.ts（新） — verify: build — worker C
+- [ ] 4. 接線（world.ts 呼叫 B/C、render 進球觸發歡呼）、Studio 截圖檢查、commit — me
+- 2026-11-26：接線完成、build OK、Play 無錯誤（場景 8086 parts）。左球門截圖 OK；之後 Studio 畫面全白（編輯模式也白，判斷是電腦不出圖），其餘畫面待使用者在場時再檢查。楔形高邊在本地 +Z（射線實測），營帳屋頂與龍嘴方向已用數值確認。
