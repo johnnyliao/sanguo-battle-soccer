@@ -5,6 +5,7 @@ import { colourOf } from "./world";
 import { SPRITES, SpriteSheet, animFor } from "./sprites";
 import { AvatarView, drawAvatar, getAvatarTemplate, makeAvatar, triggerAttack, triggerSpecial } from "./avatars";
 import { MatchFx } from "./matchFx";
+import * as sfx from "./sfx";
 import type { MatchCtx } from "./matchUtil";
 import { initMatchWeapon, setMatchTrails, swingMatchWeapon } from "./matchWeapons";
 
@@ -216,6 +217,7 @@ export class Renderer {
 	private lastBallPos = new Vector3(0, 0, 0);
 
 	constructor() {
+		sfx.preload();
 		let folder = Workspace.FindFirstChild("Actors");
 		if (folder === undefined) {
 			const created = new Instance("Folder");
@@ -331,6 +333,7 @@ export class Renderer {
 	}
 
 	private applyEvent(e: SimEventLite): void {
+		sfx.onEvent(e);
 		const t = e.type;
 		const idx = (e["playerIdx"] as number | undefined) ?? -1;
 		const pv = idx >= 0 ? this.players[idx] : undefined;
