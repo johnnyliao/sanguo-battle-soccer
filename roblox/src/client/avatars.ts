@@ -480,7 +480,10 @@ export function drawAvatar(v: AvatarView, foot: Vector3, fx: number, fz: number,
 	updateAction(v, act, now);
 
 	// Only touch the tracks when the desired state actually changes.
-	const wantRun = v.moving && act === "normal" && rootOverride === undefined;
+	// Attacks / charging keep the legs running underneath (the action clip overrides the upper body); otherwise a short
+	// attack clip ends while the sim still carries the player forward and the idle pose slides across the pitch.
+	const legsFree = act === "normal" || act === "punch" || act === "tackle" || act === "charge";
+	const wantRun = v.moving && legsFree && rootOverride === undefined;
 	if (wantRun !== v.runState) {
 		v.runState = wantRun;
 		if (wantRun) {
