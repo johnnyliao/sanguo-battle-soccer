@@ -86,10 +86,13 @@ function buildPitch(pitch: Instance): void {
 	// Centre circle (white ring + green inner disc) and spot.
 	const centreR = 40 * STUDS_PER_PX;
 	const ring = part(pitch, "CentreRing", new Vector3(0.05, centreR * 2, centreR * 2), new CFrame(FIELD_LEN / 2, 0.03, FIELD_WID / 2).mul(CFrame.Angles(0, 0, math.pi / 2)), LINE_COLOUR);
+	ring.Shape = Enum.PartType.Cylinder;
 	ring.Material = Enum.Material.SmoothPlastic;
 	const inner = part(pitch, "CentreInner", new Vector3(0.06, (centreR - LINE_W) * 2, (centreR - LINE_W) * 2), new CFrame(FIELD_LEN / 2, 0.04, FIELD_WID / 2).mul(CFrame.Angles(0, 0, math.pi / 2)), GRASS_A);
+	inner.Shape = Enum.PartType.Cylinder;
 	inner.Material = Enum.Material.Grass;
 	const spot = part(pitch, "CentreSpot", new Vector3(0.07, 0.6, 0.6), new CFrame(FIELD_LEN / 2, 0.05, FIELD_WID / 2).mul(CFrame.Angles(0, 0, math.pi / 2)), LINE_COLOUR);
+	spot.Shape = Enum.PartType.Cylinder;
 	spot.Material = Enum.Material.SmoothPlastic;
 
 	// Keeper boxes: a rectangle from each goal line out to the keeper line.

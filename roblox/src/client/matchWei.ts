@@ -1,6 +1,7 @@
 // Match effects for the Wei generals: Zhang Liao fear, Sima Yi leap, Xu Chu tiger, Cao Cao slash waves, Zhen Ji ice field.
 import { STUDS_PER_PX, type SimEventLite, type SnapZone } from "shared/net";
 import * as fx from "./fx";
+import { BladeWave, crossFlash, groundStreak } from "./bladeWave";
 import { Handler, MatchCtx, Mount, RingSet, SpecialModule, W, WHITE, ZView, discPart, ea, emitterHost, en, expOut, higher, impactFx, setDisc, shakeNear, sheet, spawnLoop, syncZones } from "./matchUtil";
 import { Prop, makeProp, placeProp } from "./props";
 
@@ -22,13 +23,6 @@ interface TigerView {
 	scale: number;
 }
 
-interface WaveView {
-	part: Part;
-	pos: Vector3;
-	dir: Vector3;
-	age: number;
-}
-
 interface IceView extends ZView {
 	centre: Vector3;
 	r: number;
@@ -45,7 +39,7 @@ export class WeiFx implements SpecialModule {
 	private c: MatchCtx;
 	private on: Record<string, Handler> = {};
 	private tigers = new Map<number, TigerView>();
-	private waves = new Map<number, WaveView>();
+	private waves = new Map<number, BladeWave>();
 	private ices: IceView[] = [];
 	private frost = new Map<number, RingSet>();
 	private ballAcc = 0;
@@ -263,15 +257,13 @@ export class WeiFx implements SpecialModule {
 		const dir = d.Magnitude > 0.01 ? d.Unit : new Vector3(1, 0, 0);
 		const idx = en(e, "playerIdx");
 		const col = id % 2 === 0 ? BLUE : GOLD;
-		const part = fx.block(CFrame.lookAt(pos, pos.add(dir)).mul(CFrame.Angles(0, 0, math.rad(25))), new Vector3(9, 0.15, 0.7), col, 0.4);
-		const trail = fx.makeTrail(part, new Vector3(-4.5, 0, 0), new Vector3(4.5, 0, 0), col);
-		trail.Lifetime = 0.3;
-		trail.Enabled = true;
+		const foot = this.c.foot(idx);
 		const old = this.waves.get(id);
-		if (old !== undefined) old.part.Destroy();
-		this.waves.set(id, { part, pos, dir, age: 0 });
+		if (old !== undefined) old.destroy();
+		this.waves.set(id, new BladeWave(pos, dir, col));
+		groundStreak(foot, dir, col);
+		fx.dust(higher(foot, 0.5), 5, 3);
 		sheet("caocao.bladeWave", pos, 8, 0.4, WHITE);
-		sheet("caocao.slash", higher(this.c.foot(idx), 4.5).add(dir.mul(3)), 7, 0.3, col);
 	}
 
 	private slashWaveEnd(e: SimEventLite): void {
@@ -280,13 +272,19 @@ export class WeiFx implements SpecialModule {
 		const hit = en(e, "hitIdx");
 		const p = W(en(e, "x"), en(e, "y"), 4.5);
 		if (hit >= 0) {
-			impactFx(this.c.chest(hit), BLUE, 0.9, "caocao.sparks");
+			const chest = this.c.chest(hit);
+			const col = w?.color ?? BLUE;
+			impactFx(chest, BLUE, 0.9, "caocao.sparks");
+			crossFlash(chest, col);
+			fx.burst(chest, col, 10, { size: 1.2, speed: 22 });
+			if (w !== undefined) {
+				w.destroy();
+				this.waves.delete(id);
+			}
 		} else {
 			fx.burst(p, BLUE, 6, { size: 1.2, speed: 10 });
-		}
-		if (w !== undefined) {
-			w.part.Destroy();
-			this.waves.delete(id);
+			// Missed: the wave stays in the map until its fade-out is done (see frame()).
+			if (w !== undefined) w.startFade();
 		}
 	}
 
@@ -374,6 +372,13 @@ export class WeiFx implements SpecialModule {
 		// Blade waves chase their snapshot positions.
 		for (const [id, w] of this.waves) {
 			w.age += dt;
+			if (w.fading) {
+				if (w.place(dt)) {
+					w.destroy();
+					this.waves.delete(id);
+				}
+				continue;
+			}
 			let best: Vector3 | undefined;
 			let bd = 14 * 14;
 			for (const z of zones) {
@@ -392,11 +397,11 @@ export class WeiFx implements SpecialModule {
 				if (flat.Magnitude > 0.05) w.dir = flat.Unit;
 				w.pos = w.pos.add(delta.mul(expOut(dt, 25)));
 			} else if (w.age > 1.5) {
-				w.part.Destroy();
+				w.destroy();
 				this.waves.delete(id);
 				continue;
 			}
-			w.part.CFrame = CFrame.lookAt(w.pos, w.pos.add(w.dir)).mul(CFrame.Angles(0, 0, math.rad(25)));
+			w.place(dt);
 		}
 		// Ice fields.
 		this.ices = syncZones(
@@ -473,7 +478,7 @@ export class WeiFx implements SpecialModule {
 	clear(): void {
 		for (const [, t] of this.tigers) t.prop.model.Destroy();
 		this.tigers.clear();
-		for (const [, w] of this.waves) w.part.Destroy();
+		for (const [, w] of this.waves) w.destroy();
 		this.waves.clear();
 		for (const v of this.ices) {
 			v.disc.Destroy();
