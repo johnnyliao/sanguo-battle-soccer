@@ -1,4 +1,5 @@
 import { INF, abs, sqrt, cos, min, max, len } from './num';
+import * as LC from './lordclass';
 import {
   BALL_AIR_DRAG,
   BALL_BOUNCE,
@@ -343,6 +344,7 @@ function resolveSpecialContacts(state: GameState, sp: SpecialShot): boolean {
           b.special = undefined;
           b.ownerIdx = p.idx;
           b.lastTouchIdx = p.idx;
+          LC.onBallGained(state, p);
           state.events.push({ type: 'specialEnd' });
           state.events.push({ type: 'save', playerIdx: p.idx, caught: true });
           return true;
@@ -573,6 +575,7 @@ function updatePickup(state: GameState): void {
     if (best !== -1) {
       ball.ownerIdx = best;
       ball.lastTouchIdx = best;
+      LC.onBallGained(state, state.players[best]);
       state.events.push({ type: 'pickup', playerIdx: best });
     }
   }

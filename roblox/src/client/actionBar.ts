@@ -1,13 +1,15 @@
 // Match action bar: attack (J), pass / call (K) and special (L) buttons at the bottom-right of the match screen, the same
-// on PC and touch. This file only draws the buttons from the snapshots. Presses reach the game through input.ts: keys,
-// mouse clicks and touch are all hit-tested here (actionHitTest) and fed to the same ClientInput.
+// on PC and touch. Each button has a transparent GuiButton on top of the drawn circle, so Roblox does the hit testing
+// (no manual coordinate math). Touch and mouse presses on those buttons are tracked here and read by input.ts, which
+// merges them with the keys and the joystick into the same ClientInput.
 import type { LordWeapon, Setup, SetupPlayer, Snapshot } from "shared/net";
 import { TICK_RATE } from "shared/net";
 import { RAW_CHARACTERS } from "shared/game/data";
 import { SPECIAL_COOLDOWN_TICKS } from "shared/game/sim/constants";
-import { ART, skillIconFor } from "./artIds";
+import { ART, skillIconFor, SKILL_ICON } from "./artIds";
 import { picture } from "./artUi";
 import { play } from "./sfx";
+import { getCamMode, toggleCamMode } from "./camera";
 
 const Players = game.GetService("Players");
 const RunService = game.GetService("RunService");
@@ -41,12 +43,13 @@ const MARGIN = 12;
 /** Full size at 600 px screen height and up; 0.75 on a 390 px phone (landscape). */
 const SCALE_REF_H = 600;
 const SCALE_MIN = 0.75;
-/** The touch hit area is a little larger than the drawn circle. */
-const HIT_SLOP = 1.1;
 const PRESS_FLASH_SECONDS = 0.18;
 const PRESS_SCALE = 0.88;
 const POP_SECONDS = 0.35;
 const POPUP_SECONDS = 1.2;
+/** Camera view toggle: round button at the top-right corner, and the mode name shown for CAM_TOAST_SECONDS. */
+const CAM_BTN_D = 56;
+const CAM_TOAST_SECONDS = 1.5;
 const SPARKLE_SECONDS = 0.6;
 const SPARKLE_COUNT = 10;
 /** Longest time (seconds) the cooldown is extrapolated past the last snapshot. */
@@ -65,6 +68,8 @@ interface Btn {
 	def: ButtonDef;
 	/** Circle box; its position and size follow the layout and the press scale. */
 	wrap: Frame;
+	/** Transparent GuiButton over the circle at full size (not scaled by the press); it receives the touch / click. */
+	hit: TextButton;
 	body: Frame;
 	/** The button art (btn_attack / btn_pass / btn_special). */
 	pic: ImageLabel;
@@ -115,8 +120,14 @@ let pkLive = false;
 let readyPending = false;
 let popT: number | undefined;
 let popupT: number | undefined;
+let camToast: TextLabel | undefined;
+let camToastT: number | undefined;
 let clock = 0;
 const pressed: Record<ActionKey, boolean> = { j: false, k: false, l: false };
+/** Touch / mouse pointers that began on a button, with the key each one holds until it lifts (a finger may slide off). */
+const pointers = new Map<InputObject, ActionKey>();
+/** Keys whose press began since the last takeActionPresses() call, so a quick tap still counts. */
+let newPresses = new Set<ActionKey>();
 let sparkles: Sparkle[] = [];
 /** Button the tutorial highlights (undefined = none) and whether its pulse runs faster (a long step). */
 let highlightKey: ActionKey | undefined;
@@ -167,12 +178,30 @@ function label(parent: Instance, content: string, size: UDim2, pos: UDim2): Text
 	return t;
 }
 
+/** A touch or left click that began on a button: it holds that key until the pointer lifts. */
+function onButtonBegan(key: ActionKey, input: InputObject): void {
+	if (input.UserInputType !== Enum.UserInputType.Touch && input.UserInputType !== Enum.UserInputType.MouseButton1) return;
+	pointers.set(input, key);
+	newPresses.add(key);
+}
+
 function buildBtn(screen: ScreenGui, def: ButtonDef): Btn {
 	const wrap = new Instance("Frame");
 	wrap.AnchorPoint = new Vector2(0.5, 0.5);
 	wrap.BackgroundTransparency = 1;
 	wrap.BorderSizePixel = 0;
 	wrap.Parent = screen;
+
+	const hit = new Instance("TextButton");
+	hit.AnchorPoint = new Vector2(0.5, 0.5);
+	hit.BackgroundTransparency = 1;
+	hit.BorderSizePixel = 0;
+	hit.AutoButtonColor = false;
+	hit.Text = "";
+	hit.Parent = screen;
+	hit.InputBegan.Connect((input: InputObject) => {
+		onButtonBegan(def.key, input);
+	});
 
 	// The body is transparent: the button art is the circle, and the children sit on top of it.
 	const body = disc(wrap, BLACK, 1);
@@ -221,7 +250,7 @@ function buildBtn(screen: ScreenGui, def: ButtonDef): Btn {
 	hlArrow.Rotation = -45;
 	hlArrow.Visible = false;
 
-	return { def, wrap, body, pic, label: lab, badge, flash, held: false, flashT: 0, scale: 1, hlStroke, hlArrow };
+	return { def, wrap, hit, body, pic, label: lab, badge, flash, held: false, flashT: 0, scale: 1, hlStroke, hlArrow };
 }
 
 function buildSpecial(screen: ScreenGui, b: Btn): Special {
@@ -307,9 +336,16 @@ function shortName(full: string): string {
 
 function specialNameOf(me: SetupPlayer | undefined): string {
 	if (me === undefined) return "大招";
+	if (me.specialName !== undefined) return me.specialName;
 	if (me.weapon !== undefined) return WEAPON_SPECIAL[me.weapon];
 	const def = RAW_CHARACTERS.find((c) => c.id === me.charId);
 	return def === undefined ? "大招" : def.special.name;
+}
+
+/** Icon image of the human's special: from the setup's specialIcon key, else the old charId / weapon lookup. */
+function specialIconOf(me: SetupPlayer): string {
+	if (me.specialIcon !== undefined) return SKILL_ICON[me.specialIcon] ?? "";
+	return skillIconFor(me.charId, me.weapon) ?? "";
 }
 
 function spawnSparkles(screen: ScreenGui, cx: number, cy: number, s: number): void {
@@ -350,6 +386,10 @@ function updateBtn(b: Btn, dt: number, size: Vector2, s: number): void {
 	b.wrap.Position = UDim2.fromOffset(cx, cy);
 	b.wrap.Size = UDim2.fromOffset(d, d);
 	b.wrap.Visible = !(isSpecial && pkLive);
+	const full = b.def.d * s;
+	b.hit.Position = UDim2.fromOffset(cx, cy);
+	b.hit.Size = UDim2.fromOffset(full, full);
+	b.hit.Visible = b.wrap.Visible;
 	b.badge.Size = UDim2.fromOffset(26 * s, 22 * s);
 	b.flash.BackgroundTransparency = 1 - 0.55 * (b.flashT / PRESS_FLASH_SECONDS);
 
@@ -417,6 +457,51 @@ function updateSpecial(sp: Special, size: Vector2, s: number, rem: number, cooli
 	}
 }
 
+/** Top-right round "視角" button (GuiButton, so Roblox does the hit test) and the toast that names the view. */
+function buildCamButton(screen: ScreenGui): void {
+	const btn = new Instance("TextButton");
+	btn.Name = "CamModeButton";
+	btn.AnchorPoint = new Vector2(1, 0);
+	btn.Position = new UDim2(1, -MARGIN, 0.3, 0); // right edge, below the top-right tutorial panel, above the action buttons
+	btn.Size = UDim2.fromOffset(CAM_BTN_D, CAM_BTN_D);
+	btn.BackgroundColor3 = BLACK;
+	btn.BackgroundTransparency = 0.35;
+	btn.BorderSizePixel = 0;
+	btn.AutoButtonColor = false;
+	btn.Font = Enum.Font.GothamBlack;
+	btn.Text = "視角";
+	btn.TextColor3 = WHITE;
+	btn.TextScaled = true;
+	btn.TextStrokeTransparency = 0.2;
+	btn.TextStrokeColor3 = BLACK;
+	btn.Parent = screen;
+	const corner = new Instance("UICorner");
+	corner.CornerRadius = new UDim(0.5, 0);
+	corner.Parent = btn;
+	const stroke = new Instance("UIStroke");
+	stroke.Color = GOLD;
+	stroke.Thickness = 2;
+	stroke.Parent = btn;
+	btn.Activated.Connect(() => {
+		toggleCamView();
+	});
+
+	camToast = label(screen, "", UDim2.fromOffset(260, 44), UDim2.fromScale(0.5, 0.2));
+	camToast.TextColor3 = GOLD;
+	camToast.Visible = false;
+}
+
+/**
+ * Switches the match camera between the side and behind views (the V key and the top-right button). The mode name
+ * shows at the top of the screen for CAM_TOAST_SECONDS, during a match only.
+ */
+export function toggleCamView(): void {
+	toggleCamMode();
+	if (!matchOn || camToast === undefined) return;
+	camToast.Text = getCamMode() === "side" ? "視角：側面" : "視角：背後";
+	camToastT = 0;
+}
+
 /** Per-frame drawing: press scale and flash, cooldown interpolation, ready effects. */
 function update(screen: ScreenGui, dt: number): void {
 	clock += dt;
@@ -444,6 +529,19 @@ function update(screen: ScreenGui, dt: number): void {
 		spawnSparkles(screen, cx, cy, s);
 		play(READY_SOUND);
 	}
+	if (camToast !== undefined && camToastT !== undefined) {
+		camToastT += dt;
+		const p = camToastT / CAM_TOAST_SECONDS;
+		if (p >= 1) {
+			camToastT = undefined;
+			camToast.Visible = false;
+		} else {
+			const fade = p < 0.67 ? 0 : (p - 0.67) / 0.33;
+			camToast.Visible = true;
+			camToast.TextTransparency = fade;
+			camToast.TextStrokeTransparency = fade;
+		}
+	}
 	for (const b of btns) updateBtn(b, dt, size, s);
 	if (special !== undefined) updateSpecial(special, size, s, rem, cooling, ready);
 	updateSparkles(dt);
@@ -455,6 +553,8 @@ export function createActionBar(): void {
 	const screen = new Instance("ScreenGui");
 	screen.Name = "ActionBarGui";
 	screen.IgnoreGuiInset = true;
+	// Keep the bar clear of the iPhone notch and home indicator (device cutouts only; the top bar is still ignored).
+	screen.ScreenInsets = Enum.ScreenInsets.DeviceSafeInsets;
 	screen.ResetOnSpawn = false;
 	// Above the HUD (10), below the tutorial banner and arrow (15) and the touch layer (20).
 	screen.DisplayOrder = 12;
@@ -464,9 +564,14 @@ export function createActionBar(): void {
 
 	for (const def of DEFS) btns.push(buildBtn(screen, def));
 	special = buildSpecial(screen, btns[2]);
+	buildCamButton(screen);
 
 	RunService.RenderStepped.Connect((dt) => {
 		if (gui !== undefined) update(gui, dt);
+	});
+	// A pointer lifts anywhere (even off the button it pressed): release its key.
+	UserInputService.InputEnded.Connect((input: InputObject) => {
+		pointers.delete(input);
 	});
 }
 
@@ -477,6 +582,8 @@ export function setActionMatch(on: boolean): void {
 	if (!on) {
 		popT = undefined;
 		popupT = undefined;
+		pointers.clear();
+		newPresses = new Set<ActionKey>();
 	}
 }
 
@@ -486,7 +593,7 @@ export function onActionSetup(s: Setup): void {
 	const me = s.players.find((p) => p.idx === s.humanIdx);
 	if (special !== undefined) {
 		special.btn.label.Text = shortName(specialNameOf(me));
-		special.icon.Image = me === undefined ? "" : skillIconFor(me.charId, me.weapon) ?? "";
+		special.icon.Image = me === undefined ? "" : specialIconOf(me);
 	}
 	snapCd = 0;
 	snapPhase = "";
@@ -520,20 +627,19 @@ export function setActionPressed(j: boolean, k: boolean, l: boolean): void {
 	pressed.l = l;
 }
 
-/** The button under a screen point, or undefined. Only while the bar is shown; hidden buttons are not hit. */
-export function actionHitTest(x: number, y: number): ActionKey | undefined {
-	if (gui === undefined || !matchOn) return undefined;
-	const size = gui.AbsoluteSize;
-	const s = barScale(size);
-	for (const def of DEFS) {
-		if (def.key === "l" && pkLive) continue;
-		const [cx, cy] = centreOf(def, size, s);
-		const r = (def.d * s * HIT_SLOP) / 2;
-		const dx = x - cx;
-		const dy = y - cy;
-		if (dx * dx + dy * dy <= r * r) return def.key;
+/** True while a touch or mouse press that began on this button is still down. */
+export function isActionHeld(key: ActionKey): boolean {
+	for (const [, k] of pointers) {
+		if (k === key) return true;
 	}
-	return undefined;
+	return false;
+}
+
+/** Buttons pressed since the last call (a quick tap counts even if it lifted before the sample). Clears the record. */
+export function takeActionPresses(): Set<ActionKey> {
+	const out = newPresses;
+	newPresses = new Set<ActionKey>();
+	return out;
 }
 
 /** Screen y (px) of the top edge of the highest action button (the pass button), for placing HUD panels clear of the bar. */

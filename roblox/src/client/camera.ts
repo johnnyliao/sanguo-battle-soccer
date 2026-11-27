@@ -2,16 +2,30 @@ import { STUDS_PER_PX } from "shared/net";
 import { FIELD_D, FIELD_W } from "shared/game/sim/constants";
 import { pitchOffsetPx } from "./worldParts";
 import * as fx from "./fx";
-// Side-on oblique follow camera: stands on the near side (+Z), looks toward -Z and down,
-// and tracks the ball's World X and Z with exponential smoothing (close framing, follows depth).
-const CAM_PITCH_DEG = 38; // angle below horizontal
-const CAM_DISTANCE = 30; // studs from look-at point to camera
+// Match camera, two modes (toggled with toggleCamMode):
+// - "side": side-on oblique follow camera: stands on the near side (+Z), looks toward -Z and down. The look point sits
+//   between the lord and the ball, so the lord stays on screen when the ball runs away.
+// - "behind": over-the-shoulder camera behind the local lord, looking toward the enemy goal. mapMove() turns the screen
+//   direction of the input into a world direction so "up" is always the way the lord faces the screen.
+// Both modes track World X and Z with exponential smoothing; switching modes glides instead of jumping.
+export type CamMode = "side" | "behind";
+
+const CAM_PITCH_DEG = 38; // angle below horizontal (side mode)
+const CAM_DISTANCE = 25.5; // studs from look-at point to camera (side mode; 0.85 x the old 30)
 const CAM_FOV = 50; // vertical field of view (degrees)
-const CAM_TARGET_Y = 3; // look-at height above the ground (studs)
+const CAM_TARGET_Y = 3; // look-at height above the ground (studs, side mode)
 const CAM_FOLLOW_RATE = 4; // smoothing rate per second (higher = snappier)
 const CAM_MARGIN_X = 12; // look-at point stays this far inside the pitch edge on X (studs)
 const CAM_MARGIN_Z = 14; // and on Z (studs)
 const CAM_SMALL_ZOOM = 0.85; // distance factor for 1v1 / 2v2 (small pitch)
+const CAM_SIDE_LOOK_BLEND = 0.3; // side mode: look point this fraction of the way from the lord toward the ball
+const CAM_BEHIND_BACK = 22; // behind mode: camera this far behind the lord (studs)
+const CAM_BEHIND_HEIGHT = 14; // behind mode: camera height (studs)
+const CAM_BEHIND_AHEAD = 8; // behind mode: look point this far ahead of the lord, toward the attack (studs)
+const CAM_BEHIND_LOOK_Y = 2; // behind mode: look point height (studs)
+const CAM_BEHIND_LOOK_BLEND = 0.25; // behind mode: look point this fraction of the way from the lord toward the ball
+/** Quantising a screen-to-world move: a component counts only above this magnitude (keeps 8 directions). */
+const MOVE_AXIS_THRESHOLD = 0.38;
 
 /**
  * Screen shake for the match camera (main.client adds fx.shakeOffset every frame). intensity is the offset in studs at the
@@ -19,6 +33,20 @@ const CAM_SMALL_ZOOM = 0.85; // distance factor for 1v1 / 2v2 (small pitch)
  */
 export function shake(intensity: number, duration: number): void {
 	fx.shake(intensity, duration);
+}
+
+let mode: CamMode = "side";
+/** True while the behind view is really in use (mode is behind and the local lord is on the pitch). */
+let behindActive = false;
+
+/** Switches the match camera between the side and behind views. */
+export function toggleCamMode(): void {
+	mode = mode === "side" ? "behind" : "side";
+}
+
+/** The camera mode the player picked (the view may still fall back to side when there is no lord). */
+export function getCamMode(): CamMode {
+	return mode;
 }
 
 /** Pitch the camera follows (studs, World X / Z) and the camera distance. Default 5v5 until setCameraPitch(). */
@@ -42,11 +70,43 @@ export function setCameraPitch(field: { w: number; d: number }, teamSize: number
 	};
 }
 
+function clampX(v: number): number {
+	return math.max(bounds.x0 + CAM_MARGIN_X, math.min(bounds.x1 - CAM_MARGIN_X, v));
+}
+
+function clampZ(v: number): number {
+	return math.max(bounds.z0 + CAM_MARGIN_Z, math.min(bounds.z1 - CAM_MARGIN_Z, v));
+}
+
+function quantise(v: number): number {
+	if (math.abs(v) <= MOVE_AXIS_THRESHOLD) return 0;
+	return v > 0 ? 1 : -1;
+}
+
+/**
+ * Turns a screen-direction move (moveX +1 = screen right, moveY +1 = screen down, as input.ts reports it) into a
+ * world / sim direction (World X = sim x, World Z = sim y). Side view and no lord: returned unchanged.
+ */
+export function mapMove(moveX: number, moveY: number): [number, number] {
+	if (mode !== "behind" || !behindActive) return [moveX, moveY];
+	const cam = game.Workspace.CurrentCamera;
+	if (cam === undefined) return [moveX, moveY];
+	const look = cam.CFrame.LookVector;
+	const right = cam.CFrame.RightVector;
+	const fwd = new Vector3(look.X, 0, look.Z).Unit;
+	const rt = new Vector3(right.X, 0, right.Z).Unit;
+	// Screen up is -moveY, so forward contributes -moveY.
+	const wx = rt.X * moveX - fwd.X * moveY;
+	const wz = rt.Z * moveX - fwd.Z * moveY;
+	return [quantise(wx), quantise(wz)];
+}
+
 export class FollowCamera {
 	private cam: Camera;
-	private x = 0;
-	private z = 0;
+	private eye = new Vector3(0, 0, 0);
+	private look = new Vector3(0, 0, 0);
 	private ready = false;
+	private lastAttackDir = 1;
 
 	constructor() {
 		let cam = game.Workspace.CurrentCamera;
@@ -59,23 +119,49 @@ export class FollowCamera {
 		this.cam = cam;
 	}
 
-	/** focusX / focusZ = ball World X, Z in studs (Renderer.getFocusX() / getFocusZ()). Call every frame after Renderer.update. */
-	update(dt: number, focusX: number, focusZ: number): void {
+	/**
+	 * Call every frame after Renderer.update. playerX / playerZ = the local lord's World X, Z (undefined when he has no
+	 * character on the pitch: the camera then falls back to following the ball). ballX / ballZ = ball World X, Z.
+	 * attackDir = +1 / -1: the direction (World X) the local lord's team attacks this half.
+	 */
+	update(
+		dt: number,
+		playerX: number | undefined,
+		playerZ: number | undefined,
+		ballX: number,
+		ballZ: number,
+		attackDir: number,
+	): void {
 		if (game.Workspace.GetAttribute("ShowroomActive") === true) return;
-		const targetX = math.max(bounds.x0 + CAM_MARGIN_X, math.min(bounds.x1 - CAM_MARGIN_X, focusX));
-		const targetZ = math.max(bounds.z0 + CAM_MARGIN_Z, math.min(bounds.z1 - CAM_MARGIN_Z, focusZ));
-		if (!this.ready) {
-			this.x = targetX;
-			this.z = targetZ;
+		const dir = attackDir < 0 ? -1 : 1;
+		let desiredEye: Vector3;
+		let desiredLook: Vector3;
+		if (mode === "behind" && playerX !== undefined && playerZ !== undefined) {
+			behindActive = true;
+			const lx = clampX(playerX + (ballX - playerX) * CAM_BEHIND_LOOK_BLEND);
+			const lz = clampZ(playerZ + (ballZ - playerZ) * CAM_BEHIND_LOOK_BLEND);
+			desiredLook = new Vector3(lx + dir * CAM_BEHIND_AHEAD, CAM_BEHIND_LOOK_Y, lz);
+			desiredEye = new Vector3(playerX - dir * CAM_BEHIND_BACK, CAM_BEHIND_HEIGHT, playerZ);
+		} else {
+			behindActive = false;
+			const fx0 = playerX === undefined ? ballX : playerX + (ballX - playerX) * CAM_SIDE_LOOK_BLEND;
+			const fz0 = playerZ === undefined ? ballZ : playerZ + (ballZ - playerZ) * CAM_SIDE_LOOK_BLEND;
+			const look = new Vector3(clampX(fx0), CAM_TARGET_Y, clampZ(fz0));
+			const pitch = math.rad(CAM_PITCH_DEG);
+			desiredLook = look;
+			desiredEye = look.add(new Vector3(0, math.sin(pitch) * bounds.distance, math.cos(pitch) * bounds.distance));
+		}
+		// The attack direction flips at half time: cut to the new side instead of sweeping through the lord.
+		if (!this.ready || dir !== this.lastAttackDir) {
+			this.eye = desiredEye;
+			this.look = desiredLook;
 			this.ready = true;
+			this.lastAttackDir = dir;
 		} else {
 			const k = 1 - math.exp(-CAM_FOLLOW_RATE * dt);
-			this.x += (targetX - this.x) * k;
-			this.z += (targetZ - this.z) * k;
+			this.eye = this.eye.Lerp(desiredEye, k);
+			this.look = this.look.Lerp(desiredLook, k);
 		}
-		const pitch = math.rad(CAM_PITCH_DEG);
-		const look = new Vector3(this.x, CAM_TARGET_Y, this.z);
-		const eye = look.add(new Vector3(0, math.sin(pitch) * bounds.distance, math.cos(pitch) * bounds.distance));
-		this.cam.CFrame = CFrame.lookAt(eye, look);
+		this.cam.CFrame = CFrame.lookAt(this.eye, this.look);
 	}
 }

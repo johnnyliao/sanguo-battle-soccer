@@ -1,6 +1,7 @@
 import type { ClientInput, Remotes } from "../shared/net";
 import { TouchControls } from "./touch";
-import { actionHitTest, setActionPressed, type ActionKey } from "./actionBar";
+import { isActionHeld, setActionPressed, takeActionPresses, toggleCamView } from "./actionBar";
+import { mapMove } from "./camera";
 
 const Players = game.GetService("Players");
 const RunService = game.GetService("RunService");
@@ -47,16 +48,6 @@ const heldKeys = new Set<Enum.KeyCode>();
 let pendingJ = false;
 let pendingK = false;
 let pendingL = false;
-/** Mouse clicks on the action bar: which button is held by the left mouse button. */
-const mouseHeld: Record<ActionKey, boolean> = { j: false, k: false, l: false };
-let mouseKey: ActionKey | undefined;
-
-/** Queues a press of J / K / L for the next sample (same as a key press). */
-function pressAction(key: ActionKey): void {
-	if (key === "j") pendingJ = true;
-	else if (key === "k") pendingK = true;
-	else pendingL = true;
-}
 let inputEnabled = true;
 let touch: TouchControls | undefined;
 const dashDetector = new DashDetector();
@@ -88,9 +79,10 @@ function sameInput(a: ClientInput, b: ClientInput): boolean {
 /** Samples keyboard and touch once per frame and merges them (same rules as src/input/LocalInput.ts). */
 function sample(): ClientInput {
 	const t = touch !== undefined ? touch.state() : undefined;
-	const pressJ = pendingJ;
-	const pressK = pendingK;
-	const pressL = pendingL;
+	const presses = takeActionPresses();
+	const pressJ = pendingJ || presses.has("j");
+	const pressK = pendingK || presses.has("k");
+	const pressL = pendingL || presses.has("l");
 	pendingJ = false;
 	pendingK = false;
 	pendingL = false;
@@ -107,15 +99,17 @@ function sample(): ClientInput {
 	const down = keyDown(Enum.KeyCode.S, Enum.KeyCode.Down) || ty > 0;
 	const moveX = left === right ? 0 : left ? -1 : 1;
 	const moveY = up === down ? 0 : up ? -1 : 1;
+	// Screen direction -> world / sim direction for the behind camera (identity in side view).
+	const [mx, my] = mapMove(moveX, moveY);
 
-	const doubleTap = dashDetector.update(moveX, moveY);
+	const doubleTap = dashDetector.update(mx, my);
 	return {
-		moveX,
-		moveY,
+		moveX: mx,
+		moveY: my,
 		dash: doubleTap || keyDown(Enum.KeyCode.LeftShift) || (t !== undefined && t.dash),
-		j: pressJ || keyDown(Enum.KeyCode.J) || (t !== undefined && t.j) || mouseHeld.j,
-		k: pressK || keyDown(Enum.KeyCode.K) || (t !== undefined && t.k) || mouseHeld.k,
-		l: pressL || keyDown(Enum.KeyCode.L) || (t !== undefined && t.l) || mouseHeld.l,
+		j: pressJ || keyDown(Enum.KeyCode.J) || isActionHeld("j"),
+		k: pressK || keyDown(Enum.KeyCode.K) || isActionHeld("k"),
+		l: pressL || keyDown(Enum.KeyCode.L) || isActionHeld("l"),
 	};
 }
 
@@ -158,20 +152,13 @@ export function startInput(remotes: Remotes): void {
 		touch.setVisible(inputEnabled);
 	}
 
+	// Mouse and touch presses on the action buttons are GuiButton events (actionBar.ts), so they arrive here with
+	// gameProcessed = true and are skipped; this handler is keyboard only.
 	UserInputService.InputBegan.Connect((input, gameProcessed) => {
 		// Keys swallowed by chat or other GUI are ignored.
 		if (gameProcessed) return;
-		if (input.UserInputType === Enum.UserInputType.MouseButton1) {
-			// Clicking an action bar button presses it (the bar itself is hit-tested, see actionBar.ts).
-			const key = actionHitTest(input.Position.X, input.Position.Y);
-			if (key !== undefined) {
-				mouseKey = key;
-				mouseHeld[key] = true;
-				pressAction(key);
-			}
-			return;
-		}
 		if (input.UserInputType !== Enum.UserInputType.Keyboard) return;
+		if (input.KeyCode === Enum.KeyCode.V) toggleCamView();
 		heldKeys.add(input.KeyCode);
 		if (input.KeyCode === Enum.KeyCode.J) pendingJ = true;
 		else if (input.KeyCode === Enum.KeyCode.K) pendingK = true;
@@ -180,10 +167,6 @@ export function startInput(remotes: Remotes): void {
 
 	UserInputService.InputEnded.Connect((input) => {
 		if (input.UserInputType === Enum.UserInputType.Keyboard) heldKeys.delete(input.KeyCode);
-		if (input.UserInputType === Enum.UserInputType.MouseButton1 && mouseKey !== undefined) {
-			mouseHeld[mouseKey] = false;
-			mouseKey = undefined;
-		}
 	});
 
 	RunService.Heartbeat.Connect((dt) => {

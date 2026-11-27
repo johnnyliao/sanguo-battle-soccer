@@ -134,6 +134,7 @@ export function createInitialState(
         specialNoBall: def.special.noBall ?? false,
         specialBumpPct: def.special.bumpPct ?? undefined,
         weapon: def.weapon,
+        lordClass: def.lordClass,
         prevInput: { ...EMPTY_INPUT },
       };
       state.players.push(player);

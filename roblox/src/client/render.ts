@@ -220,6 +220,8 @@ export class Renderer {
 	private evq: { tick: number; events: SimEventLite[] }[] = [];
 	private focusX = 0;
 	private focusZ = 26;
+	/** Latest snapshot's side swap (second half: the teams have switched ends). */
+	private swapped = false;
 	private ballSpin = 0;
 	private lastBallPos = new Vector3(0, 0, 0);
 	private arrow: OffscreenArrow | undefined;
@@ -281,6 +283,7 @@ export class Renderer {
 		this.arrow?.destroy();
 		this.arrow = createOffscreenArrow();
 		this.setup = s;
+		this.swapped = false;
 		this.buffer = [];
 		this.clockReady = false;
 		this.players = [];
@@ -299,6 +302,7 @@ export class Renderer {
 	/** Pushes a snapshot into the interpolation buffer. */
 	onSnapshot(s: Snapshot): void {
 		this.buffer.push(s);
+		this.swapped = s.swapped;
 		if (s.events.size() > 0) {
 			this.evq.push({ tick: s.tick, events: s.events });
 			while (this.evq.size() > 120) this.evq.shift();
@@ -406,6 +410,25 @@ export class Renderer {
 			}
 		}
 		this.mfx.onEvent(e);
+	}
+
+	/** Local player's drawn foot position (world studs), or undefined when he has no character on the pitch. */
+	getHumanFoot(): Vector3 | undefined {
+		const hv = this.players[this.setup?.humanIdx ?? -1];
+		return hv === undefined ? undefined : hv.foot;
+	}
+
+	/**
+	 * World X direction (+1 / -1) the local player's team attacks this half. Team 0 attacks +X until the side swap
+	 * (sim field.ts attackDir), team 1 the other way; the swap flag comes from the latest snapshot.
+	 */
+	getAttackDirX(): number {
+		const s = this.setup;
+		if (s === undefined) return 1;
+		const me = s.players.find((p) => p.idx === s.humanIdx);
+		if (me === undefined) return 1;
+		const dir = me.team === 0 ? 1 : -1;
+		return this.swapped ? -dir : dir;
 	}
 
 	/** Interpolated ball world X (studs), used by the camera. */

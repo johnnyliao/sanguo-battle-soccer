@@ -1,11 +1,25 @@
 // Persistent player profile (save data) shared shape and remotes. Server owns the data; clients read it via GetProfile.
+import type { LordClass } from "shared/game/data";
 import type { LordWeapon } from "shared/net";
 const ReplicatedStorage = game.GetService("ReplicatedStorage");
 const RunService = game.GetService("RunService");
 
 export type Country = "shu" | "wei" | "wu";
 
-export const PROFILE_VERSION = 1;
+/** Version 2: lord classes, owned items and loadout (version 1 saves are migrated on load, see loadout.ts settleLoadout). */
+export const PROFILE_VERSION = 2;
+
+/** Items the lord owns: weapon ids (lord_* or a general charId) and special ids (whirl / dragonspear / featherfan or a general charId). */
+export interface OwnedItems {
+	weapons: string[];
+	specials: string[];
+}
+
+/** Equipped items. Undefined only before the lord has a class. */
+export interface Loadout {
+	weapon?: string;
+	special?: string;
+}
 
 export interface Profile {
 	version: number;
@@ -16,7 +30,11 @@ export interface Profile {
 	coins: number;
 	recruited: string[];
 	cleared: string[];
-	/** The lord's weapon. Undefined until chosen (older saves have none). */
+	/** The lord's class (流派). Undefined until chosen. */
+	lordClass?: LordClass;
+	owned: OwnedItems;
+	loadout: Loadout;
+	/** Old save field (version 1). Read only by the migration; nothing writes it any more. */
 	lordWeapon?: LordWeapon;
 }
 
@@ -34,6 +52,8 @@ export function defaultProfile(): Profile {
 		coins: 0,
 		recruited: [],
 		cleared: [],
+			owned: { weapons: [], specials: [] },
+			loadout: {},
 	};
 }
 

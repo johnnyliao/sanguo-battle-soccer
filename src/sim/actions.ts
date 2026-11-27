@@ -1,6 +1,7 @@
 import { PI, INF, abs, sqrt, sign, sin, cos, atan2, min, max, round, len } from './num';
 import type { SpecialKind } from '../data/types';
 import * as C from './constants';
+import * as LC from './lordclass';
 import { attackDir, goalMouth, inOwnArea, opponentGoalX, ownGoalX } from './field';
 import { rngInt, rngNext } from './rng';
 import {
@@ -172,7 +173,7 @@ function maxSpeedOf(state: GameState, p: Player): number {
     featherSlowMult(p),
   );
   const boostMult = p.lordBoostTicks !== undefined && p.lordBoostTicks > 0 ? C.LORD_FEATHER_BOOST_MULT : 1;
-  return (C.PLAYER_BASE_SPEED + p.stats.speed * C.PLAYER_SPEED_PER_STAT) * slowMult * sailMult * boostMult;
+  return (C.PLAYER_BASE_SPEED + p.stats.speed * C.PLAYER_SPEED_PER_STAT) * slowMult * sailMult * boostMult * LC.classSpeedMult(state, p);
 }
 
 /**
@@ -228,9 +229,18 @@ function startRecover(p: Player): void {
   p.actionTimer = C.RECOVER_TICKS;
 }
 
-function setDown(p: Player, ticks: number): void {
+/**
+ * Knocks p down for ticks and returns true. A tiebi guard's every other knockdown is held in hitstun instead (returns false).
+ * `by` is the attacker credited with a mengjiang cooldown cut; it is credited only for a new knockdown.
+ */
+function setDown(state: GameState, p: Player, ticks: number, by?: Player): boolean {
+  if (p.action !== 'down') {
+    if (LC.holdsKnockdown(state, p)) return false;
+    if (by !== undefined) LC.creditKnockdown(state, by);
+  }
   p.action = 'down';
   p.actionTimer = ticks;
+  return true;
 }
 
 function updateNormal(state: GameState, p: Player, input: InputFrame): void {
@@ -343,7 +353,7 @@ function updateTackle(state: GameState, p: Player): void {
   const done = coast(state, p, TACKLE_DAMP);
   if (!p.hitDone) {
     const victim = findVictim(state, p, (v) => {
-      return v.z < TACKLE_MAX_VICTIM_Z && distance(p.x, p.y, v.x, v.y) < p.radius + v.radius + TACKLE_CONTACT_PAD;
+      return v.z < TACKLE_MAX_VICTIM_Z && distance(p.x, p.y, v.x, v.y) < (p.radius + v.radius + TACKLE_CONTACT_PAD) * LC.tackleReachMult(p);
     });
     if (victim) {
       p.hitDone = true;
@@ -476,7 +486,7 @@ function trySpecial(state: GameState, p: Player, input: InputFrame): boolean {
 function startRampage(state: GameState, p: Player): void {
   p.stamina -= C.SPECIAL_STAMINA_COST;
   p.rampageTicks = C.RAMPAGE_TICKS;
-  p.specialCooldown = C.SPECIAL_COOLDOWN_TICKS;
+  p.specialCooldown = LC.castCooldown(p);
   p.action = 'normal';
   p.actionTimer = 0;
   state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
@@ -494,7 +504,7 @@ function startLunge(state: GameState, p: Player, input: InputFrame): void {
     p.facingY = dir.y;
   }
   p.stamina -= C.SPECIAL_STAMINA_COST;
-  p.specialCooldown = C.SPECIAL_COOLDOWN_TICKS;
+  p.specialCooldown = LC.castCooldown(p);
   p.chargeTicks = 0;
   p.action = 'lunge';
   p.actionTimer = C.LUNGE_TICKS;
@@ -569,7 +579,7 @@ function startLeap(state: GameState, p: Player): void {
     p.facingY = 0;
   }
   p.stamina -= C.SPECIAL_STAMINA_COST;
-  p.specialCooldown = C.SPECIAL_COOLDOWN_TICKS;
+  p.specialCooldown = LC.castCooldown(p);
   p.chargeTicks = 0;
   p.action = 'leap';
   p.actionTimer = C.LEAP_BACK_TICKS + C.LEAP_FLY_TICKS;
@@ -650,8 +660,7 @@ function leapVictim(state: GameState, p: Player, v: Player): void {
   let down = false;
   if (v.stamina <= 0) {
     if (v.action !== 'down') {
-      setDown(v, C.DOWN_TICKS_EXHAUSTED);
-      down = true;
+      down = setDown(state, v, C.DOWN_TICKS_EXHAUSTED, p);
     }
   } else if (v.action !== 'down' && v.action !== 'recover') {
     v.action = 'hitstun';
@@ -676,7 +685,7 @@ function startRide(state: GameState, p: Player): void {
     p.facingY = 0;
   }
   p.stamina -= C.SPECIAL_STAMINA_COST;
-  p.specialCooldown = C.SPECIAL_COOLDOWN_TICKS;
+  p.specialCooldown = LC.castCooldown(p);
   p.chargeTicks = 0;
   p.rideHits = [];
   p.action = 'ride';
@@ -767,8 +776,7 @@ function rideBump(state: GameState, p: Player, v: Player, lateral: number): void
   v.stamina = max(0, v.stamina - cost);
   let down = false;
   if (v.stamina <= 0) {
-    setDown(v, C.DOWN_TICKS_EXHAUSTED);
-    down = true;
+    down = setDown(state, v, C.DOWN_TICKS_EXHAUSTED, p);
   } else {
     v.action = 'hitstun';
     v.actionTimer = C.RIDE_HITSTUN_TICKS;
@@ -800,7 +808,7 @@ function startBeamCast(state: GameState, p: Player): void {
   p.facingX = aim.x;
   p.facingY = aim.y;
   p.stamina -= C.SPECIAL_STAMINA_COST;
-  p.specialCooldown = C.SPECIAL_COOLDOWN_TICKS;
+  p.specialCooldown = LC.castCooldown(p);
   p.chargeTicks = 0;
   p.vx = 0;
   p.vy = 0;
@@ -860,10 +868,10 @@ function beamStrikeVictim(state: GameState, p: Player, v: Player): void {
   v.chargeTicks = 0;
   const damage = C.BEAM_STRIKE_STAMINA_RATIO * v.maxStamina;
   v.stamina = max(0, v.stamina - damage);
-  setDown(v, C.DOWN_TICKS_KNOCKED);
+  const wentDown = setDown(state, v, C.DOWN_TICKS_KNOCKED, p);
 
   state.events.push({ type: 'hit', attackerIdx: p.idx, victimIdx: v.idx, kind: 'special', damage });
-  state.events.push({ type: 'down', playerIdx: v.idx });
+  if (wentDown) state.events.push({ type: 'down', playerIdx: v.idx });
   if (state.ball.ownerIdx === v.idx) knockLooseBall(state, p, v, dirX, dirY);
 }
 
@@ -873,7 +881,7 @@ function beamStrikeVictim(state: GameState, p: Player, v: Player): void {
  */
 function startSummon(state: GameState, p: Player): void {
   p.stamina -= C.SPECIAL_STAMINA_COST;
-  p.specialCooldown = C.SPECIAL_COOLDOWN_TICKS;
+  p.specialCooldown = LC.castCooldown(p);
   state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
   state.events.push({ type: 'summonStart', playerIdx: p.idx, x: p.x, y: p.y });
 
@@ -1087,7 +1095,7 @@ function tickSpecialCooldown(state: GameState, p: Player): void {
  */
 function castRoar(state: GameState, p: Player): void {
   p.stamina = max(0, p.stamina - C.SPECIAL_STAMINA_COST);
-  p.specialCooldown = C.SPECIAL_COOLDOWN_TICKS;
+  p.specialCooldown = LC.castCooldown(p);
   toNormal(p);
   const cx = p.x + p.facingX * C.ROAR_FORWARD;
   const cy = p.y + p.facingY * C.ROAR_FORWARD;
@@ -1142,8 +1150,7 @@ function roarKnock(state: GameState, p: Player, v: Player): void {
 
   let down = false;
   if (v.stamina <= 0) {
-    setDown(v, C.DOWN_TICKS_EXHAUSTED);
-    down = true;
+    down = setDown(state, v, C.DOWN_TICKS_EXHAUSTED, p);
   } else {
     v.action = 'hitstun';
     v.actionTimer = C.ROAR_STUN_TICKS;
@@ -1161,7 +1168,7 @@ function roarKnock(state: GameState, p: Player, v: Player): void {
  */
 function castFear(state: GameState, p: Player): void {
   p.stamina = max(0, p.stamina - C.SPECIAL_STAMINA_COST);
-  p.specialCooldown = C.SPECIAL_COOLDOWN_TICKS;
+  p.specialCooldown = LC.castCooldown(p);
   toNormal(p);
   state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
   const victimIdxs: number[] = [];
@@ -1189,8 +1196,7 @@ function fearVictim(state: GameState, p: Player, v: Player): void {
 
   if (v.stamina <= 0) {
     if (v.action !== 'down') {
-      setDown(v, C.DOWN_TICKS_EXHAUSTED);
-      state.events.push({ type: 'down', playerIdx: v.idx });
+      if (setDown(state, v, C.DOWN_TICKS_EXHAUSTED, p)) state.events.push({ type: 'down', playerIdx: v.idx });
     }
     return;
   }
@@ -1216,7 +1222,7 @@ function updateFear(p: Player): void {
  */
 function startTiger(state: GameState, p: Player): void {
   p.stamina -= C.SPECIAL_STAMINA_COST;
-  p.specialCooldown = C.SPECIAL_COOLDOWN_TICKS;
+  p.specialCooldown = LC.castCooldown(p);
   p.chargeTicks = 0;
   p.tigerTicks = C.TIGER_GUARD_TICKS;
   p.action = 'normal';
@@ -1267,8 +1273,7 @@ function tigerRoarKnock(state: GameState, p: Player, v: Player): void {
 
   let down = false;
   if (v.stamina <= 0) {
-    setDown(v, C.DOWN_TICKS_EXHAUSTED);
-    down = true;
+    down = setDown(state, v, C.DOWN_TICKS_EXHAUSTED, p);
   } else {
     v.action = 'hitstun';
     v.actionTimer = C.HITSTUN_TICKS;
@@ -1296,8 +1301,7 @@ export function tigerBallHit(state: GameState, tiger: Player, v: Player, dirX: n
 
   let down = false;
   if (v.stamina <= 0) {
-    setDown(v, C.DOWN_TICKS_EXHAUSTED);
-    down = true;
+    down = setDown(state, v, C.DOWN_TICKS_EXHAUSTED, tiger);
   } else {
     v.action = 'hitstun';
     v.actionTimer = C.TIGER_STUN_TICKS;
@@ -1326,7 +1330,7 @@ export function endTigerWindows(state: GameState): void {
  */
 function startSlash(state: GameState, p: Player): void {
   p.stamina -= C.SPECIAL_STAMINA_COST;
-  p.specialCooldown = C.SPECIAL_COOLDOWN_TICKS;
+  p.specialCooldown = LC.castCooldown(p);
   p.chargeTicks = 0;
   p.slashTicks = C.SLASH_TICKS;
   p.action = 'normal';
@@ -1477,8 +1481,7 @@ function slashVictim(state: GameState, p: Player, v: Player): void {
 
   let down = false;
   if (v.stamina <= 0) {
-    setDown(v, C.DOWN_TICKS_EXHAUSTED);
-    down = true;
+    down = setDown(state, v, C.DOWN_TICKS_EXHAUSTED, p);
   } else {
     v.action = 'hitstun';
     v.actionTimer = C.SLASH_HITSTUN_TICKS;
@@ -1514,7 +1517,7 @@ export function endSlashWindows(state: GameState): void {
  */
 function startIcefield(state: GameState, p: Player): void {
   p.stamina -= C.SPECIAL_STAMINA_COST;
-  p.specialCooldown = C.SPECIAL_COOLDOWN_TICKS;
+  p.specialCooldown = LC.castCooldown(p);
   const fieldId = state.nextIceId++;
   state.iceFields.push({ id: fieldId, ownerIdx: p.idx, team: p.team, x: p.x, y: p.y, ticks: 0 });
   state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
@@ -1551,8 +1554,7 @@ function icePulse(state: GameState, f: IceField): void {
     victimIdxs.push(v.idx);
     state.events.push({ type: 'hit', attackerIdx: f.ownerIdx, victimIdx: v.idx, kind: 'special', damage: cost });
     if (v.stamina <= 0) {
-      setDown(v, C.DOWN_TICKS_EXHAUSTED);
-      state.events.push({ type: 'down', playerIdx: v.idx });
+      if (setDown(state, v, C.DOWN_TICKS_EXHAUSTED, state.players[f.ownerIdx])) state.events.push({ type: 'down', playerIdx: v.idx });
     }
   }
   state.events.push({ type: 'icePulse', fieldId: f.id, victimIdxs });
@@ -1571,7 +1573,7 @@ export function endIcefields(state: GameState): void {
  */
 function startGust(state: GameState, p: Player): void {
   p.stamina -= C.SPECIAL_STAMINA_COST;
-  p.specialCooldown = C.SPECIAL_COOLDOWN_TICKS;
+  p.specialCooldown = LC.castCooldown(p);
   const attack = attackDir(state, p.team);
   const side = p.facingX !== 0 ? sign(p.facingX) : attack;
   let target: Player | undefined = undefined;
@@ -1658,11 +1660,11 @@ function launchGustVictim(state: GameState, g: Gust, caster: Player, v: Player):
   v.vz = C.GUST_LAUNCH_VZ;
   const damage = C.GUST_STAMINA_RATIO * v.maxStamina;
   v.stamina = max(0, v.stamina - damage);
-  setDown(v, v.stamina <= 0 ? max(C.GUST_LAUNCH_TICKS, C.DOWN_TICKS_EXHAUSTED) : C.GUST_LAUNCH_TICKS);
+  const wentDown = setDown(state, v, v.stamina <= 0 ? max(C.GUST_LAUNCH_TICKS, C.DOWN_TICKS_EXHAUSTED) : C.GUST_LAUNCH_TICKS, caster);
 
   state.events.push({ type: 'hit', attackerIdx: g.ownerIdx, victimIdx: v.idx, kind: 'special', damage });
   if (state.ball.ownerIdx === v.idx) knockLooseBall(state, caster, v, dirX, dirY);
-  state.events.push({ type: 'down', playerIdx: v.idx });
+  if (wentDown) state.events.push({ type: 'down', playerIdx: v.idx });
 }
 
 /** Clears every pending gust without an eruption (the phase left play). */
@@ -1677,7 +1679,7 @@ export function endGusts(state: GameState): void {
  */
 function startPortal(state: GameState, p: Player): void {
   p.stamina -= C.SPECIAL_STAMINA_COST;
-  p.specialCooldown = C.SPECIAL_COOLDOWN_TICKS;
+  p.specialCooldown = LC.castCooldown(p);
   const portalId = state.nextPortalId++;
   state.portals.push({ id: portalId, ownerIdx: p.idx, team: p.team, x: p.x, y: p.y, ticks: 0, summoned: false });
   state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
@@ -1754,8 +1756,7 @@ function portalPulse(state: GameState, f: Portal): void {
     v.stamina = max(0, v.stamina - cost);
     state.events.push({ type: 'hit', attackerIdx: f.ownerIdx, victimIdx: v.idx, kind: 'special', damage: cost });
     if (v.stamina <= 0) {
-      setDown(v, C.DOWN_TICKS_EXHAUSTED);
-      state.events.push({ type: 'down', playerIdx: v.idx });
+      if (setDown(state, v, C.DOWN_TICKS_EXHAUSTED, state.players[f.ownerIdx])) state.events.push({ type: 'down', playerIdx: v.idx });
     }
   }
 }
@@ -1773,7 +1774,7 @@ export function endPortals(state: GameState): void {
  */
 function startEastwind(state: GameState, p: Player): void {
   p.stamina -= C.SPECIAL_STAMINA_COST;
-  p.specialCooldown = C.SPECIAL_COOLDOWN_TICKS;
+  p.specialCooldown = LC.castCooldown(p);
   const windId = state.nextEastWindId++;
   state.eastwinds.push({ id: windId, ownerIdx: p.idx, team: p.team, x: p.x, y: p.y, ticks: 0 });
   state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
@@ -1868,8 +1869,7 @@ function eastwindPulse(state: GameState, f: EastWind): void {
     v.stamina = max(0, v.stamina - cost);
     state.events.push({ type: 'hit', attackerIdx: f.ownerIdx, victimIdx: v.idx, kind: 'special', damage: cost });
     if (v.stamina <= 0) {
-      setDown(v, C.DOWN_TICKS_EXHAUSTED);
-      state.events.push({ type: 'down', playerIdx: v.idx });
+      if (setDown(state, v, C.DOWN_TICKS_EXHAUSTED, state.players[f.ownerIdx])) state.events.push({ type: 'down', playerIdx: v.idx });
     }
   }
 }
@@ -1898,7 +1898,7 @@ export function endEastwinds(state: GameState): void {
  */
 function startArrowship(state: GameState, p: Player): void {
   p.stamina -= C.SPECIAL_STAMINA_COST;
-  p.specialCooldown = C.SPECIAL_COOLDOWN_TICKS;
+  p.specialCooldown = LC.castCooldown(p);
   p.chargeTicks = 0;
   p.arrowshipUp = true;
   const shipId = state.nextArrowShipId++;
@@ -1957,8 +1957,7 @@ function arrowshipKnock(state: GameState, s: ArrowShip, v: Player): void {
 
   let down = false;
   if (v.stamina <= 0) {
-    setDown(v, C.DOWN_TICKS_EXHAUSTED);
-    down = true;
+    down = setDown(state, v, C.DOWN_TICKS_EXHAUSTED, state.players[s.ownerIdx]);
   } else {
     v.action = 'hitstun';
     v.actionTimer = C.ARROWSHIP_STUN_TICKS;
@@ -2046,7 +2045,7 @@ export function endArrowships(state: GameState): void {
  */
 function startSail(state: GameState, p: Player): void {
   p.stamina -= C.SPECIAL_STAMINA_COST;
-  p.specialCooldown = C.SPECIAL_COOLDOWN_TICKS;
+  p.specialCooldown = LC.castCooldown(p);
   p.sailTicks = C.SAIL_TICKS;
   p.action = 'normal';
   p.actionTimer = 0;
@@ -2126,11 +2125,11 @@ function sailCrash(state: GameState, sailor: Player, v: Player): void {
   const damage = C.SAIL_CRASH_STAMINA_RATIO * v.maxStamina;
   v.stamina = max(0, v.stamina - damage);
   // Airborne for LAUNCH_AIR_TICKS, down for the whole time; an emptied victim stays down for the longer exhausted time.
-  setDown(v, v.stamina <= 0 ? max(C.SAIL_LAUNCH_TICKS, C.DOWN_TICKS_EXHAUSTED) : C.SAIL_LAUNCH_TICKS);
+  const wentDown = setDown(state, v, v.stamina <= 0 ? max(C.SAIL_LAUNCH_TICKS, C.DOWN_TICKS_EXHAUSTED) : C.SAIL_LAUNCH_TICKS, sailor);
 
   state.events.push({ type: 'hit', attackerIdx: sailor.idx, victimIdx: v.idx, kind: 'special', damage });
   if (state.ball.ownerIdx === v.idx) knockLooseBall(state, sailor, v, dirX, dirY);
-  state.events.push({ type: 'down', playerIdx: v.idx });
+  if (wentDown) state.events.push({ type: 'down', playerIdx: v.idx });
   endSail(state, sailor);
 }
 
@@ -2224,6 +2223,7 @@ function rampageAtGoalMouth(state: GameState, p: Player): boolean {
 /** Ball leaves the owner. The ball keeps its current (dribble) position. */
 function releaseBall(state: GameState, p: Player, vx: number, vy: number, vz: number): void {
   const ball = state.ball;
+  LC.clearBallMarks(ball);
   ball.ownerIdx = -1;
   ball.lastTouchIdx = p.idx;
   ball.vx = vx;
@@ -2398,6 +2398,7 @@ function passBall(state: GameState, p: Player): void {
     const t = dist / C.PASS_LOB_SPEED;
     releaseBall(state, p, ux * C.PASS_LOB_SPEED, uy * C.PASS_LOB_SPEED, min(PASS_LOB_MAX_VZ, 0.5 * C.GRAVITY * t));
   }
+  LC.markPass(state, p);
   state.events.push({ type: 'kick', playerIdx: p.idx, kind: 'pass', targetIdx: idx });
 }
 
@@ -2431,11 +2432,9 @@ export function applySpecialHit(
 
   let down = false;
   if (victim.stamina <= 0) {
-    setDown(victim, C.DOWN_TICKS_EXHAUSTED);
-    down = true;
+    down = setDown(state, victim, C.DOWN_TICKS_EXHAUSTED, shooter);
   } else if (kind === 'pierce') {
-    setDown(victim, downTicks);
-    down = true;
+    down = setDown(state, victim, downTicks, shooter);
   } else {
     victim.action = 'hitstun';
     victim.actionTimer = C.HITSTUN_TICKS;
@@ -2522,7 +2521,7 @@ function rampageBump(state: GameState, rampager: Player, victim: Player, dist: n
   victim.stamina = max(0, victim.stamina - cost);
 
   // Sent flying: always knocked down (longer when it empties his stamina).
-  setDown(victim, victim.stamina <= 0 ? C.DOWN_TICKS_EXHAUSTED : C.DOWN_TICKS_KNOCKED);
+  const wentDown = setDown(state, victim, victim.stamina <= 0 ? C.DOWN_TICKS_EXHAUSTED : C.DOWN_TICKS_KNOCKED, rampager);
 
   state.events.push({
     type: 'hit',
@@ -2531,7 +2530,7 @@ function rampageBump(state: GameState, rampager: Player, victim: Player, dist: n
     kind: 'special',
     damage: cost,
   });
-  state.events.push({ type: 'down', playerIdx: victim.idx });
+  if (wentDown) state.events.push({ type: 'down', playerIdx: victim.idx });
   if (rampager.action === 'lunge') lungeHeal(state, rampager);
 }
 
@@ -2576,11 +2575,9 @@ function applyHit(state: GameState, attacker: Player, victim: Player, kind: Atta
 
   let down = false;
   if (victim.stamina <= 0) {
-    setDown(victim, C.DOWN_TICKS_EXHAUSTED);
-    down = true;
+    down = setDown(state, victim, C.DOWN_TICKS_EXHAUSTED, attacker);
   } else if (kind !== 'punch') {
-    setDown(victim, C.DOWN_TICKS_KNOCKED);
-    down = true;
+    down = setDown(state, victim, C.DOWN_TICKS_KNOCKED, attacker);
   } else {
     victim.action = 'hitstun';
     victim.actionTimer = C.HITSTUN_TICKS;
@@ -2601,6 +2598,8 @@ function applyHit(state: GameState, attacker: Player, victim: Player, kind: Atta
 
 /** A hit knocks the ball out of the victim's control, launched along the hit direction. */
 export function knockLooseBall(state: GameState, attacker: Player, victim: Player, dirX: number, dirY: number): void {
+  if (LC.shieldAbsorbs(state, victim)) return;
+  LC.noteBallLost(state, attacker);
   const ball = state.ball;
   ball.ownerIdx = -1;
   // The attacker's hit is the last touch, so a knock-in (even into the victim's own goal) is credited to the attacker.
@@ -2802,8 +2801,7 @@ function windpuffVictim(state: GameState, attacker: Player, w: Windpuff, v: Play
 
   let down = false;
   if (v.stamina <= 0) {
-    setDown(v, C.DOWN_TICKS_EXHAUSTED);
-    down = true;
+    down = setDown(state, v, C.DOWN_TICKS_EXHAUSTED, attacker);
   } else {
     v.action = 'hitstun';
     v.actionTimer = C.HITSTUN_TICKS;
@@ -2828,7 +2826,7 @@ function startDragon(state: GameState, p: Player): void {
     p.facingY = 0;
   }
   p.stamina -= C.SPECIAL_STAMINA_COST;
-  p.specialCooldown = C.SPECIAL_COOLDOWN_TICKS;
+  p.specialCooldown = LC.castCooldown(p);
   p.chargeTicks = 0;
   p.vx = 0;
   p.vy = 0;
@@ -2953,7 +2951,7 @@ export function endLordProjectiles(state: GameState): void {
  */
 function startWhirl(state: GameState, p: Player): void {
   p.stamina -= C.SPECIAL_STAMINA_COST;
-  p.specialCooldown = C.SPECIAL_COOLDOWN_TICKS;
+  p.specialCooldown = LC.castCooldown(p);
   p.chargeTicks = 0;
   p.whirlTicks = C.LORD_WHIRL_TICKS;
   p.whirlHits = [];
@@ -3032,7 +3030,7 @@ function startFeatherfan(state: GameState, p: Player): void {
     p.facingY = 0;
   }
   p.stamina -= C.SPECIAL_STAMINA_COST;
-  p.specialCooldown = C.SPECIAL_COOLDOWN_TICKS;
+  p.specialCooldown = LC.castCooldown(p);
   p.chargeTicks = 0;
   state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
   p.lordBoostTicks = C.LORD_FEATHER_BOOST_TICKS;
@@ -3076,8 +3074,7 @@ function featherVictim(state: GameState, p: Player, v: Player): void {
 
   let down = false;
   if (v.stamina <= 0) {
-    setDown(v, C.DOWN_TICKS_EXHAUSTED);
-    down = true;
+    down = setDown(state, v, C.DOWN_TICKS_EXHAUSTED, p);
   } else {
     v.action = 'hitstun';
     v.actionTimer = C.LORD_FEATHER_HITSTUN_TICKS;

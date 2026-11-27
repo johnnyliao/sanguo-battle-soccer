@@ -1,16 +1,11 @@
-import { actionHitTest, type ActionKey } from "./actionBar";
-
 const RunService = game.GetService("RunService");
 const UserInputService = game.GetService("UserInputService");
 
-/** Held state of the on-screen controls. */
+/** Held state of the joystick. The action buttons are read from actionBar.ts (isActionHeld / takeActionPresses). */
 export interface TouchState {
 	moveX: number; // -1 | 0 | 1
 	moveY: number; // -1 | 0 | 1
 	dash: boolean;
-	j: boolean;
-	k: boolean;
-	l: boolean;
 }
 
 /** Joystick rest centre: 110 from the left edge, 110 from the bottom. */
@@ -58,25 +53,17 @@ interface StickClaim {
 	y: number;
 }
 
-interface ButtonClaim {
-	kind: "button";
-	key: ActionKey;
-}
-
-type Claim = StickClaim | ButtonClaim;
-
 /**
- * Touch input for phones: a floating thumbstick on the left half, and the attack (J), pass / call (K) and special (L)
- * buttons on the right. The buttons are drawn by actionBar.ts; this class hit-tests them with actionHitTest.
- * Multi-touch: each finger is tracked by its InputObject.
+ * Touch input for phones: a floating thumbstick on the left half. The attack (J), pass / call (K) and special (L)
+ * buttons on the right are real GuiButtons in actionBar.ts, so a touch that lands on one is sunk by the GUI and never
+ * starts the stick. Multi-touch: each finger is tracked by its InputObject.
  */
 export class TouchControls {
 	private readonly gui: ScreenGui;
 	private readonly root: Frame;
 	private readonly stickBase: Frame;
 	private readonly knob: Frame;
-	private readonly claims = new Map<InputObject, Claim>();
-	private readonly pendingPress = new Set<ActionKey>();
+	private readonly claims = new Map<InputObject, StickClaim>();
 	private visible = true;
 
 	constructor(gui: ScreenGui) {
@@ -87,8 +74,8 @@ export class TouchControls {
 		this.knob = circle(this.stickBase, KNOB_R * 2, WHITE, 0.6);
 		this.knob.Position = new UDim2(0.5, 0, 0.5, 0);
 
-		UserInputService.TouchStarted.Connect((input) => {
-			this.onTouchStarted(input);
+		UserInputService.TouchStarted.Connect((input, gameProcessed) => {
+			this.onTouchStarted(input, gameProcessed);
 		});
 		UserInputService.TouchMoved.Connect((input) => {
 			this.onTouchMoved(input);
@@ -101,21 +88,11 @@ export class TouchControls {
 		});
 	}
 
-	/**
-	 * Current held state, once per sample. A button pressed since the previous call is reported as held even if it was
-	 * already released (a quick tap). All false while hidden.
-	 */
+	/** Current joystick state, once per sample. All false while hidden. */
 	state(): TouchState {
-		const out: TouchState = { moveX: 0, moveY: 0, dash: false, j: false, k: false, l: false };
-		if (!this.visible) {
-			this.pendingPress.clear();
-			return out;
-		}
+		const out: TouchState = { moveX: 0, moveY: 0, dash: false };
+		if (!this.visible) return out;
 		for (const [, claim] of this.claims) {
-			if (claim.kind === "button") {
-				out[claim.key] = true;
-				continue;
-			}
 			const dx = claim.x - claim.ox;
 			const dy = claim.y - claim.oy;
 			const len = math.sqrt(dx * dx + dy * dy);
@@ -124,8 +101,6 @@ export class TouchControls {
 			if (math.abs(dy) > AXIS_RATIO * len) out.moveY = dy > 0 ? 1 : -1;
 			if (len > DASH_RATIO * STICK_R) out.dash = true;
 		}
-		for (const key of this.pendingPress) out[key] = true;
-		this.pendingPress.clear();
 		return out;
 	}
 
@@ -133,29 +108,19 @@ export class TouchControls {
 	setVisible(visible: boolean): void {
 		this.visible = visible;
 		this.root.Visible = visible;
-		if (!visible) {
-			this.claims.clear();
-			this.pendingPress.clear();
-		}
+		if (!visible) this.claims.clear();
 	}
 
 	private findStick(): StickClaim | undefined {
-		for (const [, claim] of this.claims) {
-			if (claim.kind === "stick") return claim;
-		}
+		for (const [, claim] of this.claims) return claim;
 		return undefined;
 	}
 
-	private onTouchStarted(input: InputObject): void {
-		if (!this.visible) return;
+	/** A touch that the GUI sank (it landed on an action button or another GUI) never starts the stick. */
+	private onTouchStarted(input: InputObject, gameProcessed: boolean): void {
+		if (!this.visible || gameProcessed) return;
 		const x = input.Position.X;
 		const y = input.Position.Y;
-		const key = actionHitTest(x, y);
-		if (key !== undefined) {
-			this.claims.set(input, { kind: "button", key });
-			this.pendingPress.add(key);
-			return;
-		}
 		if (x < this.gui.AbsoluteSize.X * 0.5 && this.findStick() === undefined) {
 			this.claims.set(input, { kind: "stick", ox: x, oy: y, x, y });
 		}
@@ -164,15 +129,8 @@ export class TouchControls {
 	private onTouchMoved(input: InputObject): void {
 		const claim = this.claims.get(input);
 		if (claim === undefined) return;
-		const x = input.Position.X;
-		const y = input.Position.Y;
-		if (claim.kind === "stick") {
-			claim.x = x;
-			claim.y = y;
-		} else if (actionHitTest(x, y) !== claim.key) {
-			// Sliding off a button releases it.
-			this.claims.delete(input);
-		}
+		claim.x = input.Position.X;
+		claim.y = input.Position.Y;
 	}
 
 	private draw(): void {

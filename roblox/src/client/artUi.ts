@@ -76,7 +76,8 @@ export function artButton(parent: Instance, skin: ArtSkin, size: UDim2, pos: UDi
 
 /**
  * Card or banner button whose art keeps its own aspect ratio (aspect = width / height). The height sets the size, so
- * text placed over the art lines up with the art. color (optional) tints the box behind the transparent parts of the art.
+ * text placed over the art lines up with the art. color (optional) fills only the picture window of the card frame
+ * (0.11–0.90 × 0.13–0.645 of the card, named CardColor, ZIndex 1); the rest of the card stays the art itself.
  */
 export function artCard(
 	parent: Instance,
@@ -90,13 +91,36 @@ export function artCard(
 	b.BackgroundTransparency = 1;
 	b.BorderSizePixel = 0;
 	b.AutoButtonColor = false;
-	b.ScaleType = Enum.ScaleType.Fit;
-	b.Image = image;
+	b.Image = "";
 	b.Size = size;
 	b.Position = pos;
+	// Children always draw above their parent, so the frame art is a child image (ZIndex 2) above the colour window (1).
+	const art = new Instance("ImageLabel");
+	art.Name = "CardFrame";
+	art.BackgroundTransparency = 1;
+	art.ScaleType = Enum.ScaleType.Fit;
+	art.Image = image;
+	art.Size = UDim2.fromScale(1, 1);
+	art.ZIndex = 2;
+	art.Parent = b;
 	if (color !== undefined) {
-		b.BackgroundColor3 = color;
-		b.BackgroundTransparency = 0.3;
+		const win = new Instance("Frame");
+		win.Name = "CardColor";
+		win.Position = UDim2.fromScale(0.11, 0.13);
+		win.Size = UDim2.fromScale(0.79, 0.515);
+		win.BackgroundColor3 = color;
+		win.BackgroundTransparency = 0;
+		win.BorderSizePixel = 0;
+		win.ZIndex = 1;
+		const corner = new Instance("UICorner");
+		corner.CornerRadius = new UDim(0.04, 0);
+		corner.Parent = win;
+		// Top is the full colour, the bottom darkens, so the window reads as lit from above.
+		const shade = new Instance("UIGradient");
+		shade.Rotation = 90;
+		shade.Color = new ColorSequence(Color3.fromRGB(255, 255, 255), Color3.fromRGB(120, 120, 120));
+		shade.Parent = win;
+		win.Parent = b;
 	}
 	b.Parent = parent;
 	const ratio = new Instance("UIAspectRatioConstraint");

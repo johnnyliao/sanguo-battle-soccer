@@ -465,6 +465,7 @@ export function createTutorialUi(remotes: Remotes): void {
 		if (s === undefined) return WEAPON_SPECIAL.sword;
 		const humanIdx = s.humanIdx;
 		const me = s.players.find((p) => p.idx === humanIdx);
+		if (me !== undefined && me.specialName !== undefined) return me.specialName;
 		const weapon = me === undefined ? undefined : me.weapon;
 		return weapon === undefined ? WEAPON_SPECIAL.sword : WEAPON_SPECIAL[weapon];
 	};

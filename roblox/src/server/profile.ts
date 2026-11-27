@@ -1,5 +1,6 @@
 // Server-side save data for player profiles. DataStore with in-memory fallback (Studio / unpublished place).
 import { defaultProfile, getProfileRemotes, parseLordWeapon, PROFILE_VERSION, type Country, type Profile } from "shared/profileTypes";
+import { isSpecialId, isWeaponId, parseLordClass, settleLoadout } from "shared/loadout";
 
 const DataStoreService = game.GetService("DataStoreService");
 const Players = game.GetService("Players");
@@ -29,7 +30,13 @@ function keyFor(player: Player): string {
 }
 
 function copyProfile(p: Profile): Profile {
-	return { ...p, recruited: [...p.recruited], cleared: [...p.cleared] };
+	return {
+		...p,
+		recruited: [...p.recruited],
+		cleared: [...p.cleared],
+		owned: { weapons: [...p.owned.weapons], specials: [...p.owned.specials] },
+		loadout: { ...p.loadout },
+	};
 }
 
 function parseCountry(v: unknown): Country | undefined {
@@ -51,13 +58,25 @@ function asStringArray(v: unknown): string[] {
 	return out;
 }
 
-/** Fills missing fields from defaults and replaces invalid ones. Never throws. */
+/** Keeps the strings that pass the id check (unknown ids and duplicates are dropped). */
+function asItemIds(v: unknown, valid: (id: string) => boolean): string[] {
+	const out: string[] = [];
+	for (const id of asStringArray(v)) {
+		if (valid(id) && !out.includes(id)) out.push(id);
+	}
+	return out;
+}
+
+/** Fills missing fields from defaults and replaces invalid ones, then settles the lord's class and loadout (old saves
+ *  are migrated here). Never throws. */
 function sanitizeProfile(raw: unknown): Profile {
 	const d = defaultProfile();
 	if (!typeIs(raw, "table")) return d;
 	const r = raw as { [key: string]: unknown };
 	const starter = r.starter;
-	return {
+	const owned = typeIs(r.owned, "table") ? (r.owned as { [key: string]: unknown }) : {};
+	const loadout = typeIs(r.loadout, "table") ? (r.loadout as { [key: string]: unknown }) : {};
+	const p: Profile = {
 		version: PROFILE_VERSION,
 		country: parseCountry(r.country),
 		starter: typeIs(starter, "string") ? starter : undefined,
@@ -66,8 +85,19 @@ function sanitizeProfile(raw: unknown): Profile {
 		coins: asNumber(r.coins, d.coins, 0),
 		recruited: asStringArray(r.recruited),
 		cleared: asStringArray(r.cleared),
+		lordClass: parseLordClass(r.lordClass),
+		owned: {
+			weapons: asItemIds(owned.weapons, isWeaponId),
+			specials: asItemIds(owned.specials, isSpecialId),
+		},
+		loadout: {
+			weapon: typeIs(loadout.weapon, "string") && isWeaponId(loadout.weapon) ? loadout.weapon : undefined,
+			special: typeIs(loadout.special, "string") && isSpecialId(loadout.special) ? loadout.special : undefined,
+		},
 		lordWeapon: parseLordWeapon(r.lordWeapon),
 	};
+	settleLoadout(p);
+	return p;
 }
 
 /** Switches the session to in-memory profiles. Warns only on the first switch. */

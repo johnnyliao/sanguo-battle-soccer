@@ -22,6 +22,9 @@ function resetProfile(player: Player): void {
 		p.coins = d.coins;
 		p.recruited = d.recruited;
 		p.cleared = d.cleared;
+		p.lordClass = d.lordClass;
+		p.owned = d.owned;
+		p.loadout = d.loadout;
 		p.lordWeapon = d.lordWeapon;
 	});
 	saveProfile(player);

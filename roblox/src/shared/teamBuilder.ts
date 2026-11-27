@@ -1,7 +1,8 @@
 // Builds CharacterDef arrays for story matches: the player's team (lord, starter, recruits, own soldiers) and the
 // enemy team of a stage. Story teams are never normalized (only the quick match getTeam() normalizes).
-import { RAW_CHARACTERS, getTeam, type CharacterDef, type Role, type Stats } from "shared/game/data";
-import type { Country, LordWeapon } from "shared/net";
+import { RAW_CHARACTERS, getTeam, type CharacterDef, type LordClass, type Role, type Stats } from "shared/game/data";
+import { attackFor, classInfo, effectiveSpecial, effectiveWeapon, lordSpecialName, lordStatsFor } from "shared/loadout";
+import type { Country } from "shared/net";
 import type { Profile } from "shared/profileTypes";
 import { RIVAL, type StageDef } from "shared/story";
 
@@ -15,10 +16,6 @@ const ROLES_BY_SIZE: Role[][] = [
 	["GK", "DF", "MF", "MF", "FW"],
 ];
 
-const LORD_BASE_STATS: Stats = { power: 5, speed: 6, stamina: 6, technique: 5, defense: 4 };
-const LORD_MAX_LEVEL = 30;
-const STAT_CAP = 9;
-const STAT_KEYS: (keyof Stats)[] = ["power", "speed", "stamina", "technique", "defense"];
 const BOSS_STAT_SCALE = 0.75;
 /** Role used for the boss of huangjin stage 2 (1v1, so it lands in slot 0 anyway). */
 const HUANGJIN_BOSS_ROLE: Role = "FW";
@@ -65,41 +62,50 @@ function checkTeam(team: CharacterDef[], teamSize: number, label: string): Chara
 	return team;
 }
 
-/** Each lord weapon's special (name and mode match specialText.ts / the sim's special modes). */
-const LORD_SPECIAL: Record<LordWeapon, CharacterDef["special"]> = {
-	sword: { name: "天子劍・旋風斬", kind: "straight", mode: "whirl", noBall: true },
-	spear: { name: "破陣槍・龍騰", kind: "straight", mode: "dragonspear", noBall: true },
-	fan: { name: "鳳翼扇・羽風陣", kind: "straight", mode: "featherfan", noBall: true },
+/** Formation slot preference of each class (first role with a free slot wins): 猛將 FW; 軍師 MF, FW when the team has no MF;
+ *  鐵壁 DF. In a 1v1 the only slot is FW for everyone. */
+const LORD_SLOT_PREF: Record<LordClass, Role[]> = {
+	mengjiang: ["FW", "MF", "DF"],
+	junshi: ["MF", "FW", "DF"],
+	tiebi: ["DF", "MF", "FW"],
 };
 
-/** Lord (the player's own character). charId `lord_<userId>`. Lv1 5/6/6/5/4; each level after 1 adds +1 round-robin. Weapon sets def.weapon and the matching special. */
-export function lordDef(
-	userId: number,
-	displayName: string,
-	country: Country,
-	level: number,
-	weapon: LordWeapon,
-): CharacterDef {
-	const stats = copyStats(LORD_BASE_STATS);
-	const steps = math.clamp(math.floor(level), 1, LORD_MAX_LEVEL) - 1;
-	let k = 0;
-	for (let i = 0; i < steps; i++) {
-		// Skip stats already at the cap; at most one full loop.
-		for (let tries = 0; tries < STAT_KEYS.size() && stats[STAT_KEYS[k]] >= STAT_CAP; tries++) {
-			k = (k + 1) % STAT_KEYS.size();
+/** Slot index of the lord in a team of teamSize: the first slot whose role matches his class (see LORD_SLOT_PREF). */
+export function lordSlot(lordClass: LordClass, teamSize: number): number {
+	const roles = rolesFor(teamSize);
+	for (const want of LORD_SLOT_PREF[lordClass]) {
+		for (let i = 0; i < roles.size(); i++) {
+			if (roles[i] === want) return i;
 		}
-		if (stats[STAT_KEYS[k]] < STAT_CAP) stats[STAT_KEYS[k]] += 1;
-		k = (k + 1) % STAT_KEYS.size();
 	}
+	error(`teamBuilder: no slot for lord class ${lordClass} in a team of ${teamSize}`);
+}
+
+/**
+ * Lord (the player's own character), charId `lord_<userId>`, built from the profile: role = class position (the team slot
+ * decides the real role, see buildPlayerTeam), stats = lordStatsFor(class, level, equipped weapon), weapon = attack type of
+ * the equipped weapon, special = the equipped special. Items that cannot be equipped yet fall back to the class starter.
+ */
+export function lordDef(userId: number, displayName: string, country: Country, profile: Profile): CharacterDef {
+	const cls = profile.lordClass;
+	if (cls === undefined) error("teamBuilder: lord has no class");
+	const equipWeapon = effectiveWeapon(cls, profile.loadout.weapon);
+	const specialId = effectiveSpecial(cls, profile.loadout.special);
 	return {
 		id: `lord_${userId}`,
 		name: displayName,
 		country,
-		role: "FW",
+		role: classInfo(cls).role,
 		size: "M",
-		stats,
-		weapon,
-		special: { ...LORD_SPECIAL[weapon] },
+		stats: lordStatsFor(cls, profile.lordLevel, equipWeapon),
+		weapon: attackFor(equipWeapon, cls),
+		lordClass: cls,
+		special: {
+			name: lordSpecialName(specialId) ?? specialId,
+			kind: "straight",
+			mode: specialId as CharacterDef["special"]["mode"],
+			noBall: true,
+		},
 	};
 }
 
@@ -157,34 +163,108 @@ export function bossDef(charId: string): CharacterDef {
 	};
 }
 
+/** Formation line, back to front: the distance between two roles is the difference of their indices here. */
+const LINE: Role[] = ["GK", "DF", "MF", "FW"];
+/** Order in which the slots pick their general: goal first (the most limited), then attack, midfield and defence. */
+const SLOT_PRIORITY: Role[] = ["GK", "FW", "MF", "DF"];
+
+/** Who plays in a slot of the player team. */
+export type SlotFill = { kind: "lord" } | { kind: "general"; def: CharacterDef } | { kind: "soldier" };
+
+/** One slot of the player lineup: its formation role and who plays there. */
+export interface LineupSlot {
+	role: Role;
+	fill: SlotFill;
+}
+
 /**
- * Player team for a story match, slot order = formation. The last slot is the lord (FW). The other slots take the
- * starter, then recruits in recruit order, then own soldiers. Each def gets the slot role.
+ * Distance on the line GK–DF–MF–FW between a general's natural role and a slot role, or undefined when he may not play
+ * there. Goal takes only a GK or a DF general: an attacker or midfielder is never put in goal (a soldier is used instead).
  */
-export function buildPlayerTeam(profile: Profile, lord: CharacterDef, teamSize: number): CharacterDef[] {
-	const country = profile.country;
-	const starter = profile.starter;
-	if (country === undefined || starter === undefined) {
-		error("teamBuilder: profile has no country or starter");
+function fitDistance(natural: Role, slot: Role): number | undefined {
+	if (slot === "GK" && natural !== "GK" && natural !== "DF") return undefined;
+	return math.abs(LINE.indexOf(natural) - LINE.indexOf(slot));
+}
+
+/**
+ * Slot assignment of a player team (pure and deterministic). The lord keeps lordIdx. The other slots are filled in
+ * SLOT_PRIORITY order (formation order within a role). Each slot takes the available general with the smallest
+ * fitDistance; ties go to the earlier general in `generals` (starter first, then recruits in recruit order). A slot with
+ * no fitting general gets an own soldier. A general keeps his natural role when it matches the slot.
+ */
+export function assignSlots(roles: Role[], lordIdx: number, generals: CharacterDef[]): SlotFill[] {
+	const fills: SlotFill[] = roles.map((): SlotFill => ({ kind: "soldier" }));
+	fills[lordIdx] = { kind: "lord" };
+	const free: CharacterDef[] = [...generals];
+	for (const want of SLOT_PRIORITY) {
+		for (let slot = 0; slot < roles.size(); slot++) {
+			if (slot === lordIdx || roles[slot] !== want) continue;
+			let best: number | undefined;
+			let bestDist = math.huge;
+			for (let g = 0; g < free.size(); g++) {
+				const dist = fitDistance(free[g].role, want);
+				if (dist !== undefined && dist < bestDist) {
+					best = g;
+					bestDist = dist;
+				}
+			}
+			if (best !== undefined) {
+				fills[slot] = { kind: "general", def: free[best] };
+				free.remove(best);
+			}
+		}
 	}
+	return fills;
+}
+
+/**
+ * Lineup of the player team of a story match with teamSize players, in formation order: the same slot rule as
+ * buildPlayerTeam (see assignSlots). The generals are the starter, then the recruits in recruit order.
+ */
+export function lineupFor(profile: Profile, teamSize: number): LineupSlot[] {
+	const cls = profile.lordClass;
+	const starter = profile.starter;
+	if (cls === undefined || starter === undefined) error("teamBuilder: profile has no starter or class");
 	const roles = rolesFor(teamSize);
 
 	const ids: string[] = [starter];
 	for (const id of profile.recruited) {
 		if (!ids.includes(id)) ids.push(id);
 	}
-	const pool: CharacterDef[] = [];
+	const generals: CharacterDef[] = [];
 	for (const id of ids) {
 		const d = findRaw(id);
-		if (d !== undefined && pool.size() < teamSize - 1) pool.push(d);
+		if (d !== undefined) generals.push(d);
 	}
+	const fills = assignSlots(roles, lordSlot(cls, teamSize), generals);
+	return roles.map((role, i): LineupSlot => ({ role, fill: fills[i] }));
+}
+
+/** Short label of a lineup slot for the server log, e.g. "GK:許褚". */
+function describeSlot(s: LineupSlot): string {
+	const fill = s.fill;
+	const who = fill.kind === "lord" ? "主公" : fill.kind === "general" ? fill.def.name : "士兵";
+	return `${s.role}:${who}`;
+}
+
+/**
+ * Player team for a story match, in formation order (see lineupFor): the lord takes the slot lordSlot() gives his class,
+ * generals take the slots of their role (or the nearest role), leftover slots take own soldiers. Each def gets its slot
+ * role. Prints the slots once for testers.
+ */
+export function buildPlayerTeam(profile: Profile, lord: CharacterDef, teamSize: number): CharacterDef[] {
+	const country = profile.country;
+	if (country === undefined) error("teamBuilder: profile has no country");
+	const lineup = lineupFor(profile, teamSize);
 
 	const team: CharacterDef[] = [];
-	for (let slot = 0; slot < teamSize - 1; slot++) {
-		const base = slot < pool.size() ? pool[slot] : ownSoldierDef(country);
-		team.push(withRole(base, roles[slot]));
+	for (const slot of lineup) {
+		const fill = slot.fill;
+		if (fill.kind === "lord") team.push(withRole(lord, slot.role));
+		else if (fill.kind === "general") team.push(withRole(fill.def, slot.role));
+		else team.push(withRole(ownSoldierDef(country), slot.role));
 	}
-	team.push(withRole(lord, roles[teamSize - 1]));
+	print(`[team] slots ${lineup.map(describeSlot).join(" ")}`);
 	return checkTeam(team, teamSize, "player");
 }
 

@@ -1,4 +1,4 @@
-import type { BodySize, CharacterDef, Role, SpecialKind, Stats, Weapon } from '../data/types';
+import type { BodySize, CharacterDef, LordClass, Role, SpecialKind, Stats, Weapon } from '../data/types';
 
 /** Held-button state for one tick. dash = virtual dash button. */
 export interface InputFrame {
@@ -98,6 +98,16 @@ export interface Player {
   sailPassengerOf: number;
   /** The lord's weapon (changes the basic attack). Undefined for every other character. */
   weapon?: Weapon;
+  /** The lord's class (流派); absent for every other character. See lordclass.ts. */
+  lordClass?: LordClass;
+  /** 猛將 破陣: absolute tick the ball shield was last used (ready again LORD_SHIELD_RECHARGE_TICKS later). Undefined = never used. */
+  shieldTick?: number;
+  /** Knockdowns this player has suffered; a tiebi holds every other one. Undefined until the first. */
+  knockdowns?: number;
+  /** 軍師 運籌: absolute tick until which the pass boost lasts. Undefined = none. */
+  passBoostUntil?: number;
+  /** 鐵壁 固守: absolute tick until which the team rally lasts. Undefined = none. */
+  rallyUntil?: number;
   /** Set by the server on a human-controlled player only. A basic attack with no ball first turns him to the nearest opponent in reach. Undefined = AI or no assist. */
   humanAssist?: boolean;
   /** Ticks left in the lord's whirl (旋風斬). 0 or undefined = not whirling. */
@@ -174,6 +184,11 @@ export interface Ball {
   special: SpecialShot | undefined;
   /** A swallowed shot (held, then spat) or a spat tiger ball in flight. undefined otherwise. See TigerBall. */
   tiger: TigerBall | undefined;
+  /** 軍師 運籌: the passer of a pass still in flight. Undefined otherwise (cleared by any pickup, kick or hit). */
+  passerIdx?: number;
+  /** 鐵壁 固守: the tiebi hitter whose hit knocked the ball loose, and the tick of that hit. Undefined otherwise. */
+  tiebiHitIdx?: number;
+  tiebiHitTick?: number;
 }
 
 /**
@@ -325,6 +340,16 @@ export type SimEvent =
   | { type: 'dive'; playerIdx: number }
   | { type: 'callPass'; playerIdx: number }
   | { type: 'looseBall'; playerIdx: number }
+  /** 猛將: a ball shield absorbed a ball loss (the ball stayed with him). */
+  | { type: 'shieldBlock'; playerIdx: number }
+  /** 猛將: his knockdown cut his special cooldown by ticks. */
+  | { type: 'classCdCut'; playerIdx: number; ticks: number }
+  /** 軍師: a teammate received his pass and runs faster for a while (playerIdx is the receiver). */
+  | { type: 'passBoost'; playerIdx: number }
+  /** 鐵壁: a knockdown of his was held in hitstun instead. */
+  | { type: 'guardHold'; playerIdx: number }
+  /** 鐵壁: he gained the ball, so every player of team runs faster for a while. */
+  | { type: 'teamRally'; team: 0 | 1 }
   | { type: 'kick'; playerIdx: number; kind: 'pass' | 'shot' | 'clear'; targetIdx: number }
   | { type: 'chargeFull'; playerIdx: number }
   /** A special is activated: a rampage starts or a roar fires. Emitted once per activation. */

@@ -1,6 +1,7 @@
 // Server <-> client contract for the R1a single-player match.
 // The server is authoritative: it runs shared/game/sim at 60Hz; clients only send raw buttons
 // and render the snapshots they receive.
+import type { LordClass } from "shared/game/data";
 const ReplicatedStorage = game.GetService("ReplicatedStorage");
 const RunService = game.GetService("RunService");
 
@@ -46,8 +47,14 @@ export type Command =
 	| { cmd: "story"; stageId: number }
 	/** Picks the starter general; only accepted while the profile has no starter yet. */
 	| { cmd: "chooseStarter"; country: Country; starter: string }
-	/** Sets the lord's weapon (allowed any time; saved in the profile). */
-	| { cmd: "chooseWeapon"; weapon: LordWeapon };
+	/** Compatibility: equips the lord weapon of this type (grants it if needed). Use equip instead. */
+	| { cmd: "chooseWeapon"; weapon: LordWeapon }
+	/** Chooses the lord's class (流派). The first choice also grants and equips the class starter gear. Later changes are
+	 *  allowed any time outside a story match; the equipped special is replaced by the class starter when it is not in the
+	 *  new class's pool. */
+	| { cmd: "chooseClass"; lordClass: LordClass }
+	/** Equips an owned item: slot weapon (a lord weapon id) or special (a special id in the class pool). Outside story matches. */
+	| { cmd: "equip"; slot: "weapon" | "special"; id: string };
 
 /** The lord's weapon (matches the sim's CharacterDef.weapon). */
 export type LordWeapon = "sword" | "spear" | "fan";
@@ -63,6 +70,8 @@ export interface SetupPlayer {
 	size: string; // S | M | L
 	radius: number; // sim px
 	weapon?: LordWeapon; // only on the lord
+	specialName?: string; // name of the special in use (the lord's equipped special, or a general's own)
+	specialIcon?: string; // artIds SKILL_ICON key of that special (lord specials map to their weapon icon; general = charId)
 }
 
 /** Sent once when a match starts. */

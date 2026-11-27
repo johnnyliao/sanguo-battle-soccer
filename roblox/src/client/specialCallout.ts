@@ -1,6 +1,7 @@
 // Cast callout for the lord's three specials: a diagonal name banner sliding in across the lower middle of the screen,
 // with a short white flash for the human's lord. One banner at a time (a new cast replaces the old one). Timing is real
 // time, so the banner keeps its length under the showroom time scale. clearCallout() removes it on match reset.
+import type { SetupPlayer } from "shared/net";
 import { SKILL_ICON } from "./artIds";
 import { picture } from "./artUi";
 import { WEAPON_SPECIAL } from "./actionBar";
@@ -35,8 +36,21 @@ function ensureGui(): ScreenGui | undefined {
 	return g;
 }
 
-/** Skill icon for a lord special name (the cast callout names the lord's weapon special). */
+/** The human's SetupPlayer (name and icon of his special), see setCalloutHuman. */
+let humanPlayer: SetupPlayer | undefined;
+
+/** Match setup: the human's lord, whose special's name and icon the cast banners use. Call with the human's SetupPlayer. */
+export function setCalloutHuman(me: SetupPlayer | undefined): void {
+	humanPlayer = me;
+}
+
+/** Skill icon for a cast name: the human's special from the setup. The weapon mapping is only a fallback for a setup without specialName. */
 function skillIconOf(name: string): string | undefined {
+	const me = humanPlayer;
+	if (me !== undefined && me.specialName !== undefined) {
+		if (name !== me.specialName || me.specialIcon === undefined) return undefined;
+		return SKILL_ICON[me.specialIcon];
+	}
 	if (name === WEAPON_SPECIAL.sword) return SKILL_ICON.lord_sword;
 	if (name === WEAPON_SPECIAL.spear) return SKILL_ICON.lord_spear;
 	if (name === WEAPON_SPECIAL.fan) return SKILL_ICON.lord_fan;

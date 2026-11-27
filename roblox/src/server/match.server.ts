@@ -3,7 +3,7 @@
 import { COUNTRY_INFO, getTeam, SIZE_PARAMS } from "shared/game/data";
 import { createInitialState, defaultFieldFor, type GameState, type MatchSetup } from "shared/game/sim";
 import { getRemotes, type Country, type Setup, type SetupPlayer, type StoryResult } from "shared/net";
-import { buildEnemyTeam, buildPlayerTeam, lordDef } from "shared/teamBuilder";
+import { buildEnemyTeam, buildPlayerTeam, lordDef, lordSlot } from "shared/teamBuilder";
 import {
 	clearedKey,
 	getStages,
@@ -16,6 +16,16 @@ import {
 	type StageDef,
 } from "shared/story";
 import { parseLordWeapon } from "shared/profileTypes";
+import {
+	chooseClassGear,
+	classPool,
+	effectiveSpecial,
+	effectiveWeapon,
+	isEquippableSpecial,
+	isEquippableWeapon,
+	parseLordClass,
+	specialIconKey,
+} from "shared/loadout";
 import { loadProfile, updateProfile } from "./profile";
 import { MatchInstance } from "./matchInstance";
 
@@ -38,7 +48,7 @@ Players.CharacterAutoLoads = false;
 
 /** The one running match per player. */
 const sessions = new Map<Player, MatchInstance>();
-/** Story matches that have not reached fulltime yet (the lord's weapon cannot change while one runs). */
+/** Story matches that have not reached fulltime yet (the lord's class and loadout cannot change while one runs). */
 const runningStories = new Set<MatchInstance>();
 
 function parseCountry(v: unknown): Country | undefined {
@@ -74,6 +84,8 @@ function buildSetup(
 			size: p.size,
 			radius: p.radius,
 			weapon: p.weapon,
+			specialName: p.specialName,
+			specialIcon: specialIconKey(p.charId, p.specialMode),
 		}),
 	);
 	return {
@@ -118,8 +130,9 @@ function startStory(player: Player, raw: unknown): void {
 	const profile = loadProfile(player);
 	const country = profile.country;
 	const starter = profile.starter;
-	if (country === undefined || starter === undefined || !isStarterFor(country, starter)) {
-		warn(`[story] start ignored, no starter yet: ${player.Name}`);
+	const lordClass = profile.lordClass;
+	if (country === undefined || starter === undefined || lordClass === undefined || !isStarterFor(country, starter)) {
+		warn(`[story] start ignored, no class or starter yet: ${player.Name}`);
 		return;
 	}
 	if (!isUnlocked(profile, stageId)) {
@@ -129,7 +142,7 @@ function startStory(player: Player, raw: unknown): void {
 	const stage = getStages(country, starter).find((st) => st.id === stageId);
 	if (stage === undefined) return;
 
-	const lord = lordDef(player.UserId, player.DisplayName, country, profile.lordLevel, profile.lordWeapon ?? "sword");
+	const lord = lordDef(player.UserId, player.DisplayName, country, profile);
 	const home = buildPlayerTeam(profile, lord, stage.teamSize);
 	const away = buildEnemyTeam(stage, country);
 	const seed = newSeed();
@@ -145,7 +158,8 @@ function startStory(player: Player, raw: unknown): void {
 		state.match.phase = "fulltime";
 	}
 
-	const humanIdx = stage.teamSize - 1; // home team's last slot is the lord (FW)
+	// The lord is the human: his real slot in the home team (by class, see teamBuilder lordSlot).
+	const humanIdx = lordSlot(lordClass, stage.teamSize);
 	const awayLabel = isRivalStage(stage) ? COUNTRY_INFO[RIVAL[country]].name : "黃巾軍";
 	const setup = buildSetup(state, country, RIVAL[country], humanIdx, "story", stage.id, awayLabel);
 	if (stage.goalTarget !== undefined) setup.goalTarget = stage.goalTarget;
@@ -155,6 +169,10 @@ function startStory(player: Player, raw: unknown): void {
 	replaceSession(player, inst);
 	runningStories.add(inst);
 	print(`[story] start ${player.Name} stage ${stage.id} teamSize ${stage.teamSize}`);
+	print(
+		`[story] lord loadout ${lordClass} ${effectiveWeapon(lordClass, profile.loadout.weapon)} ` +
+			`${effectiveSpecial(lordClass, profile.loadout.special)}`,
+	);
 }
 
 /** Pays the rewards for a finished story match and tells the owner. Yields (profile update). */
@@ -207,22 +225,84 @@ function finishStory(inst: MatchInstance, stage: StageDef): void {
 	);
 }
 
-/** Sets the lord's weapon. Ignored while this player's story match is running (the sim fixes the weapon at kickoff). */
+/** True while this player's story match runs: the class and loadout cannot change then (the sim fixes the lord at kickoff). */
+function storyRunning(player: Player): boolean {
+	const current = sessions.get(player);
+	return current !== undefined && runningStories.has(current);
+}
+
+/** Chooses the lord's class. Every choice grants and equips the class starter gear (chooseClassGear). Outside stories. */
+function chooseClass(player: Player, rawClass: unknown): void {
+	const lordClass = parseLordClass(rawClass);
+	if (lordClass === undefined) {
+		warn(`[profile] chooseClass rejected from ${player.Name}`);
+		return;
+	}
+	if (storyRunning(player)) {
+		warn(`[profile] chooseClass ignored, story match running: ${player.Name}`);
+		return;
+	}
+	updateProfile(player, (p) => {
+		chooseClassGear(p, lordClass);
+	});
+	print(`[profile] class chosen ${player.Name} ${lordClass}`);
+}
+
+/** Equips an owned item. slot weapon: a lord weapon. slot special: an owned special in the class pool. Outside stories. */
+function equip(player: Player, rawSlot: unknown, rawId: unknown): void {
+	if (!typeIs(rawId, "string")) {
+		warn(`[profile] equip rejected from ${player.Name}`);
+		return;
+	}
+	const id: string = rawId;
+	if (storyRunning(player)) {
+		warn(`[profile] equip ignored, story match running: ${player.Name}`);
+		return;
+	}
+	const p = loadProfile(player);
+	const cls = p.lordClass;
+	if (cls === undefined) {
+		warn(`[profile] equip ignored, no class yet: ${player.Name}`);
+		return;
+	}
+	if (rawSlot === "weapon") {
+		if (!isEquippableWeapon(id) || !p.owned.weapons.includes(id)) {
+			warn(`[profile] equip weapon rejected ${player.Name} ${id}`);
+			return;
+		}
+		updateProfile(player, (q) => {
+			q.loadout.weapon = id;
+		});
+	} else if (rawSlot === "special") {
+		if (!isEquippableSpecial(id) || !p.owned.specials.includes(id) || !classPool(cls).includes(id)) {
+			warn(`[profile] equip special rejected ${player.Name} ${id}`);
+			return;
+		}
+		updateProfile(player, (q) => {
+			q.loadout.special = id;
+		});
+	} else {
+		warn(`[profile] equip rejected from ${player.Name}`);
+	}
+}
+
+/** Compatibility for the old weapon command: equips the lord weapon of that type (granted if not owned). */
 function chooseWeapon(player: Player, rawWeapon: unknown): void {
 	const weapon = parseLordWeapon(rawWeapon);
 	if (weapon === undefined) {
 		warn(`[profile] chooseWeapon rejected from ${player.Name}`);
 		return;
 	}
-	const current = sessions.get(player);
-	if (current !== undefined && runningStories.has(current)) {
+	if (storyRunning(player)) {
 		warn(`[profile] chooseWeapon ignored, story match running: ${player.Name}`);
 		return;
 	}
+	const id = `lord_${weapon}`;
 	updateProfile(player, (p) => {
-		p.lordWeapon = weapon;
+		if (!p.owned.weapons.includes(id)) p.owned.weapons.push(id);
+		p.loadout.weapon = id;
 	});
-	print(`[profile] weapon chosen ${player.Name} ${weapon}`);
+	print(`[profile] weapon chosen ${player.Name} ${id}`);
 }
 
 function chooseStarter(player: Player, rawCountry: unknown, rawStarter: unknown): void {
@@ -237,6 +317,10 @@ function chooseStarter(player: Player, rawCountry: unknown, rawStarter: unknown)
 		warn(`[story] chooseStarter ignored, ${player.Name} already has a starter`);
 		return;
 	}
+	if (profile.lordClass === undefined) {
+		warn(`[story] chooseStarter ignored, ${player.Name} has no class yet`);
+		return;
+	}
 	updateProfile(player, (p) => {
 		p.country = country;
 		p.starter = starter;
@@ -245,10 +329,19 @@ function chooseStarter(player: Player, rawCountry: unknown, rawStarter: unknown)
 }
 
 // Commands from the menu. "start" = quick match, "story" = story stage, "chooseStarter" = first story pick,
-// "chooseWeapon" = lord weapon.
+// "chooseClass" = lord class, "equip" = lord weapon / special, "chooseWeapon" = compatibility for the old weapon command.
 remotes.Command.OnServerEvent.Connect((player, raw) => {
 	if (!typeIs(raw, "table")) return;
-	const r = raw as { cmd?: unknown; country?: unknown; stageId?: unknown; starter?: unknown; weapon?: unknown };
+	const r = raw as {
+		cmd?: unknown;
+		country?: unknown;
+		stageId?: unknown;
+		starter?: unknown;
+		weapon?: unknown;
+		lordClass?: unknown;
+		slot?: unknown;
+		id?: unknown;
+	};
 	if (r.cmd === "start") {
 		const country = parseCountry(r.country);
 		if (country === undefined) return;
@@ -259,6 +352,10 @@ remotes.Command.OnServerEvent.Connect((player, raw) => {
 		chooseStarter(player, r.country, r.starter);
 	} else if (r.cmd === "chooseWeapon") {
 		chooseWeapon(player, r.weapon);
+	} else if (r.cmd === "chooseClass") {
+		chooseClass(player, r.lordClass);
+	} else if (r.cmd === "equip") {
+		equip(player, r.slot, r.id);
 	}
 });
 

@@ -8,6 +8,7 @@ import { createStoryUi } from "./storyUi";
 import { createTutorialUi } from "./tutorialUi";
 import { startInput } from "./input";
 import { createActionBar, onActionSetup, onActionSnapshot, setActionMatch } from "./actionBar";
+import { setCalloutHuman } from "./specialCallout";
 import { Renderer } from "./render";
 import { buildWorld } from "./world";
 
@@ -56,6 +57,8 @@ remotes.Setup.OnClientEvent.Connect((s: unknown) => {
 	renderer.onSetup(s as Setup);
 	hud.onSetup(s as Setup);
 	onActionSetup(s as Setup);
+	const setup = s as Setup;
+	setCalloutHuman(setup.players.find((p) => p.idx === setup.humanIdx));
 });
 
 remotes.Snapshot.OnClientEvent.Connect((s: unknown) => {
@@ -66,7 +69,15 @@ remotes.Snapshot.OnClientEvent.Connect((s: unknown) => {
 
 RunService.RenderStepped.Connect((dt) => {
 	renderer.update(dt);
-	camera.update(dt, renderer.getFocusX(), renderer.getFocusZ());
+	const human = renderer.getHumanFoot();
+	camera.update(
+		dt,
+		human === undefined ? undefined : human.X,
+		human === undefined ? undefined : human.Z,
+		renderer.getFocusX(),
+		renderer.getFocusZ(),
+		renderer.getAttackDirX(),
+	);
 	// Camera shake from combat effects (hits, roars, crashes); the showroom stage applies its own.
 	const cam = game.Workspace.CurrentCamera;
 	if (cam !== undefined && game.Workspace.GetAttribute("ShowroomActive") !== true) {

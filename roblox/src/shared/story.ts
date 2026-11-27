@@ -24,6 +24,28 @@ export const RIVAL: Record<Country, Country> = {
 	wu: "shu",
 };
 
+/**
+ * What a defeated general says when he joins the lord (the post-victory recruit scene): two lines, by charId. The lord's
+ * answer is added by the client. Falls back to the stage's recruitLine when a general has no entry.
+ */
+export const RECRUIT_LINES: Record<string, string[]> = {
+	zhangfei: ["哈哈哈！好小子，有兩下子嘛！", "俺張飛服了！這個主公，俺認了！"],
+	guanyu: ["好身手！我關雲長佩服。", "從今以後，願為主公效力！"],
+	zhugeliang: ["勝負之數，早已在我心中。", "願為主公運籌帷幄，共定天下。"],
+	machao: ["痛快！痛快！我馬孟起心服口服。", "西涼鐵騎，願隨主公縱橫天下！"],
+	zhaoyun: ["將軍好身手，趙子龍佩服。", "一身是膽，願為主公赴湯蹈火！"],
+	xuchu: ["嘿！好力氣，俺許仲康服了！", "以後誰敢欺負主公，俺第一個衝上去！"],
+	caocao: ["哼，勝者為王，敗者為寇。", "孤敬你是條好漢，從今起隨孤縱橫天下！"],
+	zhenji: ["妾身輸得心服口服。", "願以一片冰心，侍奉主公左右。"],
+	simayi: ["嘿嘿……老夫算漏了一步。", "此後，老夫的計謀盡歸主公所用。"],
+	zhangliao: ["好一個主公，張文遠心服口服。", "從今以後，這一身武藝都是主公的了！"],
+	sunquan: ["江東的水，也比不上你的勇氣。", "好！孤願與主公同舟共濟。"],
+	daqiao: ["哎呀，輸給你啦！", "我會好好幫主公照顧大家的，放心吧！"],
+	zhouyu: ["這一局，周公瑾輸得心服。", "東風已至，願為主公助一臂之力。"],
+	xiaoqiao: ["嘻嘻，你好厲害喔！", "以後我們就是一起的夥伴囉，多多指教！"],
+	sunce: ["哈哈！痛快！痛快！", "我孫伯符服了，從今以後，江東的風為主公而吹！"],
+};
+
 export const LAST_STAGE_ID = 8;
 
 /** Stage 0 is the guided tutorial: one lord (with his weapon) against one 黃巾兵. */
@@ -106,7 +128,8 @@ export function getStages(country: Country, starter: string): StageDef[] {
 			teamSize: 1,
 			enemy: [{ kind: "huangjinBoss" }],
 			title: "第二關 黃巾頭目",
-			intro: ["黃巾頭目橫行鄉里，主公前去討伐！"],
+			intro: ["黃巾頭目橫行鄉里，主公前去討伐！", "先進 3 球就贏！"],
+			goalTarget: 3,
 		},
 		{
 			id: 3,
@@ -115,7 +138,8 @@ export function getStages(country: Country, starter: string): StageDef[] {
 			bossCharId: a,
 			recruit: a,
 			title: `第三關 單挑${nameOf(a)}`,
-			intro: [`${nameOf(a)}聞訊而來，欲與主公一決高下！`],
+			intro: [`${nameOf(a)}聞訊而來，欲與主公一決高下！`, "先進 3 球就贏！"],
+			goalTarget: 3,
 			recruitLine: `${nameOf(a)}心服口服，願隨主公征戰！`,
 		},
 		{
@@ -123,7 +147,8 @@ export function getStages(country: Country, starter: string): StageDef[] {
 			teamSize: 2,
 			enemy: [{ kind: "huangjin" }, { kind: "huangjin" }],
 			title: "第四關 雙將出陣",
-			intro: ["黃巾兵再度來襲，主公與夥伴並肩迎敵！"],
+			intro: ["黃巾兵再度來襲，主公與夥伴並肩迎敵！", "先進 3 球就贏！"],
+			goalTarget: 3,
 		},
 		{
 			id: 5,
@@ -132,7 +157,8 @@ export function getStages(country: Country, starter: string): StageDef[] {
 			bossCharId: b,
 			recruit: b,
 			title: `第五關 ${nameOf(b)}`,
-			intro: [`${nameOf(b)}率黃巾兵擋路！`],
+			intro: [`${nameOf(b)}率黃巾兵擋路！`, "先進 3 球就贏！"],
+			goalTarget: 3,
 			recruitLine: `${nameOf(b)}拱手相投，願助主公一臂之力！`,
 		},
 		{
@@ -142,7 +168,8 @@ export function getStages(country: Country, starter: string): StageDef[] {
 			bossCharId: c,
 			recruit: c,
 			title: `第六關 ${nameOf(c)}`,
-			intro: [`${nameOf(c)}率黃巾兵來襲！`],
+			intro: [`${nameOf(c)}率黃巾兵來襲！`, "先進 3 球就贏！"],
+			goalTarget: 3,
 			recruitLine: `${nameOf(c)}歸順主公，共襄大業！`,
 		},
 		{
@@ -157,7 +184,8 @@ export function getStages(country: Country, starter: string): StageDef[] {
 			bossCharId: d,
 			recruit: d,
 			title: `第七關 ${nameOf(d)}`,
-			intro: [`${nameOf(d)}親率大軍壓境！`],
+			intro: [`${nameOf(d)}親率大軍壓境！`, "先進 3 球就贏！"],
+			goalTarget: 3,
 			recruitLine: `${nameOf(d)}心悅誠服，從此追隨主公！`,
 		},
 		{
@@ -165,7 +193,8 @@ export function getStages(country: Country, starter: string): StageDef[] {
 			teamSize: 5,
 			enemy: [{ kind: "rivalTeam" }],
 			title: `第八關 ${rivalName}決戰`,
-			intro: [`${rivalName}大軍壓境，第一章決戰！`],
+			intro: [`${rivalName}大軍壓境，第一章決戰！`, "先進 3 球就贏！"],
+			goalTarget: 3,
 		},
 	];
 }

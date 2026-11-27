@@ -105,3 +105,45 @@ export function skillIconFor(charId: string, weapon?: string): string | undefine
 	if (charId.sub(1, 5) === "lord_") return SKILL_ICON[`lord_${weapon ?? "sword"}`];
 	return SKILL_ICON[charId];
 }
+
+/** Batch 4 (lord progression, delivered 2026-11-28). */
+export const ART4: Record<string, string> = {
+	camp_bg: "rbxassetid://76607932354752",
+	class_mengjiang: "rbxassetid://118994347952249",
+	class_junshi: "rbxassetid://102966626893331",
+	class_tiebi: "rbxassetid://97934459687256",
+	emblem_mengjiang: "rbxassetid://120083761475954",
+	emblem_junshi: "rbxassetid://82594911572617",
+	emblem_tiebi: "rbxassetid://125628926605930",
+	passive_pozhen: "rbxassetid://133153423878766",
+	passive_yunchou: "rbxassetid://97891587054627",
+	passive_gushou: "rbxassetid://139190926700095",
+	loot_banner: "rbxassetid://140522221090572",
+	slot_frame: "rbxassetid://137997648566832",
+	weapon_type_sword: "rbxassetid://128551622237138",
+	weapon_type_polearm: "rbxassetid://74368815073852",
+	weapon_type_fan: "rbxassetid://123053922784775",
+	weapon_type_heavy: "rbxassetid://139979883963780",
+};
+
+/** Weapon icons by item id: general charId → that general's weapon; lord_* → the batch-2 weapon art. */
+export const WEAPON_ICON: Record<string, string> = {
+	caocao: "rbxassetid://122094886195427",
+	daqiao: "rbxassetid://121342837188773",
+	guanyu: "rbxassetid://81379639411884",
+	machao: "rbxassetid://105722030877731",
+	simayi: "rbxassetid://123931166690230",
+	sunce: "rbxassetid://87906466550148",
+	sunquan: "rbxassetid://78104747702957",
+	xiaoqiao: "rbxassetid://136698709223514",
+	xuchu: "rbxassetid://102451533302322",
+	zhangfei: "rbxassetid://108071655794853",
+	zhangliao: "rbxassetid://114546431235925",
+	zhaoyun: "rbxassetid://82125448494617",
+	zhenji: "rbxassetid://118514362065278",
+	zhouyu: "rbxassetid://138649674273815",
+	zhugeliang: "rbxassetid://96937769327410",
+	lord_sword: "rbxassetid://121031573485001",
+	lord_spear: "rbxassetid://112709855091812",
+	lord_fan: "rbxassetid://98227528437994",
+};
