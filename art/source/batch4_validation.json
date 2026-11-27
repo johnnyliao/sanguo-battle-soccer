@@ -1,0 +1,250 @@
+﻿[
+    {
+        "name":  "class_mengjiang",
+        "batch":  4,
+        "width":  512,
+        "height":  768,
+        "transparent_samples":  546,
+        "sha256":  "ab5ab914eb1fc14bf09eb6183e86b4fe7dec60d8d7f9f9d5ea62b4138fef9041"
+    },
+    {
+        "name":  "class_junshi",
+        "batch":  4,
+        "width":  512,
+        "height":  768,
+        "transparent_samples":  574,
+        "sha256":  "6f0c749ca448fea09c05982504a1978660374af7c3602f5505ba9a3255ac826c"
+    },
+    {
+        "name":  "class_tiebi",
+        "batch":  4,
+        "width":  512,
+        "height":  768,
+        "transparent_samples":  610,
+        "sha256":  "f76a29dacd747c6457f1909619e86271e83adfc4193e69fa495250946f9c9fd1"
+    },
+    {
+        "name":  "emblem_mengjiang",
+        "batch":  4,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  442,
+        "sha256":  "3b38eb9e73b1a82332d8421e2e4b4bd1a56320081ff75bb1808e96f3b969fa5a"
+    },
+    {
+        "name":  "emblem_junshi",
+        "batch":  4,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  664,
+        "sha256":  "2373da95fb4d5c2b4bf03d64d50e5b15c28c68eb9f983055bdc5cc352dc1143f"
+    },
+    {
+        "name":  "emblem_tiebi",
+        "batch":  4,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  459,
+        "sha256":  "5581a82b6a73da799625bd528f7552cd8d4022b806ed84b37ebe3cd6a84171c1"
+    },
+    {
+        "name":  "passive_pozhen",
+        "batch":  4,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  418,
+        "sha256":  "33b6bb54e2f9ec90e6732cbf36234f8f8d1d25f5ce49ad331abc22d989e8a4eb"
+    },
+    {
+        "name":  "passive_yunchou",
+        "batch":  4,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  370,
+        "sha256":  "164596570b79de61f8df7987b69e23c452324045d809de2c4a57ca2537aa652e"
+    },
+    {
+        "name":  "passive_gushou",
+        "batch":  4,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  399,
+        "sha256":  "e7668d61e19fa779e51ed295b8f2e2d2fc4c418c3e7cf1f6da6de7215caff476"
+    },
+    {
+        "name":  "weapon_icon_guanyu",
+        "batch":  4,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  886,
+        "sha256":  "4cfc14edc25c4db4c75441cd57710b17f5341dff6c14b597617f26e3178acbcc"
+    },
+    {
+        "name":  "weapon_icon_zhangfei",
+        "batch":  4,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  921,
+        "sha256":  "a0ad8cd5a210c0a2426f63c4eb080ccdd712766da56f9a47243e765f9403ecea"
+    },
+    {
+        "name":  "weapon_icon_zhaoyun",
+        "batch":  4,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  896,
+        "sha256":  "53b7ceb59e33a3b7a37797ad55c178298bf08a3708d14827706e46b1a38022c1"
+    },
+    {
+        "name":  "weapon_icon_zhugeliang",
+        "batch":  4,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  593,
+        "sha256":  "6a3e3a99d9e091ec3f376d0442d844ca7bb24a93b4daaf769111bdac720cb78e"
+    },
+    {
+        "name":  "weapon_icon_machao",
+        "batch":  4,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  900,
+        "sha256":  "6949e07cbdeb24e4e86a9597e5fa9d2005cd04539ec44f97cf4f5eaabbecfcaa"
+    },
+    {
+        "name":  "weapon_icon_caocao",
+        "batch":  4,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  828,
+        "sha256":  "24c1730b9265806d38b2ef99650b0c9abba06f2db6780397321f36a9c2db8844"
+    },
+    {
+        "name":  "weapon_icon_xuchu",
+        "batch":  4,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  756,
+        "sha256":  "80a99fd51d175b6efbe17a77615c9faf0ec3236a8cebe65d339b9eb9fb06306a"
+    },
+    {
+        "name":  "weapon_icon_zhangliao",
+        "batch":  4,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  784,
+        "sha256":  "d25287f44c51f49bdcd1fecd432167aaa97f1f48a36659b23025cfd594e58966"
+    },
+    {
+        "name":  "weapon_icon_simayi",
+        "batch":  4,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  677,
+        "sha256":  "15b8bdd9f16609c98982d2ba64294e46657999fac8d0787903f8939aae18eb02"
+    },
+    {
+        "name":  "weapon_icon_zhenji",
+        "batch":  4,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  772,
+        "sha256":  "dbed65e132576401cec46ec7b4c4a84e9c43401b10c3301e17dd827b86334bdb"
+    },
+    {
+        "name":  "weapon_icon_sunce",
+        "batch":  4,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  768,
+        "sha256":  "ef54fe7a23b71cb972ab6d3694e0b30e3ebec9af1977b4496465b3424f53718f"
+    },
+    {
+        "name":  "weapon_icon_sunquan",
+        "batch":  4,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  857,
+        "sha256":  "2bc03e77f7fba2fbacfd5bccf3bcf073d7a5b6067e9edafa5fee2f7b4f963b87"
+    },
+    {
+        "name":  "weapon_icon_zhouyu",
+        "batch":  4,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  891,
+        "sha256":  "9413f88b131e00943f83e38b39f5731f2112659e1bf2c69a7481826928115898"
+    },
+    {
+        "name":  "weapon_icon_daqiao",
+        "batch":  4,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  575,
+        "sha256":  "cf93a969c821bafd075bf6822a9854472cbe05f00c34b87bfd09dc2a3df4e416"
+    },
+    {
+        "name":  "weapon_icon_xiaoqiao",
+        "batch":  4,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  594,
+        "sha256":  "49635d86d343af8bfac0de799c6375db1bc113531c83efd6a8d8c9d440954348"
+    },
+    {
+        "name":  "weapon_type_sword",
+        "batch":  4,
+        "width":  128,
+        "height":  128,
+        "transparent_samples":  782,
+        "sha256":  "b29f74fa23d1181437f53984ed857ec97b2a7e41c92cf11cb7e1c27c3904282e"
+    },
+    {
+        "name":  "weapon_type_polearm",
+        "batch":  4,
+        "width":  128,
+        "height":  128,
+        "transparent_samples":  906,
+        "sha256":  "29822d26372991cd7f779fbdfa1666b0199ef0b2a7bf431207da2d6d0daed4ed"
+    },
+    {
+        "name":  "weapon_type_fan",
+        "batch":  4,
+        "width":  128,
+        "height":  128,
+        "transparent_samples":  584,
+        "sha256":  "505ca94a5f80d2c31a1c00c8defbf223be8c0423c6e11a4d92fae7ee7c6f8995"
+    },
+    {
+        "name":  "weapon_type_heavy",
+        "batch":  4,
+        "width":  128,
+        "height":  128,
+        "transparent_samples":  700,
+        "sha256":  "65ccea33ef9fb8ca2dce65d89e2cec869248762601ca6d47e75ca2364be2de4e"
+    },
+    {
+        "name":  "camp_bg",
+        "batch":  4,
+        "width":  1920,
+        "height":  1080,
+        "transparent_samples":  0,
+        "sha256":  "8a0cf90c2446f151223dd582271c36eca316a6f69637bae221ce759f68b1d822"
+    },
+    {
+        "name":  "slot_frame",
+        "batch":  4,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  679,
+        "sha256":  "ec2e753eae075aa85fd03b925e677fa560e5f001eee2b991dae890e9d9ff6df7"
+    },
+    {
+        "name":  "loot_banner",
+        "batch":  4,
+        "width":  1024,
+        "height":  384,
+        "transparent_samples":  554,
+        "sha256":  "e3f789f78dbdb5ab6f113b3ef91bf511dfdcbef32fcd509a491d4993aebb8ede"
+    }
+]

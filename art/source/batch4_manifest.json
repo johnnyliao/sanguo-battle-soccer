@@ -1,0 +1,281 @@
+[
+  {
+    "name": "class_mengjiang",
+    "width": 512,
+    "height": 768,
+    "transparent": true,
+    "source": "art/source/generated/class_mengjiang.png",
+    "prompt": "Use case: stylized-concept. One finished game selection card illustration, portrait 2:3, intended 512x768 transparent PNG. A cute original Roblox block-shaped faceless player LORD, helmet hiding face completely, red flowing cape, red/gold armor, charging with a long spear, flame red energy. Bright thick dark outlines, saturated polished chibi cartoon for ages 8–12 matching Three Kingdoms mobile game. Full figure contained in upper 70 percent, bottom 30 percent entirely transparent empty for UI text. No card border, no lettering, no watermark. Clear squared block arms legs torso, heroic cute proportions 1:2.5. Single character only.",
+    "batch": 4
+  },
+  {
+    "name": "class_junshi",
+    "width": 512,
+    "height": 768,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Portrait 2:3 transparent game card illustration. Cute faceless Roblox block-shaped commander LORD with squared limbs, gold teal helmet fully hiding face, white teal gold robes, teal cape. Holds white feather fan casting teal star magic. Bright saturated thick dark outline chibi cartoon same Three Kingdoms game design. CRITICAL LAYOUT: ENTIRE character AND magic occupy only TOP 60 PERCENT of canvas. Bottom FORTY PERCENT absolutely empty fully transparent for UI typography. Character never extends below 60 percent height. No border no background no text no watermark.",
+    "source": "art/source/generated/class_junshi.png",
+    "batch": 4
+  },
+  {
+    "name": "class_tiebi",
+    "width": 512,
+    "height": 768,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Finished original Three Kingdoms battle soccer game asset for children 8–12. Faceless Roblox block-shaped LORD helmet fully concealing face, steel blue gold armor and blue cape, holding large shield and sword steadfastly defending. Full body upper 70%, bottom 30% completely empty transparent. Same heroic cute helmet and squared limbs as red warrior counterpart. Bright saturated polished Q cartoon, thick clean dark outlines, gold #F5C542 highlights, no realism no blood no watermark.  Genuine transparent alpha background, no colored backdrop, no shadow rectangle. NO TEXT or letters. Canvas aspect ratio 512:768, target export 512x768.",
+    "source": "art/source/generated/class_tiebi.png",
+    "batch": 4
+  },
+  {
+    "name": "emblem_mengjiang",
+    "width": 256,
+    "height": 256,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Finished original Three Kingdoms battle soccer game asset for children 8–12. Class emblem: two crossed long spears and bold red orange flame, gold trim, strong simple silhouette. Bright saturated polished Q cartoon, thick clean dark outlines, gold #F5C542 highlights, no realism no blood no watermark.  Genuine transparent alpha background, no colored backdrop, no shadow rectangle. NO TEXT or letters. Canvas aspect ratio 256:256, target export 256x256.",
+    "source": "art/source/generated/emblem_mengjiang.png",
+    "batch": 4
+  },
+  {
+    "name": "emblem_junshi",
+    "width": 256,
+    "height": 256,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Original Three Kingdoms cartoon UI asset for ages 8–12, bright saturated colors, thick clean dark outlines. ONE white teal feather fan with THREE gold five-pointed stars above it, tiny gold edge trim, SIMPLE class badge. ONLY fan and stars. NO soccer ball, no circles, no faces, no people, no lettering. Bold clean shapes legible at 48 pixels. Transparent alpha background. No background panel no watermark. Canvas aspect ratio 256:256.",
+    "source": "art/source/generated/emblem_junshi.png",
+    "batch": 4
+  },
+  {
+    "name": "emblem_tiebi",
+    "width": 256,
+    "height": 256,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Original Three Kingdoms cartoon UI asset for ages 8–12, bright saturated colors, thick clean dark outlines. ONE simple class badge: steel BLUE shield in front of THREE gray crenellated castle wall towers, gold border. ONLY shield and wall. NO people, no faces, no generals, no soccer balls, no lettering. Broad simple shapes readable at 48x48. Transparent alpha background. No background panel no watermark. Canvas aspect ratio 256:256.",
+    "source": "art/source/generated/emblem_tiebi.png",
+    "batch": 4
+  },
+  {
+    "name": "passive_pozhen",
+    "width": 256,
+    "height": 256,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Finished original Three Kingdoms battle soccer game asset for children 8–12. Passive ability icon: protective glowing red gold shield enclosing ONE black and white soccer ball. Clear bold simple shapes. Bright saturated polished Q cartoon, thick clean dark outlines, gold #F5C542 highlights, no realism no blood no watermark.  Genuine transparent alpha background, no colored backdrop, no shadow rectangle. NO TEXT or letters. Canvas aspect ratio 256:256, target export 256x256.",
+    "source": "art/source/generated/passive_pozhen.png",
+    "batch": 4
+  },
+  {
+    "name": "passive_yunchou",
+    "width": 256,
+    "height": 256,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Finished original Three Kingdoms battle soccer game asset for children 8–12. Passive ability icon: white teal feather fan behind ONE golden hourglass with visible sand. Clear bold simple shapes. Bright saturated polished Q cartoon, thick clean dark outlines, gold #F5C542 highlights, no realism no blood no watermark.  Genuine transparent alpha background, no colored backdrop, no shadow rectangle. NO TEXT or letters. Canvas aspect ratio 256:256, target export 256x256.",
+    "source": "art/source/generated/passive_yunchou.png",
+    "batch": 4
+  },
+  {
+    "name": "passive_gushou",
+    "width": 256,
+    "height": 256,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Finished original Three Kingdoms battle soccer game asset for children 8–12. Passive ability icon: massive steel blue gold shield with three chunky castle wall bricks behind it. Clear bold simple shapes. Bright saturated polished Q cartoon, thick clean dark outlines, gold #F5C542 highlights, no realism no blood no watermark.  Genuine transparent alpha background, no colored backdrop, no shadow rectangle. NO TEXT or letters. Canvas aspect ratio 256:256, target export 256x256.",
+    "source": "art/source/generated/passive_gushou.png",
+    "batch": 4
+  },
+  {
+    "name": "weapon_icon_guanyu",
+    "width": 256,
+    "height": 256,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Finished original Three Kingdoms battle soccer game asset for children 8–12. Single Guan Yu green dragon crescent guandao: long green shaft, gold sculpted dragon collar, broad silver crescent blade inlaid emerald green and gold dragon, red tassel. Bright saturated polished Q cartoon, thick clean dark outlines, gold #F5C542 highlights, no realism no blood no watermark. Weapon ONLY, no character no hands, diagonal orientation, whole object inside canvas with 8 percent margin. Match established original character weapon design. Genuine transparent alpha background, no colored backdrop, no shadow rectangle. NO TEXT or letters. Canvas aspect ratio 256:256, target export 256x256.",
+    "source": "art/source/generated/weapon_icon_guanyu.png",
+    "batch": 4
+  },
+  {
+    "name": "weapon_icon_zhangfei",
+    "width": 256,
+    "height": 256,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Finished original Three Kingdoms battle soccer game asset for children 8–12. Single Zhang Fei snake spear, black gold shaft, long dark steel serpentine wavy pointed blade, red tassel. Bright saturated polished Q cartoon, thick clean dark outlines, gold #F5C542 highlights, no realism no blood no watermark. Weapon ONLY, no character no hands, diagonal orientation, whole object inside canvas with 8 percent margin. Match established original character weapon design. Genuine transparent alpha background, no colored backdrop, no shadow rectangle. NO TEXT or letters. Canvas aspect ratio 256:256, target export 256x256.",
+    "source": "art/source/generated/weapon_icon_zhangfei.png",
+    "batch": 4
+  },
+  {
+    "name": "weapon_icon_zhaoyun",
+    "width": 256,
+    "height": 256,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Finished original Three Kingdoms battle soccer game asset for children 8–12. Single Zhao Yun long spear, silver white shaft silver leaf blade with elegant silver dragon collar and bright red tassel. Bright saturated polished Q cartoon, thick clean dark outlines, gold #F5C542 highlights, no realism no blood no watermark. Weapon ONLY, no character no hands, diagonal orientation, whole object inside canvas with 8 percent margin. Match established original character weapon design. Genuine transparent alpha background, no colored backdrop, no shadow rectangle. NO TEXT or letters. Canvas aspect ratio 256:256, target export 256x256.",
+    "source": "art/source/generated/weapon_icon_zhaoyun.png",
+    "batch": 4
+  },
+  {
+    "name": "weapon_icon_zhugeliang",
+    "width": 256,
+    "height": 256,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Finished original Three Kingdoms battle soccer game asset for children 8–12. Single Zhuge Liang white feather fan, broad overlapping soft white feathers, black gold handle, pale blue accents. Bright saturated polished Q cartoon, thick clean dark outlines, gold #F5C542 highlights, no realism no blood no watermark. Weapon ONLY, no character no hands, diagonal orientation, whole object inside canvas with 8 percent margin. Match established original character weapon design. Genuine transparent alpha background, no colored backdrop, no shadow rectangle. NO TEXT or letters. Canvas aspect ratio 256:256, target export 256x256.",
+    "source": "art/source/generated/weapon_icon_zhugeliang.png",
+    "batch": 4
+  },
+  {
+    "name": "weapon_icon_machao",
+    "width": 256,
+    "height": 256,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Finished original Three Kingdoms battle soccer game asset for children 8–12. Single Ma Chao black gold cavalry long spear, heavy black angular spear blade gold edges, black gold shaft, red tassel, gold lion collar. Bright saturated polished Q cartoon, thick clean dark outlines, gold #F5C542 highlights, no realism no blood no watermark. Weapon ONLY, no character no hands, diagonal orientation, whole object inside canvas with 8 percent margin. Match established original character weapon design. Genuine transparent alpha background, no colored backdrop, no shadow rectangle. NO TEXT or letters. Canvas aspect ratio 256:256, target export 256x256.",
+    "source": "art/source/generated/weapon_icon_machao.png",
+    "batch": 4
+  },
+  {
+    "name": "weapon_icon_caocao",
+    "width": 256,
+    "height": 256,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Finished original Three Kingdoms battle soccer game asset for children 8–12. Single Cao Cao jeweled longsword, silver blade, ornate gold crossguard and pommel, large blue gemstones, navy handle. Bright saturated polished Q cartoon, thick clean dark outlines, gold #F5C542 highlights, no realism no blood no watermark. Weapon ONLY, no character no hands, diagonal orientation, whole object inside canvas with 8 percent margin. Match established original character weapon design. Genuine transparent alpha background, no colored backdrop, no shadow rectangle. NO TEXT or letters. Canvas aspect ratio 256:256, target export 256x256.",
+    "source": "art/source/generated/weapon_icon_caocao.png",
+    "batch": 4
+  },
+  {
+    "name": "weapon_icon_xuchu",
+    "width": 256,
+    "height": 256,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Finished original Three Kingdoms battle soccer game asset for children 8–12. Single Xu Chu massive dark iron spiked mace, thick wooden handle, heavy black metal head covered with blunt triangular spikes, iron chain loop. Bright saturated polished Q cartoon, thick clean dark outlines, gold #F5C542 highlights, no realism no blood no watermark. Weapon ONLY, no character no hands, diagonal orientation, whole object inside canvas with 8 percent margin. Match established original character weapon design. Genuine transparent alpha background, no colored backdrop, no shadow rectangle. NO TEXT or letters. Canvas aspect ratio 256:256, target export 256x256.",
+    "source": "art/source/generated/weapon_icon_xuchu.png",
+    "batch": 4
+  },
+  {
+    "name": "weapon_icon_zhangliao",
+    "width": 256,
+    "height": 256,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Finished original Three Kingdoms battle soccer game asset for children 8–12. Single Zhang Liao double dragon-head battle axe, paired broad steel axe blades, gold dragon heads holding blades, purple black long handle. Bright saturated polished Q cartoon, thick clean dark outlines, gold #F5C542 highlights, no realism no blood no watermark. Weapon ONLY, no character no hands, diagonal orientation, whole object inside canvas with 8 percent margin. Match established original character weapon design. Genuine transparent alpha background, no colored backdrop, no shadow rectangle. NO TEXT or letters. Canvas aspect ratio 256:256, target export 256x256.",
+    "source": "art/source/generated/weapon_icon_zhangliao.png",
+    "batch": 4
+  },
+  {
+    "name": "weapon_icon_simayi",
+    "width": 256,
+    "height": 256,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Finished original Three Kingdoms battle soccer game asset for children 8–12. Single Sima Yi black feather fan, broad layered glossy black raven feathers, gold filigree handle with dark red jewel. Bright saturated polished Q cartoon, thick clean dark outlines, gold #F5C542 highlights, no realism no blood no watermark. Weapon ONLY, no character no hands, diagonal orientation, whole object inside canvas with 8 percent margin. Match established original character weapon design. Genuine transparent alpha background, no colored backdrop, no shadow rectangle. NO TEXT or letters. Canvas aspect ratio 256:256, target export 256x256.",
+    "source": "art/source/generated/weapon_icon_simayi.png",
+    "batch": 4
+  },
+  {
+    "name": "weapon_icon_zhenji",
+    "width": 256,
+    "height": 256,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Finished original Three Kingdoms battle soccer game asset for children 8–12. Single Zhen Ji crystal chain whip, elegant silver handle with pale blue crystal, curved linked silver chain ending in faceted ice blue crystal drop. Entire chain visible. Bright saturated polished Q cartoon, thick clean dark outlines, gold #F5C542 highlights, no realism no blood no watermark. Weapon ONLY, no character no hands, diagonal orientation, whole object inside canvas with 8 percent margin. Match established original character weapon design. Genuine transparent alpha background, no colored backdrop, no shadow rectangle. NO TEXT or letters. Canvas aspect ratio 256:256, target export 256x256.",
+    "source": "art/source/generated/weapon_icon_zhenji.png",
+    "batch": 4
+  },
+  {
+    "name": "weapon_icon_sunce",
+    "width": 256,
+    "height": 256,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Finished original Three Kingdoms battle soccer game asset for children 8–12. Single Sun Ce tiger-head great hammer, huge sculpted gold tiger face hammer head with red accents, dark red shaft and gold grip. Bright saturated polished Q cartoon, thick clean dark outlines, gold #F5C542 highlights, no realism no blood no watermark. Weapon ONLY, no character no hands, diagonal orientation, whole object inside canvas with 8 percent margin. Match established original character weapon design. Genuine transparent alpha background, no colored backdrop, no shadow rectangle. NO TEXT or letters. Canvas aspect ratio 256:256, target export 256x256.",
+    "source": "art/source/generated/weapon_icon_sunce.png",
+    "batch": 4
+  },
+  {
+    "name": "weapon_icon_sunquan",
+    "width": 256,
+    "height": 256,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Finished original Three Kingdoms battle soccer game asset for children 8–12. Single Sun Quan purple gold longsword, gleaming silver blade, regal gold guard purple gemstone, purple gold handle. Bright saturated polished Q cartoon, thick clean dark outlines, gold #F5C542 highlights, no realism no blood no watermark. Weapon ONLY, no character no hands, diagonal orientation, whole object inside canvas with 8 percent margin. Match established original character weapon design. Genuine transparent alpha background, no colored backdrop, no shadow rectangle. NO TEXT or letters. Canvas aspect ratio 256:256, target export 256x256.",
+    "source": "art/source/generated/weapon_icon_sunquan.png",
+    "batch": 4
+  },
+  {
+    "name": "weapon_icon_zhouyu",
+    "width": 256,
+    "height": 256,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Finished original Three Kingdoms battle soccer game asset for children 8–12. Single Zhou Yu elegant golden longsword, slim straight gold blade with red central detail, graceful gold guard, white red grip. Bright saturated polished Q cartoon, thick clean dark outlines, gold #F5C542 highlights, no realism no blood no watermark. Weapon ONLY, no character no hands, diagonal orientation, whole object inside canvas with 8 percent margin. Match established original character weapon design. Genuine transparent alpha background, no colored backdrop, no shadow rectangle. NO TEXT or letters. Canvas aspect ratio 256:256, target export 256x256.",
+    "source": "art/source/generated/weapon_icon_zhouyu.png",
+    "batch": 4
+  },
+  {
+    "name": "weapon_icon_daqiao",
+    "width": 256,
+    "height": 256,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Finished original Three Kingdoms battle soccer game asset for children 8–12. Single Da Qiao large iron war fan, black red gold metal folding fan, bold pink red peony flower motif on red panels, gold ribs and black handle. Bright saturated polished Q cartoon, thick clean dark outlines, gold #F5C542 highlights, no realism no blood no watermark. Weapon ONLY, no character no hands, diagonal orientation, whole object inside canvas with 8 percent margin. Match established original character weapon design. Genuine transparent alpha background, no colored backdrop, no shadow rectangle. NO TEXT or letters. Canvas aspect ratio 256:256, target export 256x256.",
+    "source": "art/source/generated/weapon_icon_daqiao.png",
+    "batch": 4
+  },
+  {
+    "name": "weapon_icon_xiaoqiao",
+    "width": 256,
+    "height": 256,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Finished original Three Kingdoms battle soccer game asset for children 8–12. Single Xiao Qiao pink folding fan, pink cherry blossom petals on pale pink panels, pink gold ribs, short pink tassel. Bright saturated polished Q cartoon, thick clean dark outlines, gold #F5C542 highlights, no realism no blood no watermark. Weapon ONLY, no character no hands, diagonal orientation, whole object inside canvas with 8 percent margin. Match established original character weapon design. Genuine transparent alpha background, no colored backdrop, no shadow rectangle. NO TEXT or letters. Canvas aspect ratio 256:256, target export 256x256.",
+    "source": "art/source/generated/weapon_icon_xiaoqiao.png",
+    "batch": 4
+  },
+  {
+    "name": "weapon_type_sword",
+    "width": 128,
+    "height": 128,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Finished original Three Kingdoms battle soccer game asset for children 8–12. Simple solid gold silhouette of ONE diagonal straight sword. Minimal internal detail, readable at 48 pixels. Bright saturated polished Q cartoon, thick clean dark outlines, gold #F5C542 highlights, no realism no blood no watermark.  Genuine transparent alpha background, no colored backdrop, no shadow rectangle. NO TEXT or letters. Canvas aspect ratio 128:128, target export 128x128.",
+    "source": "art/source/generated/weapon_type_sword.png",
+    "batch": 4
+  },
+  {
+    "name": "weapon_type_polearm",
+    "width": 128,
+    "height": 128,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Original Three Kingdoms cartoon UI asset for ages 8–12, bright saturated colors, thick clean dark outlines. ONE diagonal long spear, SIMPLE MONOCHROME SOLID GOLD silhouette. Everything is GOLD including shaft and spearhead. No red tassel, no other colors, no jewels. Strong simple silhouette readable at 48x48. Transparent alpha background. No background panel no watermark. Canvas aspect ratio 128:128.",
+    "source": "art/source/generated/weapon_type_polearm.png",
+    "batch": 4
+  },
+  {
+    "name": "weapon_type_fan",
+    "width": 128,
+    "height": 128,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Finished original Three Kingdoms battle soccer game asset for children 8–12. Simple solid gold silhouette of ONE open folding fan. Minimal internal detail, readable at 48 pixels. Bright saturated polished Q cartoon, thick clean dark outlines, gold #F5C542 highlights, no realism no blood no watermark.  Genuine transparent alpha background, no colored backdrop, no shadow rectangle. NO TEXT or letters. Canvas aspect ratio 128:128, target export 128x128.",
+    "source": "art/source/generated/weapon_type_fan.png",
+    "batch": 4
+  },
+  {
+    "name": "weapon_type_heavy",
+    "width": 128,
+    "height": 128,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Finished original Three Kingdoms battle soccer game asset for children 8–12. Simple solid gold silhouette of ONE diagonal massive war hammer. Minimal internal detail, readable at 48 pixels. Bright saturated polished Q cartoon, thick clean dark outlines, gold #F5C542 highlights, no realism no blood no watermark.  Genuine transparent alpha background, no colored backdrop, no shadow rectangle. NO TEXT or letters. Canvas aspect ratio 128:128, target export 128x128.",
+    "source": "art/source/generated/weapon_type_heavy.png",
+    "batch": 4
+  },
+  {
+    "name": "camp_bg",
+    "width": 1920,
+    "height": 1080,
+    "transparent": false,
+    "prompt": "Use case: stylized-concept. Finished original Three Kingdoms battle soccer game asset for children 8–12. Widescreen 16:9 ancient Three Kingdoms commander tent interior. Weapon racks along far LEFT edge, map table tucked against far RIGHT edge, candles warm glow and plain green blue red flags at outer edges. Central 60 percent intentionally quiet EMPTY open tent floor and subdued plain fabric rear wall for interface. Inviting warm military camp, no people, no text. Opaque full background. Bright saturated polished Q cartoon, thick clean dark outlines, gold #F5C542 highlights, no realism no blood no watermark.  Opaque background. NO TEXT or letters. Canvas aspect ratio 1920:1080, target export 1920x1080.",
+    "source": "art/source/generated/camp_bg.png",
+    "batch": 4
+  },
+  {
+    "name": "slot_frame",
+    "width": 256,
+    "height": 256,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Finished original Three Kingdoms battle soccer game asset for children 8–12. Equipment slot frame only: square gold rim with four cloud-scroll ornamental corners, subtle dark bronze inner bevel. Center fully transparent and empty to insert item icon. No backing panel. Bright saturated polished Q cartoon, thick clean dark outlines, gold #F5C542 highlights, no realism no blood no watermark.  Genuine transparent alpha background, no colored backdrop, no shadow rectangle. NO TEXT or letters. Canvas aspect ratio 256:256, target export 256x256.",
+    "source": "art/source/generated/slot_frame.png",
+    "batch": 4
+  },
+  {
+    "name": "loot_banner",
+    "width": 1024,
+    "height": 384,
+    "transparent": true,
+    "prompt": "Use case: stylized-concept. Original Three Kingdoms cartoon UI asset for ages 8–12, bright saturated colors, thick clean dark outlines. Wide 8:3 loot title banner. EXACT text 獲得！ in Traditional Chinese GOLD brush lettering at TOP center. RED GOLD ribbons and golden light rays on far left and far right ONLY. Lower center EMPTY transparent spacious opening for item icon. No people, no faces, no weapons, no ball, no other objects. Only text ribbons and light. Transparent alpha background. No background panel no watermark. Canvas aspect ratio 1024:384.",
+    "source": "art/source/generated/loot_banner.png",
+    "batch": 4
+  }
+]

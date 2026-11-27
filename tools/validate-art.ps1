@@ -1,7 +1,8 @@
+param([string]$Manifest = 'art/source/generation_manifest.json', [string]$Report = 'art/source/validation.json')
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 $repoRoot = Split-Path $PSScriptRoot -Parent
-$entries = Get-Content (Join-Path $repoRoot 'art/source/generation_manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+$entries = Get-Content (Join-Path $repoRoot $Manifest) -Raw -Encoding UTF8 | ConvertFrom-Json
 $results = @()
 foreach ($entry in $entries) {
     $file = Join-Path $repoRoot "art/incoming/batch$($entry.batch)/$($entry.name).png"
@@ -23,6 +24,15 @@ foreach ($entry in $entries) {
         if ($visibleSamples -eq 0) { throw "Empty image: $file" }
         if ($entry.transparent -and $transparentSamples -eq 0 -and $entry.name -ne 'bar_fill') { throw "Missing transparent background: $file" }
         if ($entry.name -like 'card_frame_*' -and $image.GetPixel([int]($image.Width / 2), [int]($image.Height / 3)).A -gt 0) { throw "Card portrait aperture is not fully transparent: $file" }
+        if ($entry.name -eq 'slot_frame' -and $image.GetPixel([int]($image.Width / 2), [int]($image.Height / 2)).A -gt 0) { throw "Equipment slot center must be transparent: $file" }
+        if ($entry.name -like 'class_*') {
+            for ($y = [int][Math]::Ceiling($image.Height * 0.7); $y -lt $image.Height; $y++) {
+                for ($x = 0; $x -lt $image.Width; $x++) {
+                    # Ignore alpha <= 3/255 from resampling otherwise invisible edges.
+                    if ($image.GetPixel($x, $y).A -gt 3) { throw "Class card bottom 30 percent must be transparent: $file ($x,$y)" }
+                }
+            }
+        }
         $results += [PSCustomObject]@{ name = $entry.name; batch = $entry.batch; width = $image.Width; height = $image.Height; transparent_samples = $transparentSamples; sha256 = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLower() }
     } finally { $image.Dispose() }
     if ($entry.width -eq 1920) {
@@ -31,5 +41,5 @@ foreach ($entry in $entries) {
         try { if ($small.Width -ne 1024 -or $small.Height -ne 576) { throw "Wrong Roblox dimensions: $smallFile" } } finally { $small.Dispose() }
     }
 }
-$results | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $repoRoot 'art/source/validation.json') -Encoding UTF8
+$results | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $repoRoot $Report) -Encoding UTF8
 Write-Output "PASS: $($results.Count) assets; PNG dimensions, sampled alpha, nonempty content, card apertures, grayscale scoreboard and Roblox background sizes."
