@@ -4,6 +4,8 @@ test-results/
 *.png
 !art-src/*.png
 !public/sprites/*.png
+!art/incoming/**/*.png
+!art/source/**/*.png
 
 # Roblox Studio
 *.rbxl.lock

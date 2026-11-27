@@ -1,0 +1,110 @@
+[
+  {
+    "name": "icon_game",
+    "prompt": "Use case: stylized-concept. Finished 512x512 game store icon, opaque background, no text. Reference input is Guan Yu character sheet: use it solely as character identity/style reference, do NOT reproduce the sheet. One enormous chibi Guan Yu, green head scarf with red gem, green robe gold dragon shoulder armor, orange-red face, extremely long black beard and hair, crescent green dragon guandao raised toward ONE flaming soccer ball. Exaggerated fierce cute determined expression, 1:2 to 1:3 body proportions, thick dark outlines, vivid polished cartoon mobile-game illustration for ages 8–12. Tight dramatic crop; huge face and clear ball; simple deep blue radial burst background with orange fire contrast; instantly legible at thumbnail size. Original composition matching character outfit, no lettering, no watermark, no blood.",
+    "source": "C:\\Users\\1704032\\.codex\\generated_images\\01a21b1b-6b78-7b60-881a-d64005841ec4\\exec-5af80b2d-66ed-4bea-8cb9-50f32323ed71.png",
+    "width": 512,
+    "height": 512,
+    "batch": 1,
+    "transparent": false
+  },
+  {
+    "name": "thumb_1",
+    "prompt": "Use case: stylized-concept. Finished 1920x1080 landscape 16:9 promotional thumbnail for original children Three Kingdoms battle soccer game. Input 1 Guan Yu, input 2 Cao Cao, input 3 Sun Ce are character identity and art style references only. Match their outfits, weapons, faces, cartoon proportions closely, do not reproduce sheets. Dynamic triangular action composition: green/gold long-bearded Guan Yu guandao at left, blue/black/gold crowned Cao Cao gem sword at right, red/gold brown spiky-haired red-headband Sun Ce tiger hammer jumping at back; all contest ONE large flaming soccer ball foreground center on ancient grassy soccer pitch. Green dragon arc, blue sword energy and red orange burst converge dramatically around ball. Thick outlines saturated bright polished cute mobile-game cartoon, ages 8–12. Keep top-left quarter relatively quiet sky for a separately added logo. Big expressive characters. No text, no logos, no watermark, no blood.",
+    "source": "C:\\Users\\1704032\\.codex\\generated_images\\01a21b1b-6b78-7b60-881a-d64005841ec4\\exec-2aa9528e-0174-4e7e-a117-0fc10cbfa8fe.png",
+    "width": 1920,
+    "height": 1080,
+    "batch": 1,
+    "transparent": false
+  },
+  {
+    "name": "thumb_2",
+    "prompt": "Use case: stylized-concept. Finished 16:9 1920x1080 game store thumbnail: YOU ARE THE LORD. Cute block-shaped player commander in foreground center with a simple square head, squared arms, gold helmet and flowing red cape, heroic confident smile, one foot on soccer ball. Behind stand recruited chibi generals in an inviting semicircle: Guan Yu green headscarf long black beard gold dragon armor guandao, Cao Cao navy black gold dragon robe and gold crown gem sword, Sun Ce spiky brown hair red headband red gold tiger armor tiger hammer, Zhuge Liang white blue robe tall black cap white feather fan, Ma Chao full enclosed black gold lion armor red plume red cape spear. Reference sheets define outfits and style ONLY. Warm sunny ancient soccer stadium, gold recruitment rays, bright thick-outline original mobile-game cartoon for ages 8–12, heroic cute 1:2–1:3 characters. Clear silhouettes and friendly collectible-team appeal. NO text, no logos, no watermark, no blood. Single composed scene, not a sheet.",
+    "source": "C:\\Users\\1704032\\.codex\\generated_images\\01a21b1b-6b78-7b60-881a-d64005841ec4\\exec-aece15ce-f6a6-432c-a77a-28f462c35d89.png",
+    "width": 1920,
+    "height": 1080,
+    "batch": 1,
+    "transparent": false
+  },
+  {
+    "name": "thumb_3",
+    "prompt": "Use case: stylized-concept. Finished wide 16:9 1920x1080 original Three Kingdoms battle soccer promotional art, split into THREE dramatic diagonal action panels with no text. Left panel: Zhuge Liang white-blue robe black tall gold-edged scholar crown white feather fan casting luminous blue geometric magic circle and light projectiles around a soccer ball. Middle panel: Ma Chao full enclosed BLACK and GOLD knight armor gold lion chest crest red plume red cloak spear leading powerful spectral iron cavalry charging along pitch, orange gold speed trails. Right panel: Zhang Fei wild black hair beard black gold tiger armor tiger-head shoulder red cape, roaring with concentric gold shockwaves shaking the pitch. Reference inputs respectively Zhuge Liang / Ma Chao / Zhang Fei define character designs and style. Big legible faces, expressive cute chibi 1:2–1:3, thick dark outlines, highly saturated cheerful mobile-game polish for children 8–12. Unified stadium cues. NO lettering, no logos, no watermarks, no blood or horror.",
+    "source": "C:\\Users\\1704032\\.codex\\generated_images\\01a21b1b-6b78-7b60-881a-d64005841ec4\\exec-1ecc4f27-cb6a-4806-95ba-b1c56de004df.png",
+    "width": 1920,
+    "height": 1080,
+    "batch": 1,
+    "transparent": false
+  },
+  {
+    "name": "bg_menu",
+    "prompt": "Use case: stylized-concept. Finished 2D main-menu background for original Three Kingdoms battle soccer game for children 8–12. Wide 16:9, 1920x1080. Bright cute Japanese mobile-game cartoon look, thick outlines, saturated colors, golden dusk. Ancient Chinese soccer stadium with clearly marked grassy pitch, distant military tents, blue green and red faction flags bearing simple original animal symbols and no writing, wooden spectator stands, warm lanterns. Center of composition is open quiet grass and sky for a later logo and two buttons; concentrate architecture and props at sides and horizon. Friendly adventurous mood, no characters in foreground, no blood, no text, no logo, no watermark.",
+    "source": "C:\\Users\\1704032\\.codex\\generated_images\\01a21b1b-6b78-7b60-881a-d64005841ec4\\exec-ddbe72a7-d514-4f53-9fb8-d5961dd31f76.png",
+    "width": 1920,
+    "height": 1080,
+    "batch": 1,
+    "transparent": false
+  },
+  {
+    "name": "logo",
+    "prompt": "Create a finished ORIGINAL logo graphic on actual transparent background for a children Three Kingdoms battle soccer game. Wide 2:1 layout 1024x512. ONLY six Traditional Chinese characters in this exact order: 三 國 戰 鬥 足 球. They must read 三國戰鬥足球. Pay special attention the FOURTH character is 鬥 (traditional fighting), NOT 門, 闘, 鬧, or 斗. Bold highly readable playful brush lettering, red letter faces, thick gold edging #F5C542, chunky dark brown outline, a modest soccer ball flourish. Do not include people, warriors, castles, extra words or complex ornaments. Keep generous padding; entire logo visible. Transparent PNG. This is a title lettering asset, not scene art.",
+    "source": "C:\\Users\\1704032\\.codex\\generated_images\\01a21b1b-6b78-7b60-881a-d64005841ec4\\exec-c41d4c76-70c3-4c8e-9ca1-4611c2cf8c71.png",
+    "width": 1024,
+    "height": 512,
+    "batch": 1,
+    "transparent": true
+  },
+  {
+    "name": "btn_red",
+    "prompt": "Use case: stylized-concept. Single finished 512x160 wide horizontal blank UI button background for original Three Kingdoms kids soccer game. Rich vermilion red #D83A3A lacquered wooden plaque with simple chunky gold frame and dark brown thick outer outline. Cute bright polished hand-painted cartoon, bevelled raised normal state, rounded rectangular silhouette, subtle ancient Chinese corner flourishes confined to four corners. Broad central area completely plain and blank for programmatic label. Nine-slice stretch compatible: straight simple edges and long uniform middle, no central ornament. Entire rectangle visible with transparent padding outside, true transparent PNG. No text, no symbols, no characters, no watermark.",
+    "source": "C:\\Users\\1704032\\.codex\\generated_images\\01a21b1b-6b78-7b60-881a-d64005841ec4\\exec-2bd3139e-1f15-4e29-a844-8f15973015df.png",
+    "width": 512,
+    "height": 160,
+    "batch": 1,
+    "transparent": true
+  },
+  {
+    "name": "btn_red_pressed",
+    "prompt": "Use case: precise-object-edit. Input is the NORMAL blank red button asset; make the MATCHING PRESSED state of exactly this same button. Preserve identical silhouette, frame, corner scrollwork, margins, proportions, hue, blank center and transparent exterior. Depress the center bevel into the frame, darken the lacquer center slightly and reverse its inner highlight/shadow to show an unmistakably sunken pressed state. Keep corners and outer frame perfectly aligned to the reference for seamless state switching. No letters, no icons, no other changes. Wide 512x160 transparent PNG.",
+    "source": "C:\\Users\\1704032\\.codex\\generated_images\\01a21b1b-6b78-7b60-881a-d64005841ec4\\exec-9e945d18-da67-4052-9c85-d94b22bc2092.png",
+    "width": 512,
+    "height": 160,
+    "batch": 1,
+    "transparent": true
+  },
+  {
+    "name": "btn_blue",
+    "prompt": "Use case: stylized-concept. Single finished 512x160 wide horizontal blank UI button background for original Three Kingdoms kids soccer game. Royal blue #2F6FD8 lacquered wooden plaque with simple chunky gold frame and dark brown thick outer outline. Cute bright polished hand-painted cartoon, bevelled raised normal state, rounded rectangular silhouette, subtle ancient Chinese corner flourishes confined to four corners. Broad central area completely plain and blank for programmatic label. Nine-slice stretch compatible: straight simple edges and long uniform middle, no central ornament. Entire rectangle visible with transparent padding outside, true transparent PNG. No text, no symbols, no characters, no watermark.",
+    "source": "C:\\Users\\1704032\\.codex\\generated_images\\01a21b1b-6b78-7b60-881a-d64005841ec4\\exec-c8ab2b28-643b-481b-b7aa-4020a82abb9a.png",
+    "width": 512,
+    "height": 160,
+    "batch": 1,
+    "transparent": true
+  },
+  {
+    "name": "btn_blue_pressed",
+    "prompt": "Use case: precise-object-edit. Input is the NORMAL blank blue button asset; make the MATCHING PRESSED state of exactly this same button. Preserve identical silhouette, frame, corner scrollwork, margins, proportions, hue, blank center and transparent exterior. Depress the center bevel into the frame, darken the lacquer center slightly and reverse its inner highlight/shadow to show an unmistakably sunken pressed state. Keep corners and outer frame perfectly aligned to the reference for seamless state switching. No letters, no icons, no other changes. Wide 512x160 transparent PNG.",
+    "source": "C:\\Users\\1704032\\.codex\\generated_images\\01a21b1b-6b78-7b60-881a-d64005841ec4\\exec-8ce83b43-af60-4244-bed3-4fa20286e689.png",
+    "width": 512,
+    "height": 160,
+    "batch": 1,
+    "transparent": true
+  },
+  {
+    "name": "btn_gold",
+    "prompt": "Use case: stylized-concept. Single finished 512x160 wide horizontal blank UI button background for original Three Kingdoms kids soccer game. Warm golden yellow #F5C542 lacquered wooden plaque with simple chunky gold frame and dark brown thick outer outline. Cute bright polished hand-painted cartoon, bevelled raised normal state, rounded rectangular silhouette, subtle ancient Chinese corner flourishes confined to four corners. Broad central area completely plain and blank for programmatic label. Nine-slice stretch compatible: straight simple edges and long uniform middle, no central ornament. Entire rectangle visible with transparent padding outside, true transparent PNG. No text, no symbols, no characters, no watermark.",
+    "source": "C:\\Users\\1704032\\.codex\\generated_images\\01a21b1b-6b78-7b60-881a-d64005841ec4\\exec-2ce16af7-a986-4699-a37a-3689a3d79065.png",
+    "width": 512,
+    "height": 160,
+    "batch": 1,
+    "transparent": true
+  },
+  {
+    "name": "btn_gold_pressed",
+    "prompt": "Use case: precise-object-edit. Input is the NORMAL blank gold button asset; make the MATCHING PRESSED state of exactly this same button. Preserve identical silhouette, frame, corner scrollwork, margins, proportions, hue, blank center and transparent exterior. Depress the center bevel into the frame, darken the lacquer center slightly and reverse its inner highlight/shadow to show an unmistakably sunken pressed state. Keep corners and outer frame perfectly aligned to the reference for seamless state switching. No letters, no icons, no other changes. Wide 512x160 transparent PNG.",
+    "source": "C:\\Users\\1704032\\.codex\\generated_images\\01a21b1b-6b78-7b60-881a-d64005841ec4\\exec-6bcdcf72-aa6e-484c-a9aa-0aa2a9d77ac0.png",
+    "width": 512,
+    "height": 160,
+    "batch": 1,
+    "transparent": true
+  }
+]
