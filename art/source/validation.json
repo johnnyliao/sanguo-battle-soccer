@@ -1,0 +1,682 @@
+﻿[
+    {
+        "name":  "icon_game",
+        "batch":  1,
+        "width":  512,
+        "height":  512,
+        "transparent_samples":  0,
+        "sha256":  "5eded077fc61cdf13084179845958558659a679ef46e9545b0d0faf8e256fc38"
+    },
+    {
+        "name":  "thumb_1",
+        "batch":  1,
+        "width":  1920,
+        "height":  1080,
+        "transparent_samples":  0,
+        "sha256":  "fed763ce921830212afcb8705a02a3cbeb293972941aead513a4789a1cf07231"
+    },
+    {
+        "name":  "thumb_2",
+        "batch":  1,
+        "width":  1920,
+        "height":  1080,
+        "transparent_samples":  0,
+        "sha256":  "ea10934d30b433ed05e69de6bb8b0df9efe6e955008d5ef994ce8ea4b1664c75"
+    },
+    {
+        "name":  "thumb_3",
+        "batch":  1,
+        "width":  1920,
+        "height":  1080,
+        "transparent_samples":  0,
+        "sha256":  "9a4fecee875e080d19ac583d5b5a449f112d734394a728e3dc8cf769dd6dd49a"
+    },
+    {
+        "name":  "bg_menu",
+        "batch":  1,
+        "width":  1920,
+        "height":  1080,
+        "transparent_samples":  0,
+        "sha256":  "d5e0c2fdbaad00e28280464d47bd04575955901de7bc218b085e8f871495181d"
+    },
+    {
+        "name":  "logo",
+        "batch":  1,
+        "width":  1024,
+        "height":  512,
+        "transparent_samples":  598,
+        "sha256":  "61bf99493315cba96d4b497d27a24c67137e7d5801231e843eb0f8d8eb244ecb"
+    },
+    {
+        "name":  "btn_red",
+        "batch":  1,
+        "width":  512,
+        "height":  160,
+        "transparent_samples":  272,
+        "sha256":  "bdff7a0e2a7f97eaa22dcda8f73869bd8d111eb0a97f838506be84079e062dab"
+    },
+    {
+        "name":  "btn_red_pressed",
+        "batch":  1,
+        "width":  512,
+        "height":  160,
+        "transparent_samples":  270,
+        "sha256":  "726368c0066dcd77885658aae0cd238ce62e965126417fd1b9a2b26c5d8dbd0f"
+    },
+    {
+        "name":  "btn_blue",
+        "batch":  1,
+        "width":  512,
+        "height":  160,
+        "transparent_samples":  261,
+        "sha256":  "6e841cb7fcd78aea3480c080f97cbf30cfafa8e18b248f2a4a73e96530f69b7c"
+    },
+    {
+        "name":  "btn_blue_pressed",
+        "batch":  1,
+        "width":  512,
+        "height":  160,
+        "transparent_samples":  248,
+        "sha256":  "e4c3899b0b5844d9afa96b155b605890fbdac00ff98f0d0fd8e2e89beac1e0eb"
+    },
+    {
+        "name":  "btn_gold",
+        "batch":  1,
+        "width":  512,
+        "height":  160,
+        "transparent_samples":  289,
+        "sha256":  "9fcbdf8c076296a67e1fc6321c402cf31bf4aaad385d7fc99ac49a19aee0bdba"
+    },
+    {
+        "name":  "btn_gold_pressed",
+        "batch":  1,
+        "width":  512,
+        "height":  160,
+        "transparent_samples":  289,
+        "sha256":  "976a92ca631fea5f8903e99401b2b4b01eb825428bf7ceda316802c0231d702b"
+    },
+    {
+        "name":  "portrait_guanyu",
+        "batch":  2,
+        "width":  512,
+        "height":  512,
+        "transparent_samples":  350,
+        "sha256":  "899f0f37993214de3385f097108fd6a902dc2149e9bc1c0dfed415d83c3ebd65"
+    },
+    {
+        "name":  "portrait_zhangfei",
+        "batch":  2,
+        "width":  512,
+        "height":  512,
+        "transparent_samples":  355,
+        "sha256":  "e04c16da0d4f5bcec0918a65c5debf6987b7a056dd15a8283bb01e48ea3529d7"
+    },
+    {
+        "name":  "portrait_zhaoyun",
+        "batch":  2,
+        "width":  512,
+        "height":  512,
+        "transparent_samples":  426,
+        "sha256":  "21552ec1aa4bca4ca7ae8b7ee2da44b8d744152b491eacee4da26f96c0bd9cef"
+    },
+    {
+        "name":  "portrait_zhugeliang",
+        "batch":  2,
+        "width":  512,
+        "height":  512,
+        "transparent_samples":  474,
+        "sha256":  "739774139bba2148692b3dfd5640eca6781d7bcb6bf9dd625adea9f4adf1e33d"
+    },
+    {
+        "name":  "portrait_machao",
+        "batch":  2,
+        "width":  512,
+        "height":  512,
+        "transparent_samples":  471,
+        "sha256":  "e200e07dabc31e1d5a972c01f16425cc730d9d9a513a0103769dc6138e670e0b"
+    },
+    {
+        "name":  "portrait_caocao",
+        "batch":  2,
+        "width":  512,
+        "height":  512,
+        "transparent_samples":  474,
+        "sha256":  "340ffbad6a88678bdf7c01b03f30e6f1db319ac0002e13c77ecd6ded46b9954f"
+    },
+    {
+        "name":  "portrait_xuchu",
+        "batch":  2,
+        "width":  512,
+        "height":  512,
+        "transparent_samples":  378,
+        "sha256":  "52417d0d834df9149e56353ff08fd844aebdc5c6d9ce10bf2322db27f6036231"
+    },
+    {
+        "name":  "portrait_zhangliao",
+        "batch":  2,
+        "width":  512,
+        "height":  512,
+        "transparent_samples":  453,
+        "sha256":  "4fc5795f932958ab7e66c3dca889d70983ad174039accbb3ef6232425ec401aa"
+    },
+    {
+        "name":  "portrait_simayi",
+        "batch":  2,
+        "width":  512,
+        "height":  512,
+        "transparent_samples":  406,
+        "sha256":  "78d1472f2d107726be39f0909afe7532f534d5a756bdbd00a48d43a9d24f12a6"
+    },
+    {
+        "name":  "portrait_zhenji",
+        "batch":  2,
+        "width":  512,
+        "height":  512,
+        "transparent_samples":  405,
+        "sha256":  "1e58685f1b61b8018f4c9a7ac83b44a8376d8e760922c735d6b0957ecbf900eb"
+    },
+    {
+        "name":  "portrait_sunce",
+        "batch":  2,
+        "width":  512,
+        "height":  512,
+        "transparent_samples":  406,
+        "sha256":  "cac25921e51b331d30085cdf19a0ec8be201a06960f8c7bacece3c1c397766a3"
+    },
+    {
+        "name":  "portrait_sunquan",
+        "batch":  2,
+        "width":  512,
+        "height":  512,
+        "transparent_samples":  388,
+        "sha256":  "2575024c6b8743c02c18cbb5b68b16e105be1db0ba1e18269534f29131553917"
+    },
+    {
+        "name":  "portrait_zhouyu",
+        "batch":  2,
+        "width":  512,
+        "height":  512,
+        "transparent_samples":  459,
+        "sha256":  "7b5d976b42a8123314cd7d21123dbcfba11fd3c1c7d17811dd1a5153257d5100"
+    },
+    {
+        "name":  "portrait_daqiao",
+        "batch":  2,
+        "width":  512,
+        "height":  512,
+        "transparent_samples":  345,
+        "sha256":  "3f0e0bc8d798b5918007058eea5758e538513b5818ab5b3c01d6a6c060440f94"
+    },
+    {
+        "name":  "portrait_xiaoqiao",
+        "batch":  2,
+        "width":  512,
+        "height":  512,
+        "transparent_samples":  353,
+        "sha256":  "cf35360571acb09e602845401b5796817e2c39a50ab77e10483bfe2e6482ea40"
+    },
+    {
+        "name":  "portrait_huangjin",
+        "batch":  2,
+        "width":  512,
+        "height":  512,
+        "transparent_samples":  426,
+        "sha256":  "0ac504e17686c03538ac9676cfd3ca5078c9567dac3bf97be1853ddee3dac93d"
+    },
+    {
+        "name":  "portrait_huangjin_boss",
+        "batch":  2,
+        "width":  512,
+        "height":  512,
+        "transparent_samples":  399,
+        "sha256":  "e4084dc2cfda8a125bd0df1990afd346fbdd33dc2b9f51e4b82952c272f4fd44"
+    },
+    {
+        "name":  "portrait_lord",
+        "batch":  2,
+        "width":  512,
+        "height":  512,
+        "transparent_samples":  469,
+        "sha256":  "9ff5937251b4b63771c10572d44fe39f16c8faac73bb05ae61d3d0e134ab7554"
+    },
+    {
+        "name":  "banner_wei",
+        "batch":  2,
+        "width":  512,
+        "height":  1024,
+        "transparent_samples":  438,
+        "sha256":  "e0103b85893f82c792936713e82c0dc37fa77cf4544d686b8647d5262e2b7f19"
+    },
+    {
+        "name":  "banner_shu",
+        "batch":  2,
+        "width":  512,
+        "height":  1024,
+        "transparent_samples":  443,
+        "sha256":  "30f484e56e9544dab1de17a2b77f216683a39cca0ec8f96451f5e8abe1eb9b5b"
+    },
+    {
+        "name":  "banner_wu",
+        "batch":  2,
+        "width":  512,
+        "height":  1024,
+        "transparent_samples":  468,
+        "sha256":  "309dd80be056dceb6145c5e8f7619c4250ad05feea39521a994ee0f14c7ae537"
+    },
+    {
+        "name":  "card_frame_common",
+        "batch":  2,
+        "width":  512,
+        "height":  768,
+        "transparent_samples":  531,
+        "sha256":  "ca90066127fe6e535ffb2e880dee78bc3a641ae8ae78d0da4b586e949da33868"
+    },
+    {
+        "name":  "card_frame_rare",
+        "batch":  2,
+        "width":  512,
+        "height":  768,
+        "transparent_samples":  502,
+        "sha256":  "6b2f51be7c7f8de33e2da022be1b0962054e6aad9591cc0c2579f862dc44ed5b"
+    },
+    {
+        "name":  "card_frame_legend",
+        "batch":  2,
+        "width":  512,
+        "height":  768,
+        "transparent_samples":  441,
+        "sha256":  "70e97c875fbb27d06b287b2d4e19ebace876ef1d46719999a5adda1f98b1fd59"
+    },
+    {
+        "name":  "weapon_sword",
+        "batch":  2,
+        "width":  512,
+        "height":  512,
+        "transparent_samples":  777,
+        "sha256":  "c70209a9aef34dd0563da806b30d4bf630358c590fdd228a5aba22ea7d92299f"
+    },
+    {
+        "name":  "weapon_spear",
+        "batch":  2,
+        "width":  512,
+        "height":  512,
+        "transparent_samples":  828,
+        "sha256":  "8db43d039f202677b3aa0342e4897682b026369015f3a0ae878859e1e2863c19"
+    },
+    {
+        "name":  "weapon_fan",
+        "batch":  2,
+        "width":  512,
+        "height":  512,
+        "transparent_samples":  582,
+        "sha256":  "8e4c6ed2544bef926227d19fb833105a8013bfc2685ddce5cf4f3093a3ee4b62"
+    },
+    {
+        "name":  "bg_intro",
+        "batch":  2,
+        "width":  1920,
+        "height":  1080,
+        "transparent_samples":  0,
+        "sha256":  "27b3414125450116128f06c83a9233646fcec93b98e506eee9231d24b278ff9b"
+    },
+    {
+        "name":  "bg_map_ch1",
+        "batch":  2,
+        "width":  1920,
+        "height":  1080,
+        "transparent_samples":  0,
+        "sha256":  "ffcde17fa216b24e4b0429ec65f96b62d9f859b27b6fbd374f92d538922e6ed0"
+    },
+    {
+        "name":  "node_normal",
+        "batch":  2,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  523,
+        "sha256":  "55e1d6acc5b6218060c17b4a6b624c27c8d90a572575476b448bfe1f21beed79"
+    },
+    {
+        "name":  "node_boss",
+        "batch":  2,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  419,
+        "sha256":  "d297383be67b7a8e21ebe5bc18741c0e549990f909dbdd64de47cef65188bfa3"
+    },
+    {
+        "name":  "node_cleared",
+        "batch":  2,
+        "width":  128,
+        "height":  128,
+        "transparent_samples":  669,
+        "sha256":  "b5564b540dbd8a2abf864d0c605939825de117e4d4326f5b12f94c3b580d8663"
+    },
+    {
+        "name":  "node_locked",
+        "batch":  2,
+        "width":  128,
+        "height":  128,
+        "transparent_samples":  472,
+        "sha256":  "f1d04c9eb190b5b2a620cc7fdc985818e40c3d31d0a31e4bc5415d6982df6b9e"
+    },
+    {
+        "name":  "dialog_box",
+        "batch":  2,
+        "width":  1024,
+        "height":  256,
+        "transparent_samples":  371,
+        "sha256":  "a79601bfac7fba20fd8d6a126424c5dcfcca57927121217c93f7244061fbd481"
+    },
+    {
+        "name":  "title_victory",
+        "batch":  2,
+        "width":  1024,
+        "height":  384,
+        "transparent_samples":  243,
+        "sha256":  "c425fe363ddfba0d228c6058891c552dbf832e697b2ddec8f3c9f33199d7afc6"
+    },
+    {
+        "name":  "title_defeat",
+        "batch":  2,
+        "width":  1024,
+        "height":  384,
+        "transparent_samples":  282,
+        "sha256":  "38e84c04840b8b0629ff277a0d6dec7e79341ceffcd977dc9e495b7e957b8cee"
+    },
+    {
+        "name":  "title_recruit",
+        "batch":  2,
+        "width":  1024,
+        "height":  384,
+        "transparent_samples":  343,
+        "sha256":  "be6ba9712570abd7dd33176dfa30d873de3326c2fbb7265998ca5d3b665a710b"
+    },
+    {
+        "name":  "title_levelup",
+        "batch":  2,
+        "width":  1024,
+        "height":  384,
+        "transparent_samples":  176,
+        "sha256":  "016579fa01b090ac7253647f35a260094282f637b04a99294da828fe400efd1d"
+    },
+    {
+        "name":  "title_chapter_clear",
+        "batch":  2,
+        "width":  1024,
+        "height":  512,
+        "transparent_samples":  256,
+        "sha256":  "d79877b5ef889c5f1bbefe1b260653e7c21ff75d542603cd9f18125b02d5404d"
+    },
+    {
+        "name":  "bg_map_ch1_reference",
+        "batch":  2,
+        "width":  1920,
+        "height":  1080,
+        "transparent_samples":  0,
+        "sha256":  "0f9c2b8210c9d94ff9362f33a34776881ca2a812423ae4f00d7c62dcab40cbef"
+    },
+    {
+        "name":  "btn_attack_disabled",
+        "batch":  3,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  287,
+        "sha256":  "66fab5c0212ffbe784d2df16b5f0d083c214b53429a5ecad53f58429e2bc28f3"
+    },
+    {
+        "name":  "btn_pass_disabled",
+        "batch":  3,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  273,
+        "sha256":  "c98c1757342f65076a3ec9f4f1b3c5b3f1f10841bf39ac72016ae2175758bbb7"
+    },
+    {
+        "name":  "btn_special_disabled",
+        "batch":  3,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  290,
+        "sha256":  "ac560cc37f62cb9d40ee9fc97fd5c30d5ad554ff9fa03092cca951398022f5b7"
+    },
+    {
+        "name":  "hud_scoreboard",
+        "batch":  3,
+        "width":  1024,
+        "height":  192,
+        "transparent_samples":  403,
+        "sha256":  "ff63f2d9cfe23afc2647e47136d1c3ef97fef17af7488f791b85e71373536227"
+    },
+    {
+        "name":  "btn_attack",
+        "batch":  3,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  289,
+        "sha256":  "3fc83ad1eadca3469a43086bcb2690973a000452ba0692c9ef47623de4d4ebe1"
+    },
+    {
+        "name":  "btn_pass",
+        "batch":  3,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  274,
+        "sha256":  "912d0e20ac73ce676bd5981c8170d9e18eed80bb62315950ac4ea3a4617ea04e"
+    },
+    {
+        "name":  "btn_special",
+        "batch":  3,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  289,
+        "sha256":  "91658e535a3e51905e916f61d1ecbb7e4222941d3c5c10da8ceb81db88e379fe"
+    },
+    {
+        "name":  "icon_coin",
+        "batch":  3,
+        "width":  128,
+        "height":  128,
+        "transparent_samples":  454,
+        "sha256":  "b3d566cc7bb69b6dd0fb3036364687168b1f1f858ad7badc0b35d97bf73947aa"
+    },
+    {
+        "name":  "icon_xp",
+        "batch":  3,
+        "width":  128,
+        "height":  128,
+        "transparent_samples":  459,
+        "sha256":  "582184b5ec413c3af61f6cb62464ba1707ee43f11fdacea41d8c3d32c85328ae"
+    },
+    {
+        "name":  "icon_level",
+        "batch":  3,
+        "width":  128,
+        "height":  128,
+        "transparent_samples":  369,
+        "sha256":  "668f14cff9b5a3f07fbe03b78d453599460233d5cf2aeed8d641355bc76bc03c"
+    },
+    {
+        "name":  "bar_frame",
+        "batch":  3,
+        "width":  512,
+        "height":  64,
+        "transparent_samples":  826,
+        "sha256":  "7b37145ad6545ab88553e8c7014d000c117269f95ec21f44cbcaf5b87dcef7ae"
+    },
+    {
+        "name":  "bar_fill",
+        "batch":  3,
+        "width":  512,
+        "height":  64,
+        "transparent_samples":  770,
+        "sha256":  "060fb45cf8c1060ed69ab8f2775324c8d577db9ec496562f39471d985487c548"
+    },
+    {
+        "name":  "tut_keys",
+        "batch":  3,
+        "width":  1024,
+        "height":  512,
+        "transparent_samples":  373,
+        "sha256":  "b5fceb3694111149904547f966dc3eaca1dfcb2151cefda8664909384d4d727a"
+    },
+    {
+        "name":  "tut_touch",
+        "batch":  3,
+        "width":  1024,
+        "height":  512,
+        "transparent_samples":  298,
+        "sha256":  "da6e165d06db9b6dc62de36ef82d7a738f630831ece5494e788e143dabc611e4"
+    },
+    {
+        "name":  "tut_arrow",
+        "batch":  3,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  622,
+        "sha256":  "14fc2f45efb7fe434a25e1ade702e581403393155b56a72da4e6a079028f10c8"
+    },
+    {
+        "name":  "skill_guanyu",
+        "batch":  3,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  469,
+        "sha256":  "f88159e080ebea34ca4cb646b762947f82caaf91fb3728f2123516d23d52468e"
+    },
+    {
+        "name":  "skill_zhangfei",
+        "batch":  3,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  349,
+        "sha256":  "e00389bb6c2f965aa7534fbebf5913b05c96cae0fa512109c67fd36f01032440"
+    },
+    {
+        "name":  "skill_zhaoyun",
+        "batch":  3,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  498,
+        "sha256":  "92d99d0b305211ce2301ca0f9fe75fdeb4065526ff0cbb8c6233e777270abc3f"
+    },
+    {
+        "name":  "skill_zhugeliang",
+        "batch":  3,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  417,
+        "sha256":  "af61a8616a40736b5884460a7fdb34d52f84c9cadc2e9c967f66a8f12a47f9c1"
+    },
+    {
+        "name":  "skill_machao",
+        "batch":  3,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  544,
+        "sha256":  "f3092e2d0b925d2922c8c220a56bd751bfe3a7c42a93e1f8a423b756ab69d768"
+    },
+    {
+        "name":  "skill_caocao",
+        "batch":  3,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  572,
+        "sha256":  "3d8e341a89e9abb312cc4c02a7460800e75b9ae04d2e24c6b56623e77622c39e"
+    },
+    {
+        "name":  "skill_xuchu",
+        "batch":  3,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  324,
+        "sha256":  "881d8cd796966ede73958d75f9c56af83a4093019268522f6931cbd4c10908e9"
+    },
+    {
+        "name":  "skill_zhangliao",
+        "batch":  3,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  390,
+        "sha256":  "9da7aeaaf82b662f1b2622b8b277b1cc69dbed5f784fcf55846e24c4fd224154"
+    },
+    {
+        "name":  "skill_simayi",
+        "batch":  3,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  341,
+        "sha256":  "4778fbd259207a5fb73035337d6cedacde91f82749138c119ef884e761ed04bd"
+    },
+    {
+        "name":  "skill_zhenji",
+        "batch":  3,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  492,
+        "sha256":  "2277b07d9a8c90d26acbb6a0e7f74fa36a6938a19e7165abc6c62f105822e46f"
+    },
+    {
+        "name":  "skill_sunce",
+        "batch":  3,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  431,
+        "sha256":  "b9fb6d3e3e65121a43df335f57d8fa0990a841bcf54d847bcc45ae290538d01d"
+    },
+    {
+        "name":  "skill_sunquan",
+        "batch":  3,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  509,
+        "sha256":  "42d69c0df6099fb6b777da5f5d277065be135edb091f917c575dfce4c2d226ce"
+    },
+    {
+        "name":  "skill_zhouyu",
+        "batch":  3,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  419,
+        "sha256":  "ffaea7488dee2c88849ea023735ed462f546ff21dc9c645fba8c5268293e7971"
+    },
+    {
+        "name":  "skill_daqiao",
+        "batch":  3,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  445,
+        "sha256":  "75a32ffdb246687c074e55704e218b0c90bf8407e82c58002887b6639fd538af"
+    },
+    {
+        "name":  "skill_xiaoqiao",
+        "batch":  3,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  457,
+        "sha256":  "3abfcb8624b15f2299be6455c697a480b6d4df43fcb3cb09ccc6d41f0e73e3bb"
+    },
+    {
+        "name":  "skill_lord_sword",
+        "batch":  3,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  314,
+        "sha256":  "9497df29f91b883b300b1b7a02002f9a0022371027ca6d0b6bfde0c39059774f"
+    },
+    {
+        "name":  "skill_lord_spear",
+        "batch":  3,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  533,
+        "sha256":  "8d2da173e5cef8a0c29772c4c93c47e00e799c5014cf20cfaa6b6244a729b875"
+    },
+    {
+        "name":  "skill_lord_fan",
+        "batch":  3,
+        "width":  256,
+        "height":  256,
+        "transparent_samples":  370,
+        "sha256":  "48552e2bae5f7742b4bad14bae379ba5bff9089b4370fa79ced2bf54964f1215"
+    }
+]

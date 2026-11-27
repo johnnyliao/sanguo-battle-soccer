@@ -1,110 +1,807 @@
-[
-  {
-    "name": "icon_game",
-    "prompt": "Use case: stylized-concept. Finished 512x512 game store icon, opaque background, no text. Reference input is Guan Yu character sheet: use it solely as character identity/style reference, do NOT reproduce the sheet. One enormous chibi Guan Yu, green head scarf with red gem, green robe gold dragon shoulder armor, orange-red face, extremely long black beard and hair, crescent green dragon guandao raised toward ONE flaming soccer ball. Exaggerated fierce cute determined expression, 1:2 to 1:3 body proportions, thick dark outlines, vivid polished cartoon mobile-game illustration for ages 8–12. Tight dramatic crop; huge face and clear ball; simple deep blue radial burst background with orange fire contrast; instantly legible at thumbnail size. Original composition matching character outfit, no lettering, no watermark, no blood.",
-    "source": "C:\\Users\\1704032\\.codex\\generated_images\\01a21b1b-6b78-7b60-881a-d64005841ec4\\exec-5af80b2d-66ed-4bea-8cb9-50f32323ed71.png",
-    "width": 512,
-    "height": 512,
-    "batch": 1,
-    "transparent": false
-  },
-  {
-    "name": "thumb_1",
-    "prompt": "Use case: stylized-concept. Finished 1920x1080 landscape 16:9 promotional thumbnail for original children Three Kingdoms battle soccer game. Input 1 Guan Yu, input 2 Cao Cao, input 3 Sun Ce are character identity and art style references only. Match their outfits, weapons, faces, cartoon proportions closely, do not reproduce sheets. Dynamic triangular action composition: green/gold long-bearded Guan Yu guandao at left, blue/black/gold crowned Cao Cao gem sword at right, red/gold brown spiky-haired red-headband Sun Ce tiger hammer jumping at back; all contest ONE large flaming soccer ball foreground center on ancient grassy soccer pitch. Green dragon arc, blue sword energy and red orange burst converge dramatically around ball. Thick outlines saturated bright polished cute mobile-game cartoon, ages 8–12. Keep top-left quarter relatively quiet sky for a separately added logo. Big expressive characters. No text, no logos, no watermark, no blood.",
-    "source": "C:\\Users\\1704032\\.codex\\generated_images\\01a21b1b-6b78-7b60-881a-d64005841ec4\\exec-2aa9528e-0174-4e7e-a117-0fc10cbfa8fe.png",
-    "width": 1920,
-    "height": 1080,
-    "batch": 1,
-    "transparent": false
-  },
-  {
-    "name": "thumb_2",
-    "prompt": "Use case: stylized-concept. Finished 16:9 1920x1080 game store thumbnail: YOU ARE THE LORD. Cute block-shaped player commander in foreground center with a simple square head, squared arms, gold helmet and flowing red cape, heroic confident smile, one foot on soccer ball. Behind stand recruited chibi generals in an inviting semicircle: Guan Yu green headscarf long black beard gold dragon armor guandao, Cao Cao navy black gold dragon robe and gold crown gem sword, Sun Ce spiky brown hair red headband red gold tiger armor tiger hammer, Zhuge Liang white blue robe tall black cap white feather fan, Ma Chao full enclosed black gold lion armor red plume red cape spear. Reference sheets define outfits and style ONLY. Warm sunny ancient soccer stadium, gold recruitment rays, bright thick-outline original mobile-game cartoon for ages 8–12, heroic cute 1:2–1:3 characters. Clear silhouettes and friendly collectible-team appeal. NO text, no logos, no watermark, no blood. Single composed scene, not a sheet.",
-    "source": "C:\\Users\\1704032\\.codex\\generated_images\\01a21b1b-6b78-7b60-881a-d64005841ec4\\exec-aece15ce-f6a6-432c-a77a-28f462c35d89.png",
-    "width": 1920,
-    "height": 1080,
-    "batch": 1,
-    "transparent": false
-  },
-  {
-    "name": "thumb_3",
-    "prompt": "Use case: stylized-concept. Finished wide 16:9 1920x1080 original Three Kingdoms battle soccer promotional art, split into THREE dramatic diagonal action panels with no text. Left panel: Zhuge Liang white-blue robe black tall gold-edged scholar crown white feather fan casting luminous blue geometric magic circle and light projectiles around a soccer ball. Middle panel: Ma Chao full enclosed BLACK and GOLD knight armor gold lion chest crest red plume red cloak spear leading powerful spectral iron cavalry charging along pitch, orange gold speed trails. Right panel: Zhang Fei wild black hair beard black gold tiger armor tiger-head shoulder red cape, roaring with concentric gold shockwaves shaking the pitch. Reference inputs respectively Zhuge Liang / Ma Chao / Zhang Fei define character designs and style. Big legible faces, expressive cute chibi 1:2–1:3, thick dark outlines, highly saturated cheerful mobile-game polish for children 8–12. Unified stadium cues. NO lettering, no logos, no watermarks, no blood or horror.",
-    "source": "C:\\Users\\1704032\\.codex\\generated_images\\01a21b1b-6b78-7b60-881a-d64005841ec4\\exec-1ecc4f27-cb6a-4806-95ba-b1c56de004df.png",
-    "width": 1920,
-    "height": 1080,
-    "batch": 1,
-    "transparent": false
-  },
-  {
-    "name": "bg_menu",
-    "prompt": "Use case: stylized-concept. Finished 2D main-menu background for original Three Kingdoms battle soccer game for children 8–12. Wide 16:9, 1920x1080. Bright cute Japanese mobile-game cartoon look, thick outlines, saturated colors, golden dusk. Ancient Chinese soccer stadium with clearly marked grassy pitch, distant military tents, blue green and red faction flags bearing simple original animal symbols and no writing, wooden spectator stands, warm lanterns. Center of composition is open quiet grass and sky for a later logo and two buttons; concentrate architecture and props at sides and horizon. Friendly adventurous mood, no characters in foreground, no blood, no text, no logo, no watermark.",
-    "source": "C:\\Users\\1704032\\.codex\\generated_images\\01a21b1b-6b78-7b60-881a-d64005841ec4\\exec-ddbe72a7-d514-4f53-9fb8-d5961dd31f76.png",
-    "width": 1920,
-    "height": 1080,
-    "batch": 1,
-    "transparent": false
-  },
-  {
-    "name": "logo",
-    "prompt": "Create a finished ORIGINAL logo graphic on actual transparent background for a children Three Kingdoms battle soccer game. Wide 2:1 layout 1024x512. ONLY six Traditional Chinese characters in this exact order: 三 國 戰 鬥 足 球. They must read 三國戰鬥足球. Pay special attention the FOURTH character is 鬥 (traditional fighting), NOT 門, 闘, 鬧, or 斗. Bold highly readable playful brush lettering, red letter faces, thick gold edging #F5C542, chunky dark brown outline, a modest soccer ball flourish. Do not include people, warriors, castles, extra words or complex ornaments. Keep generous padding; entire logo visible. Transparent PNG. This is a title lettering asset, not scene art.",
-    "source": "C:\\Users\\1704032\\.codex\\generated_images\\01a21b1b-6b78-7b60-881a-d64005841ec4\\exec-c41d4c76-70c3-4c8e-9ca1-4611c2cf8c71.png",
-    "width": 1024,
-    "height": 512,
-    "batch": 1,
-    "transparent": true
-  },
-  {
-    "name": "btn_red",
-    "prompt": "Use case: stylized-concept. Single finished 512x160 wide horizontal blank UI button background for original Three Kingdoms kids soccer game. Rich vermilion red #D83A3A lacquered wooden plaque with simple chunky gold frame and dark brown thick outer outline. Cute bright polished hand-painted cartoon, bevelled raised normal state, rounded rectangular silhouette, subtle ancient Chinese corner flourishes confined to four corners. Broad central area completely plain and blank for programmatic label. Nine-slice stretch compatible: straight simple edges and long uniform middle, no central ornament. Entire rectangle visible with transparent padding outside, true transparent PNG. No text, no symbols, no characters, no watermark.",
-    "source": "C:\\Users\\1704032\\.codex\\generated_images\\01a21b1b-6b78-7b60-881a-d64005841ec4\\exec-2bd3139e-1f15-4e29-a844-8f15973015df.png",
-    "width": 512,
-    "height": 160,
-    "batch": 1,
-    "transparent": true
-  },
-  {
-    "name": "btn_red_pressed",
-    "prompt": "Use case: precise-object-edit. Input is the NORMAL blank red button asset; make the MATCHING PRESSED state of exactly this same button. Preserve identical silhouette, frame, corner scrollwork, margins, proportions, hue, blank center and transparent exterior. Depress the center bevel into the frame, darken the lacquer center slightly and reverse its inner highlight/shadow to show an unmistakably sunken pressed state. Keep corners and outer frame perfectly aligned to the reference for seamless state switching. No letters, no icons, no other changes. Wide 512x160 transparent PNG.",
-    "source": "C:\\Users\\1704032\\.codex\\generated_images\\01a21b1b-6b78-7b60-881a-d64005841ec4\\exec-9e945d18-da67-4052-9c85-d94b22bc2092.png",
-    "width": 512,
-    "height": 160,
-    "batch": 1,
-    "transparent": true
-  },
-  {
-    "name": "btn_blue",
-    "prompt": "Use case: stylized-concept. Single finished 512x160 wide horizontal blank UI button background for original Three Kingdoms kids soccer game. Royal blue #2F6FD8 lacquered wooden plaque with simple chunky gold frame and dark brown thick outer outline. Cute bright polished hand-painted cartoon, bevelled raised normal state, rounded rectangular silhouette, subtle ancient Chinese corner flourishes confined to four corners. Broad central area completely plain and blank for programmatic label. Nine-slice stretch compatible: straight simple edges and long uniform middle, no central ornament. Entire rectangle visible with transparent padding outside, true transparent PNG. No text, no symbols, no characters, no watermark.",
-    "source": "C:\\Users\\1704032\\.codex\\generated_images\\01a21b1b-6b78-7b60-881a-d64005841ec4\\exec-c8ab2b28-643b-481b-b7aa-4020a82abb9a.png",
-    "width": 512,
-    "height": 160,
-    "batch": 1,
-    "transparent": true
-  },
-  {
-    "name": "btn_blue_pressed",
-    "prompt": "Use case: precise-object-edit. Input is the NORMAL blank blue button asset; make the MATCHING PRESSED state of exactly this same button. Preserve identical silhouette, frame, corner scrollwork, margins, proportions, hue, blank center and transparent exterior. Depress the center bevel into the frame, darken the lacquer center slightly and reverse its inner highlight/shadow to show an unmistakably sunken pressed state. Keep corners and outer frame perfectly aligned to the reference for seamless state switching. No letters, no icons, no other changes. Wide 512x160 transparent PNG.",
-    "source": "C:\\Users\\1704032\\.codex\\generated_images\\01a21b1b-6b78-7b60-881a-d64005841ec4\\exec-8ce83b43-af60-4244-bed3-4fa20286e689.png",
-    "width": 512,
-    "height": 160,
-    "batch": 1,
-    "transparent": true
-  },
-  {
-    "name": "btn_gold",
-    "prompt": "Use case: stylized-concept. Single finished 512x160 wide horizontal blank UI button background for original Three Kingdoms kids soccer game. Warm golden yellow #F5C542 lacquered wooden plaque with simple chunky gold frame and dark brown thick outer outline. Cute bright polished hand-painted cartoon, bevelled raised normal state, rounded rectangular silhouette, subtle ancient Chinese corner flourishes confined to four corners. Broad central area completely plain and blank for programmatic label. Nine-slice stretch compatible: straight simple edges and long uniform middle, no central ornament. Entire rectangle visible with transparent padding outside, true transparent PNG. No text, no symbols, no characters, no watermark.",
-    "source": "C:\\Users\\1704032\\.codex\\generated_images\\01a21b1b-6b78-7b60-881a-d64005841ec4\\exec-2ce16af7-a986-4699-a37a-3689a3d79065.png",
-    "width": 512,
-    "height": 160,
-    "batch": 1,
-    "transparent": true
-  },
-  {
-    "name": "btn_gold_pressed",
-    "prompt": "Use case: precise-object-edit. Input is the NORMAL blank gold button asset; make the MATCHING PRESSED state of exactly this same button. Preserve identical silhouette, frame, corner scrollwork, margins, proportions, hue, blank center and transparent exterior. Depress the center bevel into the frame, darken the lacquer center slightly and reverse its inner highlight/shadow to show an unmistakably sunken pressed state. Keep corners and outer frame perfectly aligned to the reference for seamless state switching. No letters, no icons, no other changes. Wide 512x160 transparent PNG.",
-    "source": "C:\\Users\\1704032\\.codex\\generated_images\\01a21b1b-6b78-7b60-881a-d64005841ec4\\exec-6bcdcf72-aa6e-484c-a9aa-0aa2a9d77ac0.png",
-    "width": 512,
-    "height": 160,
-    "batch": 1,
-    "transparent": true
-  }
+﻿[
+    {
+        "name":  "icon_game",
+        "prompt":  "Use case: stylized-concept. Finished 512x512 game store icon, opaque background, no text. Reference input is Guan Yu character sheet: use it solely as character identity/style reference, do NOT reproduce the sheet. One enormous chibi Guan Yu, green head scarf with red gem, green robe gold dragon shoulder armor, orange-red face, extremely long black beard and hair, crescent green dragon guandao raised toward ONE flaming soccer ball. Exaggerated fierce cute determined expression, 1:2 to 1:3 body proportions, thick dark outlines, vivid polished cartoon mobile-game illustration for ages 8–12. Tight dramatic crop; huge face and clear ball; simple deep blue radial burst background with orange fire contrast; instantly legible at thumbnail size. Original composition matching character outfit, no lettering, no watermark, no blood.",
+        "source":  "art/source/generated/icon_game.png",
+        "width":  512,
+        "height":  512,
+        "batch":  1,
+        "transparent":  false
+    },
+    {
+        "name":  "thumb_1",
+        "prompt":  "Use case: stylized-concept. Finished 1920x1080 landscape 16:9 promotional thumbnail for original children Three Kingdoms battle soccer game. Input 1 Guan Yu, input 2 Cao Cao, input 3 Sun Ce are character identity and art style references only. Match their outfits, weapons, faces, cartoon proportions closely, do not reproduce sheets. Dynamic triangular action composition: green/gold long-bearded Guan Yu guandao at left, blue/black/gold crowned Cao Cao gem sword at right, red/gold brown spiky-haired red-headband Sun Ce tiger hammer jumping at back; all contest ONE large flaming soccer ball foreground center on ancient grassy soccer pitch. Green dragon arc, blue sword energy and red orange burst converge dramatically around ball. Thick outlines saturated bright polished cute mobile-game cartoon, ages 8–12. Keep top-left quarter relatively quiet sky for a separately added logo. Big expressive characters. No text, no logos, no watermark, no blood.",
+        "source":  "art/source/generated/thumb_1.png",
+        "width":  1920,
+        "height":  1080,
+        "batch":  1,
+        "transparent":  false
+    },
+    {
+        "name":  "thumb_2",
+        "prompt":  "Use case: stylized-concept. Finished 16:9 1920x1080 game store thumbnail: YOU ARE THE LORD. Cute block-shaped player commander in foreground center with a simple square head, squared arms, gold helmet and flowing red cape, heroic confident smile, one foot on soccer ball. Behind stand recruited chibi generals in an inviting semicircle: Guan Yu green headscarf long black beard gold dragon armor guandao, Cao Cao navy black gold dragon robe and gold crown gem sword, Sun Ce spiky brown hair red headband red gold tiger armor tiger hammer, Zhuge Liang white blue robe tall black cap white feather fan, Ma Chao full enclosed black gold lion armor red plume red cape spear. Reference sheets define outfits and style ONLY. Warm sunny ancient soccer stadium, gold recruitment rays, bright thick-outline original mobile-game cartoon for ages 8–12, heroic cute 1:2–1:3 characters. Clear silhouettes and friendly collectible-team appeal. NO text, no logos, no watermark, no blood. Single composed scene, not a sheet.",
+        "source":  "art/source/generated/thumb_2.png",
+        "width":  1920,
+        "height":  1080,
+        "batch":  1,
+        "transparent":  false
+    },
+    {
+        "name":  "thumb_3",
+        "prompt":  "Use case: stylized-concept. Finished wide 16:9 1920x1080 original Three Kingdoms battle soccer promotional art, split into THREE dramatic diagonal action panels with no text. Left panel: Zhuge Liang white-blue robe black tall gold-edged scholar crown white feather fan casting luminous blue geometric magic circle and light projectiles around a soccer ball. Middle panel: Ma Chao full enclosed BLACK and GOLD knight armor gold lion chest crest red plume red cloak spear leading powerful spectral iron cavalry charging along pitch, orange gold speed trails. Right panel: Zhang Fei wild black hair beard black gold tiger armor tiger-head shoulder red cape, roaring with concentric gold shockwaves shaking the pitch. Reference inputs respectively Zhuge Liang / Ma Chao / Zhang Fei define character designs and style. Big legible faces, expressive cute chibi 1:2–1:3, thick dark outlines, highly saturated cheerful mobile-game polish for children 8–12. Unified stadium cues. NO lettering, no logos, no watermarks, no blood or horror.",
+        "source":  "art/source/generated/thumb_3.png",
+        "width":  1920,
+        "height":  1080,
+        "batch":  1,
+        "transparent":  false
+    },
+    {
+        "name":  "bg_menu",
+        "prompt":  "Use case: stylized-concept. Finished 2D main-menu background for original Three Kingdoms battle soccer game for children 8–12. Wide 16:9, 1920x1080. Bright cute Japanese mobile-game cartoon look, thick outlines, saturated colors, golden dusk. Ancient Chinese soccer stadium with clearly marked grassy pitch, distant military tents, blue green and red faction flags bearing simple original animal symbols and no writing, wooden spectator stands, warm lanterns. Center of composition is open quiet grass and sky for a later logo and two buttons; concentrate architecture and props at sides and horizon. Friendly adventurous mood, no characters in foreground, no blood, no text, no logo, no watermark.",
+        "source":  "art/source/generated/bg_menu.png",
+        "width":  1920,
+        "height":  1080,
+        "batch":  1,
+        "transparent":  false
+    },
+    {
+        "name":  "logo",
+        "prompt":  "Create a finished ORIGINAL logo graphic on actual transparent background for a children Three Kingdoms battle soccer game. Wide 2:1 layout 1024x512. ONLY six Traditional Chinese characters in this exact order: 三 國 戰 鬥 足 球. They must read 三國戰鬥足球. Pay special attention the FOURTH character is 鬥 (traditional fighting), NOT 門, 闘, 鬧, or 斗. Bold highly readable playful brush lettering, red letter faces, thick gold edging #F5C542, chunky dark brown outline, a modest soccer ball flourish. Do not include people, warriors, castles, extra words or complex ornaments. Keep generous padding; entire logo visible. Transparent PNG. This is a title lettering asset, not scene art.",
+        "source":  "art/source/generated/logo.png",
+        "width":  1024,
+        "height":  512,
+        "batch":  1,
+        "transparent":  true
+    },
+    {
+        "name":  "btn_red",
+        "prompt":  "Use case: stylized-concept. Single finished 512x160 wide horizontal blank UI button background for original Three Kingdoms kids soccer game. Rich vermilion red #D83A3A lacquered wooden plaque with simple chunky gold frame and dark brown thick outer outline. Cute bright polished hand-painted cartoon, bevelled raised normal state, rounded rectangular silhouette, subtle ancient Chinese corner flourishes confined to four corners. Broad central area completely plain and blank for programmatic label. Nine-slice stretch compatible: straight simple edges and long uniform middle, no central ornament. Entire rectangle visible with transparent padding outside, true transparent PNG. No text, no symbols, no characters, no watermark.",
+        "source":  "art/source/generated/btn_red.png",
+        "width":  512,
+        "height":  160,
+        "batch":  1,
+        "transparent":  true
+    },
+    {
+        "name":  "btn_red_pressed",
+        "prompt":  "Use case: precise-object-edit. Input is the NORMAL blank red button asset; make the MATCHING PRESSED state of exactly this same button. Preserve identical silhouette, frame, corner scrollwork, margins, proportions, hue, blank center and transparent exterior. Depress the center bevel into the frame, darken the lacquer center slightly and reverse its inner highlight/shadow to show an unmistakably sunken pressed state. Keep corners and outer frame perfectly aligned to the reference for seamless state switching. No letters, no icons, no other changes. Wide 512x160 transparent PNG.",
+        "source":  "art/source/generated/btn_red_pressed.png",
+        "width":  512,
+        "height":  160,
+        "batch":  1,
+        "transparent":  true
+    },
+    {
+        "name":  "btn_blue",
+        "prompt":  "Use case: stylized-concept. Single finished 512x160 wide horizontal blank UI button background for original Three Kingdoms kids soccer game. Royal blue #2F6FD8 lacquered wooden plaque with simple chunky gold frame and dark brown thick outer outline. Cute bright polished hand-painted cartoon, bevelled raised normal state, rounded rectangular silhouette, subtle ancient Chinese corner flourishes confined to four corners. Broad central area completely plain and blank for programmatic label. Nine-slice stretch compatible: straight simple edges and long uniform middle, no central ornament. Entire rectangle visible with transparent padding outside, true transparent PNG. No text, no symbols, no characters, no watermark.",
+        "source":  "art/source/generated/btn_blue.png",
+        "width":  512,
+        "height":  160,
+        "batch":  1,
+        "transparent":  true
+    },
+    {
+        "name":  "btn_blue_pressed",
+        "prompt":  "Use case: precise-object-edit. Input is the NORMAL blank blue button asset; make the MATCHING PRESSED state of exactly this same button. Preserve identical silhouette, frame, corner scrollwork, margins, proportions, hue, blank center and transparent exterior. Depress the center bevel into the frame, darken the lacquer center slightly and reverse its inner highlight/shadow to show an unmistakably sunken pressed state. Keep corners and outer frame perfectly aligned to the reference for seamless state switching. No letters, no icons, no other changes. Wide 512x160 transparent PNG.",
+        "source":  "art/source/generated/btn_blue_pressed.png",
+        "width":  512,
+        "height":  160,
+        "batch":  1,
+        "transparent":  true
+    },
+    {
+        "name":  "btn_gold",
+        "prompt":  "Use case: stylized-concept. Single finished 512x160 wide horizontal blank UI button background for original Three Kingdoms kids soccer game. Warm golden yellow #F5C542 lacquered wooden plaque with simple chunky gold frame and dark brown thick outer outline. Cute bright polished hand-painted cartoon, bevelled raised normal state, rounded rectangular silhouette, subtle ancient Chinese corner flourishes confined to four corners. Broad central area completely plain and blank for programmatic label. Nine-slice stretch compatible: straight simple edges and long uniform middle, no central ornament. Entire rectangle visible with transparent padding outside, true transparent PNG. No text, no symbols, no characters, no watermark.",
+        "source":  "art/source/generated/btn_gold.png",
+        "width":  512,
+        "height":  160,
+        "batch":  1,
+        "transparent":  true
+    },
+    {
+        "name":  "btn_gold_pressed",
+        "prompt":  "Use case: precise-object-edit. Input is the NORMAL blank gold button asset; make the MATCHING PRESSED state of exactly this same button. Preserve identical silhouette, frame, corner scrollwork, margins, proportions, hue, blank center and transparent exterior. Depress the center bevel into the frame, darken the lacquer center slightly and reverse its inner highlight/shadow to show an unmistakably sunken pressed state. Keep corners and outer frame perfectly aligned to the reference for seamless state switching. No letters, no icons, no other changes. Wide 512x160 transparent PNG.",
+        "source":  "art/source/generated/btn_gold_pressed.png",
+        "width":  512,
+        "height":  160,
+        "batch":  1,
+        "transparent":  true
+    },
+    {
+        "name":  "portrait_guanyu",
+        "prompt":  "Use case: stylized-concept. Finished standalone 512x512 transparent PNG bust portrait for children original Three Kingdoms battle soccer game. Character guanyu: Green headscarf, long black beard, green robe gold dragon shoulder armor; stern noble. Reference image is identity/style ONLY; match face, hairstyle, clothing colors and ornament precisely, do NOT reproduce sheet. Chest-up half-body, turn to viewer\u0027s RIGHT in a front three-quarter pose; head occupies upper half, entire head/helmet visible with padding, chest cropped cleanly at bottom. 1:2–1:3 chibi, thick dark outline, saturated colors, crisp cel shading, polished cute mobile-game illustration, handsome/cute, age appropriate. Transparent exterior, no frame, no ground shadow, no text, no logos, no watermarks, no blood.",
+        "ref":  "art-src/guanyu-sheet.png",
+        "width":  512,
+        "height":  512,
+        "batch":  2,
+        "transparent":  true,
+        "source":  "art/source/generated/portrait_guanyu.png"
+    },
+    {
+        "name":  "portrait_zhangfei",
+        "prompt":  "Use case: stylized-concept. Finished standalone 512x512 transparent PNG bust portrait for children original Three Kingdoms battle soccer game. Character zhangfei: Wild black hair beard, black gold tiger armor, tiger shoulder head, red cape; bold. Reference image is identity/style ONLY; match face, hairstyle, clothing colors and ornament precisely, do NOT reproduce sheet. Chest-up half-body, turn to viewer\u0027s RIGHT in a front three-quarter pose; head occupies upper half, entire head/helmet visible with padding, chest cropped cleanly at bottom. 1:2–1:3 chibi, thick dark outline, saturated colors, crisp cel shading, polished cute mobile-game illustration, handsome/cute, age appropriate. Transparent exterior, no frame, no ground shadow, no text, no logos, no watermarks, no blood.",
+        "ref":  "art-src/zhangfei-sheet.png",
+        "width":  512,
+        "height":  512,
+        "batch":  2,
+        "transparent":  true,
+        "source":  "art/source/generated/portrait_zhangfei.png"
+    },
+    {
+        "name":  "portrait_zhaoyun",
+        "prompt":  "Use case: stylized-concept. Finished standalone 512x512 transparent PNG bust portrait for children original Three Kingdoms battle soccer game. Character zhaoyun: Silver white armor, red tasselled helmet, white cape; handsome youthful warrior. Reference image is identity/style ONLY; match face, hairstyle, clothing colors and ornament precisely, do NOT reproduce sheet. Chest-up half-body, turn to viewer\u0027s RIGHT in a front three-quarter pose; head occupies upper half, entire head/helmet visible with padding, chest cropped cleanly at bottom. 1:2–1:3 chibi, thick dark outline, saturated colors, crisp cel shading, polished cute mobile-game illustration, handsome/cute, age appropriate. Transparent exterior, no frame, no ground shadow, no text, no logos, no watermarks, no blood.",
+        "ref":  "art-src/zhaoyun-sheet.png",
+        "width":  512,
+        "height":  512,
+        "batch":  2,
+        "transparent":  true,
+        "source":  "art/source/generated/portrait_zhaoyun.png"
+    },
+    {
+        "name":  "portrait_zhugeliang",
+        "prompt":  "Use case: stylized-concept. Finished standalone 512x512 transparent PNG bust portrait for children original Three Kingdoms battle soccer game. Character zhugeliang: White blue Taoist robe, black tall crown, white feather fan; calm wise. Reference image is identity/style ONLY; match face, hairstyle, clothing colors and ornament precisely, do NOT reproduce sheet. Chest-up half-body, turn to viewer\u0027s RIGHT in a front three-quarter pose; head occupies upper half, entire head/helmet visible with padding, chest cropped cleanly at bottom. 1:2–1:3 chibi, thick dark outline, saturated colors, crisp cel shading, polished cute mobile-game illustration, handsome/cute, age appropriate. Transparent exterior, no frame, no ground shadow, no text, no logos, no watermarks, no blood.",
+        "ref":  "art-src/zhugeliang-sheet.png",
+        "width":  512,
+        "height":  512,
+        "batch":  2,
+        "transparent":  true,
+        "source":  "art/source/generated/portrait_zhugeliang.png"
+    },
+    {
+        "name":  "portrait_machao",
+        "prompt":  "Use case: stylized-concept. Finished standalone 512x512 transparent PNG bust portrait for children original Three Kingdoms battle soccer game. Character machao: Fully enclosed black gold knight armor, red plume red cape, gold lion chest crest; face hidden by visor. Reference image is identity/style ONLY; match face, hairstyle, clothing colors and ornament precisely, do NOT reproduce sheet. Chest-up half-body, turn to viewer\u0027s RIGHT in a front three-quarter pose; head occupies upper half, entire head/helmet visible with padding, chest cropped cleanly at bottom. 1:2–1:3 chibi, thick dark outline, saturated colors, crisp cel shading, polished cute mobile-game illustration, handsome/cute, age appropriate. Transparent exterior, no frame, no ground shadow, no text, no logos, no watermarks, no blood.",
+        "ref":  "art-src/machao-sheet.png",
+        "width":  512,
+        "height":  512,
+        "batch":  2,
+        "transparent":  true,
+        "source":  "art/source/generated/portrait_machao.png"
+    },
+    {
+        "name":  "portrait_caocao",
+        "prompt":  "Use case: stylized-concept. Finished standalone 512x512 transparent PNG bust portrait for children original Three Kingdoms battle soccer game. Character caocao: Blue black gold dragon robe, gold crown, short moustache pointed beard; confident. Reference image is identity/style ONLY; match face, hairstyle, clothing colors and ornament precisely, do NOT reproduce sheet. Chest-up half-body, turn to viewer\u0027s RIGHT in a front three-quarter pose; head occupies upper half, entire head/helmet visible with padding, chest cropped cleanly at bottom. 1:2–1:3 chibi, thick dark outline, saturated colors, crisp cel shading, polished cute mobile-game illustration, handsome/cute, age appropriate. Transparent exterior, no frame, no ground shadow, no text, no logos, no watermarks, no blood.",
+        "ref":  "art-src/caocao-sheet.png",
+        "width":  512,
+        "height":  512,
+        "batch":  2,
+        "transparent":  true,
+        "source":  "art/source/generated/portrait_caocao.png"
+    },
+    {
+        "name":  "portrait_xuchu",
+        "prompt":  "Use case: stylized-concept. Finished standalone 512x512 transparent PNG bust portrait for children original Three Kingdoms battle soccer game. Character xuchu: Bald enormously muscular man, tiger skin shawl, heavy iron chains; cheerful tough. Reference image is identity/style ONLY; match face, hairstyle, clothing colors and ornament precisely, do NOT reproduce sheet. Chest-up half-body, turn to viewer\u0027s RIGHT in a front three-quarter pose; head occupies upper half, entire head/helmet visible with padding, chest cropped cleanly at bottom. 1:2–1:3 chibi, thick dark outline, saturated colors, crisp cel shading, polished cute mobile-game illustration, handsome/cute, age appropriate. Transparent exterior, no frame, no ground shadow, no text, no logos, no watermarks, no blood.",
+        "ref":  "art-src/xuchu-sheet.png",
+        "width":  512,
+        "height":  512,
+        "batch":  2,
+        "transparent":  true,
+        "source":  "art/source/generated/portrait_xuchu.png"
+    },
+    {
+        "name":  "portrait_zhangliao",
+        "prompt":  "Use case: stylized-concept. Finished standalone 512x512 transparent PNG bust portrait for children original Three Kingdoms battle soccer game. Character zhangliao: Purple black armor, white winged helmet, black fur collar; intense. Reference image is identity/style ONLY; match face, hairstyle, clothing colors and ornament precisely, do NOT reproduce sheet. Chest-up half-body, turn to viewer\u0027s RIGHT in a front three-quarter pose; head occupies upper half, entire head/helmet visible with padding, chest cropped cleanly at bottom. 1:2–1:3 chibi, thick dark outline, saturated colors, crisp cel shading, polished cute mobile-game illustration, handsome/cute, age appropriate. Transparent exterior, no frame, no ground shadow, no text, no logos, no watermarks, no blood.",
+        "ref":  "art-src/zhangliao-sheet.png",
+        "width":  512,
+        "height":  512,
+        "batch":  2,
+        "transparent":  true,
+        "source":  "art/source/generated/portrait_zhangliao.png"
+    },
+    {
+        "name":  "portrait_simayi",
+        "prompt":  "Use case: stylized-concept. Finished standalone 512x512 transparent PNG bust portrait for children original Three Kingdoms battle soccer game. Character simayi: Black gold long robe, tall black crown, black feather fan, red eyes sly grin; child friendly. Reference image is identity/style ONLY; match face, hairstyle, clothing colors and ornament precisely, do NOT reproduce sheet. Chest-up half-body, turn to viewer\u0027s RIGHT in a front three-quarter pose; head occupies upper half, entire head/helmet visible with padding, chest cropped cleanly at bottom. 1:2–1:3 chibi, thick dark outline, saturated colors, crisp cel shading, polished cute mobile-game illustration, handsome/cute, age appropriate. Transparent exterior, no frame, no ground shadow, no text, no logos, no watermarks, no blood.",
+        "ref":  "art-src/simayi-sheet.png",
+        "width":  512,
+        "height":  512,
+        "batch":  2,
+        "transparent":  true,
+        "source":  "art/source/generated/portrait_simayi.png"
+    },
+    {
+        "name":  "portrait_zhenji",
+        "prompt":  "Use case: stylized-concept. Finished standalone 512x512 transparent PNG bust portrait for children original Three Kingdoms battle soccer game. Character zhenji: Blue qipao, purple translucent silk shawl, ice crystal hair accessory; elegant. Reference image is identity/style ONLY; match face, hairstyle, clothing colors and ornament precisely, do NOT reproduce sheet. Chest-up half-body, turn to viewer\u0027s RIGHT in a front three-quarter pose; head occupies upper half, entire head/helmet visible with padding, chest cropped cleanly at bottom. 1:2–1:3 chibi, thick dark outline, saturated colors, crisp cel shading, polished cute mobile-game illustration, handsome/cute, age appropriate. Transparent exterior, no frame, no ground shadow, no text, no logos, no watermarks, no blood.",
+        "ref":  "art-src/zhenji-sheet.png",
+        "width":  512,
+        "height":  512,
+        "batch":  2,
+        "transparent":  true,
+        "source":  "art/source/generated/portrait_zhenji.png"
+    },
+    {
+        "name":  "portrait_sunce",
+        "prompt":  "Use case: stylized-concept. Finished standalone 512x512 transparent PNG bust portrait for children original Three Kingdoms battle soccer game. Character sunce: Brown spiky hair, red headband, red gold tiger armor; lively brave. Reference image is identity/style ONLY; match face, hairstyle, clothing colors and ornament precisely, do NOT reproduce sheet. Chest-up half-body, turn to viewer\u0027s RIGHT in a front three-quarter pose; head occupies upper half, entire head/helmet visible with padding, chest cropped cleanly at bottom. 1:2–1:3 chibi, thick dark outline, saturated colors, crisp cel shading, polished cute mobile-game illustration, handsome/cute, age appropriate. Transparent exterior, no frame, no ground shadow, no text, no logos, no watermarks, no blood.",
+        "ref":  "art-src/sunce-sheet.png",
+        "width":  512,
+        "height":  512,
+        "batch":  2,
+        "transparent":  true,
+        "source":  "art/source/generated/portrait_sunce.png"
+    },
+    {
+        "name":  "portrait_sunquan",
+        "prompt":  "Use case: stylized-concept. Finished standalone 512x512 transparent PNG bust portrait for children original Three Kingdoms battle soccer game. Character sunquan: Purple red emperor robe, gold crown with pearl curtain, long purple hair; regal. Reference image is identity/style ONLY; match face, hairstyle, clothing colors and ornament precisely, do NOT reproduce sheet. Chest-up half-body, turn to viewer\u0027s RIGHT in a front three-quarter pose; head occupies upper half, entire head/helmet visible with padding, chest cropped cleanly at bottom. 1:2–1:3 chibi, thick dark outline, saturated colors, crisp cel shading, polished cute mobile-game illustration, handsome/cute, age appropriate. Transparent exterior, no frame, no ground shadow, no text, no logos, no watermarks, no blood.",
+        "ref":  "art-src/sunquan-sheet.png",
+        "width":  512,
+        "height":  512,
+        "batch":  2,
+        "transparent":  true,
+        "source":  "art/source/generated/portrait_sunquan.png"
+    },
+    {
+        "name":  "portrait_zhouyu",
+        "prompt":  "Use case: stylized-concept. Finished standalone 512x512 transparent PNG bust portrait for children original Three Kingdoms battle soccer game. Character zhouyu: Red white robe, gold hair crown; handsome refined young man. Reference image is identity/style ONLY; match face, hairstyle, clothing colors and ornament precisely, do NOT reproduce sheet. Chest-up half-body, turn to viewer\u0027s RIGHT in a front three-quarter pose; head occupies upper half, entire head/helmet visible with padding, chest cropped cleanly at bottom. 1:2–1:3 chibi, thick dark outline, saturated colors, crisp cel shading, polished cute mobile-game illustration, handsome/cute, age appropriate. Transparent exterior, no frame, no ground shadow, no text, no logos, no watermarks, no blood.",
+        "ref":  "art-src/zhouyu-sheet.png",
+        "width":  512,
+        "height":  512,
+        "batch":  2,
+        "transparent":  true,
+        "source":  "art/source/generated/portrait_zhouyu.png"
+    },
+    {
+        "name":  "portrait_daqiao",
+        "prompt":  "Use case: stylized-concept. Finished standalone 512x512 transparent PNG bust portrait for children original Three Kingdoms battle soccer game. Character daqiao: Black red gold battle dress, large iron fan with peony motif; confident heroic young woman. Reference image is identity/style ONLY; match face, hairstyle, clothing colors and ornament precisely, do NOT reproduce sheet. Chest-up half-body, turn to viewer\u0027s RIGHT in a front three-quarter pose; head occupies upper half, entire head/helmet visible with padding, chest cropped cleanly at bottom. 1:2–1:3 chibi, thick dark outline, saturated colors, crisp cel shading, polished cute mobile-game illustration, handsome/cute, age appropriate. Transparent exterior, no frame, no ground shadow, no text, no logos, no watermarks, no blood.",
+        "ref":  "art-src/daqiao-sheet.png",
+        "width":  512,
+        "height":  512,
+        "batch":  2,
+        "transparent":  true,
+        "source":  "art/source/generated/portrait_daqiao.png"
+    },
+    {
+        "name":  "portrait_xiaoqiao",
+        "prompt":  "Use case: stylized-concept. Finished standalone 512x512 transparent PNG bust portrait for children original Three Kingdoms battle soccer game. Character xiaoqiao: Pink cherry blossom dress, twin hair buns, pink folding fan; lively cute. Reference image is identity/style ONLY; match face, hairstyle, clothing colors and ornament precisely, do NOT reproduce sheet. Chest-up half-body, turn to viewer\u0027s RIGHT in a front three-quarter pose; head occupies upper half, entire head/helmet visible with padding, chest cropped cleanly at bottom. 1:2–1:3 chibi, thick dark outline, saturated colors, crisp cel shading, polished cute mobile-game illustration, handsome/cute, age appropriate. Transparent exterior, no frame, no ground shadow, no text, no logos, no watermarks, no blood.",
+        "ref":  "art-src/xiaoqiao-sheet.png",
+        "width":  512,
+        "height":  512,
+        "batch":  2,
+        "transparent":  true,
+        "source":  "art/source/generated/portrait_xiaoqiao.png"
+    },
+    {
+        "name":  "portrait_huangjin",
+        "prompt":  "Use case: stylized-concept. Finished standalone 512x512 transparent PNG bust portrait for children original Three Kingdoms battle soccer game. Character huangjin: Original Yellow Turban grunt, yellow headscarf #E8B923, simple yellow cloth tunic, slightly goofy harmless villain. Match soldiers-sheet cartoon proportions. Design original to match bright chibi cartoon reference. Chest-up half-body, turn to viewer\u0027s RIGHT in a front three-quarter pose; head occupies upper half, entire head/helmet visible with padding, chest cropped cleanly at bottom. 1:2–1:3 chibi, thick dark outline, saturated colors, crisp cel shading, polished cute mobile-game illustration, handsome/cute, age appropriate. Transparent exterior, no frame, no ground shadow, no text, no logos, no watermarks, no blood.",
+        "ref":  "art-src/soldiers-sheet.png",
+        "width":  512,
+        "height":  512,
+        "batch":  2,
+        "transparent":  true,
+        "source":  "art/source/generated/portrait_huangjin.png"
+    },
+    {
+        "name":  "portrait_huangjin_boss",
+        "prompt":  "Use case: stylized-concept. Finished standalone 512x512 transparent PNG bust portrait for children original Three Kingdoms battle soccer game. Character huangjin_boss: Original Yellow Turban captain, yellow headscarf #E8B923, broad muscular man thick curly beard, wooden club at side; goofy formidable but friendly to ages 8–12. Match soldier chibi proportions. Design original to match bright chibi cartoon reference. Chest-up half-body, turn to viewer\u0027s RIGHT in a front three-quarter pose; head occupies upper half, entire head/helmet visible with padding, chest cropped cleanly at bottom. 1:2–1:3 chibi, thick dark outline, saturated colors, crisp cel shading, polished cute mobile-game illustration, handsome/cute, age appropriate. Transparent exterior, no frame, no ground shadow, no text, no logos, no watermarks, no blood.",
+        "ref":  "art-src/soldiers-sheet.png",
+        "width":  512,
+        "height":  512,
+        "batch":  2,
+        "transparent":  true,
+        "source":  "art/source/generated/portrait_huangjin_boss.png"
+    },
+    {
+        "name":  "portrait_lord",
+        "prompt":  "Use case: stylized-concept. Finished standalone 512x512 transparent PNG bust portrait for children original Three Kingdoms battle soccer game. Character lord: Player-placeholder portrait: faceless solid dark silhouette of a blocky commander wearing gold helmet and red cape. No facial features at all. Design original to match bright chibi cartoon reference. Chest-up half-body, turn to viewer\u0027s RIGHT in a front three-quarter pose; head occupies upper half, entire head/helmet visible with padding, chest cropped cleanly at bottom. 1:2–1:3 chibi, thick dark outline, saturated colors, crisp cel shading, polished cute mobile-game illustration, handsome/cute, age appropriate. Transparent exterior, no frame, no ground shadow, no text, no logos, no watermarks, no blood.",
+        "ref":  null,
+        "width":  512,
+        "height":  512,
+        "batch":  2,
+        "transparent":  true,
+        "source":  "art/source/generated/portrait_lord.png"
+    },
+    {
+        "name":  "banner_wei",
+        "width":  512,
+        "height":  1024,
+        "batch":  2,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 512x1024 PNG with actual transparent background. Vertical hanging battle banner in Wei royal blue #2F6FD8. Original gold eagle heraldic emblem near TOP, large blank cloth center reserved for country name, gold finial and tassels, ancient Chinese banner shape. Bright original chibi game art for ages 8–12, bold dark outlines, high saturation, clean cel shading, cheerful mobile-game polish. Original ancient Chinese motifs. Standalone asset, complete silhouette with padding. No watermark, no existing IP. Absolutely NO text, letters, digits or labels.",
+        "source":  "art/source/generated/banner_wei.png"
+    },
+    {
+        "name":  "banner_shu",
+        "width":  512,
+        "height":  1024,
+        "batch":  2,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 512x1024 PNG with actual transparent background. Vertical hanging battle banner in Shu green #2FA84F. Original gold dragon heraldic emblem near TOP, large blank cloth center reserved for country name, gold finial and tassels, ancient Chinese banner shape. Bright original chibi game art for ages 8–12, bold dark outlines, high saturation, clean cel shading, cheerful mobile-game polish. Original ancient Chinese motifs. Standalone asset, complete silhouette with padding. No watermark, no existing IP. Absolutely NO text, letters, digits or labels.",
+        "source":  "art/source/generated/banner_shu.png"
+    },
+    {
+        "name":  "banner_wu",
+        "width":  512,
+        "height":  1024,
+        "batch":  2,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 512x1024 PNG with actual transparent background. Vertical hanging battle banner in Wu red #D83A3A. Original gold tiger heraldic emblem near TOP, large blank cloth center reserved for country name, gold finial and tassels, ancient Chinese banner shape. Bright original chibi game art for ages 8–12, bold dark outlines, high saturation, clean cel shading, cheerful mobile-game polish. Original ancient Chinese motifs. Standalone asset, complete silhouette with padding. No watermark, no existing IP. Absolutely NO text, letters, digits or labels.",
+        "source":  "art/source/generated/banner_wu.png"
+    },
+    {
+        "name":  "card_frame_common",
+        "width":  512,
+        "height":  768,
+        "batch":  2,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 512x768 PNG with actual transparent background. Empty portrait-oriented collectible general card BORDER ONLY, common rarity warm bronze metal, modest Chinese corner ornaments. Upper 60 percent fully transparent opening for portrait, lower 35 percent subtle blank dark wooden panel for future text and stat bars. NO portrait or stats drawn. Bright original chibi game art for ages 8–12, bold dark outlines, high saturation, clean cel shading, cheerful mobile-game polish. Original ancient Chinese motifs. Standalone asset, complete silhouette with padding. No watermark, no existing IP. Absolutely NO text, letters, digits or labels.",
+        "source":  "art/source/generated/card_frame_common.png"
+    },
+    {
+        "name":  "card_frame_rare",
+        "width":  512,
+        "height":  768,
+        "batch":  2,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 512x768 PNG with actual transparent background. Empty portrait-oriented collectible general card BORDER ONLY, rare rarity polished silver blue metal, Chinese corner ornaments. Upper 60 percent fully transparent opening for portrait, lower 35 percent subtle blank dark blue panel for future text and stat bars. NO portrait or stats drawn. Bright original chibi game art for ages 8–12, bold dark outlines, high saturation, clean cel shading, cheerful mobile-game polish. Original ancient Chinese motifs. Standalone asset, complete silhouette with padding. No watermark, no existing IP. Absolutely NO text, letters, digits or labels.",
+        "source":  "art/source/generated/card_frame_rare.png"
+    },
+    {
+        "name":  "card_frame_legend",
+        "width":  512,
+        "height":  768,
+        "batch":  2,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 512x768 PNG with actual transparent background. Empty portrait-oriented collectible general card BORDER ONLY, legendary rarity brilliant gold #F5C542 dragon corner accents. Upper 60 percent fully transparent opening for portrait, lower 35 percent subtle blank dark red panel for future text and stat bars. NO portrait or stats drawn. Bright original chibi game art for ages 8–12, bold dark outlines, high saturation, clean cel shading, cheerful mobile-game polish. Original ancient Chinese motifs. Standalone asset, complete silhouette with padding. No watermark, no existing IP. Absolutely NO text, letters, digits or labels.",
+        "source":  "art/source/generated/card_frame_legend.png"
+    },
+    {
+        "name":  "weapon_sword",
+        "width":  512,
+        "height":  512,
+        "batch":  2,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 512x512 PNG with actual transparent background. Single original imperial Son of Heaven sword, silver double edged blade gold dragon guard red jewel gold hilt red tassel, diagonally upright, handsome readable inventory weapon illustration. Bright original chibi game art for ages 8–12, bold dark outlines, high saturation, clean cel shading, cheerful mobile-game polish. Original ancient Chinese motifs. Standalone asset, complete silhouette with padding. No watermark, no existing IP. Absolutely NO text, letters, digits or labels.",
+        "source":  "art/source/generated/weapon_sword.png"
+    },
+    {
+        "name":  "weapon_spear",
+        "width":  512,
+        "height":  512,
+        "batch":  2,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 512x512 PNG with actual transparent background. Single original Formation-Breaking spear, broad silver spearpoint long dark shaft with a sculpted GOLD DRAGON spiralling around shaft and point, diagonal composition entire weapon visible. Bright original chibi game art for ages 8–12, bold dark outlines, high saturation, clean cel shading, cheerful mobile-game polish. Original ancient Chinese motifs. Standalone asset, complete silhouette with padding. No watermark, no existing IP. Absolutely NO text, letters, digits or labels.",
+        "source":  "art/source/generated/weapon_spear.png"
+    },
+    {
+        "name":  "weapon_fan",
+        "width":  512,
+        "height":  512,
+        "batch":  2,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 512x512 PNG with actual transparent background. Single original Phoenix Wing fan, open graceful fan made from phoenix feathers red orange gold tips, gold phoenix handle with small red tassel, readable silhouette. Bright original chibi game art for ages 8–12, bold dark outlines, high saturation, clean cel shading, cheerful mobile-game polish. Original ancient Chinese motifs. Standalone asset, complete silhouette with padding. No watermark, no existing IP. Absolutely NO text, letters, digits or labels.",
+        "source":  "art/source/generated/weapon_fan.png"
+    },
+    {
+        "name":  "bg_intro",
+        "width":  1920,
+        "height":  1080,
+        "batch":  2,
+        "transparent":  false,
+        "prompt":  "Use case: stylized-concept. Finished 1920x1080 PNG opaque background. Opaque wide opening narration BACKGROUND: ancient China parchment map spreading across desk, tiny fortresses and military banners, warm stylized orange flames and smoke at far edges conveying world in turmoil without fear, large quiet open center for narration. No words, no map labels. Bright original chibi game art for ages 8–12, bold dark outlines, high saturation, clean cel shading, cheerful mobile-game polish. Original ancient Chinese motifs. Standalone asset, complete silhouette with padding. No watermark, no existing IP. Absolutely NO text, letters, digits or labels.",
+        "source":  "art/source/generated/bg_intro.png"
+    },
+    {
+        "name":  "bg_map_ch1",
+        "width":  1920,
+        "height":  1080,
+        "batch":  2,
+        "transparent":  false,
+        "prompt":  "Use case: stylized-concept. Finished 1920x1080 PNG opaque background. Opaque wide ancient parchment chapter map. EXACTLY NINE clearly separated empty circular level pads joined in order by ONE winding dotted route: pad0 at normalized (0.10,0.80), pad1 (0.20,0.62), pad2 (0.30,0.80), pad3 (0.40,0.57), pad4 (0.50,0.38), pad5 (0.60,0.58), pad6 (0.70,0.78), pad7 (0.80,0.49), pad8 (0.90,0.25). Village near start lower left, yellow turban camp, mountain pass, fortified city, large enemy command camp at finish upper right. Route visible and navigable. Pads empty for programmatically drawn numbers. No other circular markers, no labels, no text. Bright original chibi game art for ages 8–12, bold dark outlines, high saturation, clean cel shading, cheerful mobile-game polish. Original ancient Chinese motifs. Standalone asset, complete silhouette with padding. No watermark, no existing IP. Absolutely NO text, letters, digits or labels.",
+        "source":  "art/source/generated/bg_map_ch1.png"
+    },
+    {
+        "name":  "node_normal",
+        "width":  256,
+        "height":  256,
+        "batch":  2,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 256x256 PNG with actual transparent background. ONE normal level map node: small friendly brown military tent and single green triangular pennant on miniature grassy base; simple clear silhouette. Bright original chibi game art for ages 8–12, bold dark outlines, high saturation, clean cel shading, cheerful mobile-game polish. Original ancient Chinese motifs. Standalone asset, complete silhouette with padding. No watermark, no existing IP. Absolutely NO text, letters, digits or labels.",
+        "source":  "art/source/generated/node_normal.png"
+    },
+    {
+        "name":  "node_boss",
+        "width":  256,
+        "height":  256,
+        "batch":  2,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 256x256 PNG with actual transparent background. ONE boss level map node: imposing red gold commander banner with original gold tiger emblem and two small side standards on compact camp base; majestic cute, NO skull. Bright original chibi game art for ages 8–12, bold dark outlines, high saturation, clean cel shading, cheerful mobile-game polish. Original ancient Chinese motifs. Standalone asset, complete silhouette with padding. No watermark, no existing IP. Absolutely NO text, letters, digits or labels.",
+        "source":  "art/source/generated/node_boss.png"
+    },
+    {
+        "name":  "node_cleared",
+        "width":  128,
+        "height":  128,
+        "batch":  2,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 128x128 PNG with actual transparent background. ONE oversized thick gold checkmark, simple polished beveled cartoon gold icon with subtle dark outline, clear at 48px. No circle or other object. Bright original chibi game art for ages 8–12, bold dark outlines, high saturation, clean cel shading, cheerful mobile-game polish. Original ancient Chinese motifs. Standalone asset, complete silhouette with padding. No watermark, no existing IP. Absolutely NO text, letters, digits or labels.",
+        "source":  "art/source/generated/node_cleared.png"
+    },
+    {
+        "name":  "node_locked",
+        "width":  128,
+        "height":  128,
+        "batch":  2,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 128x128 PNG with actual transparent background. ONE chunky bronze and dark iron padlock, gold keyhole, very simple unmistakable closed lock icon, clear at 48px. Bright original chibi game art for ages 8–12, bold dark outlines, high saturation, clean cel shading, cheerful mobile-game polish. Original ancient Chinese motifs. Standalone asset, complete silhouette with padding. No watermark, no existing IP. Absolutely NO text, letters, digits or labels.",
+        "source":  "art/source/generated/node_locked.png"
+    },
+    {
+        "name":  "dialog_box",
+        "width":  1024,
+        "height":  256,
+        "batch":  2,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 1024x256 PNG with actual transparent background. Wide blank dialogue panel, ancient parchment scroll with wooden end rollers and gold trim. LEFT quarter is large empty transparent round portrait aperture; right three quarters plain pale parchment with ample blank space for name and dialogue, no text. Bright original chibi game art for ages 8–12, bold dark outlines, high saturation, clean cel shading, cheerful mobile-game polish. Original ancient Chinese motifs. Standalone asset, complete silhouette with padding. No watermark, no existing IP. Absolutely NO text, letters, digits or labels.",
+        "source":  "art/source/generated/dialog_box.png"
+    },
+    {
+        "name":  "title_victory",
+        "width":  1024,
+        "height":  384,
+        "batch":  2,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 1024x384 PNG with actual transparent background. Victory result title lettering EXACT Traditional Chinese: 勝利！. Huge bold joyful golden brush cartoon characters, radiating golden rays and tiny colorful ribbons, celebratory, excellent legibility. Bright original chibi game art for ages 8–12, bold dark outlines, high saturation, clean cel shading, cheerful mobile-game polish. Original ancient Chinese motifs. Standalone asset, complete silhouette with padding. No watermark, no existing IP. Render only the specified exact text.",
+        "source":  "art/source/generated/title_victory.png"
+    },
+    {
+        "name":  "title_defeat",
+        "width":  1024,
+        "height":  384,
+        "batch":  2,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 1024x384 PNG with actual transparent background. Defeat result title lettering EXACT Traditional Chinese: 惜敗. Large gray blue friendly brush cartoon characters with soft small muted stars, a little disappointed but encouraging, not gloomy. Bright original chibi game art for ages 8–12, bold dark outlines, high saturation, clean cel shading, cheerful mobile-game polish. Original ancient Chinese motifs. Standalone asset, complete silhouette with padding. No watermark, no existing IP. Render only the specified exact text.",
+        "source":  "art/source/generated/title_defeat.png"
+    },
+    {
+        "name":  "title_recruit",
+        "width":  1024,
+        "height":  384,
+        "batch":  2,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 1024x384 PNG with actual transparent background. Recruitment celebration banner with EXACT Traditional Chinese lettering 收服！ placed across TOP of a wide gold/red ribbon. Leave large open TRANSPARENT CIRCULAR CENTER BELOW lettering for separately added general portrait; small battle flags and gold light rays to each side. Bright original chibi game art for ages 8–12, bold dark outlines, high saturation, clean cel shading, cheerful mobile-game polish. Original ancient Chinese motifs. Standalone asset, complete silhouette with padding. No watermark, no existing IP. Render only the specified exact text.",
+        "source":  "art/source/generated/title_recruit.png"
+    },
+    {
+        "name":  "title_levelup",
+        "width":  1024,
+        "height":  384,
+        "batch":  2,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 1024x384 PNG with actual transparent background. Player level-up result title lettering EXACT Traditional Chinese: 主公升級！. Large joyful gold brush cartoon characters, upward arrows and bright gold stars, bold legible. Bright original chibi game art for ages 8–12, bold dark outlines, high saturation, clean cel shading, cheerful mobile-game polish. Original ancient Chinese motifs. Standalone asset, complete silhouette with padding. No watermark, no existing IP. Render only the specified exact text.",
+        "source":  "art/source/generated/title_levelup.png"
+    },
+    {
+        "name":  "title_chapter_clear",
+        "width":  1024,
+        "height":  512,
+        "batch":  2,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 1024x512 PNG with actual transparent background. Chapter complete result title EXACT Traditional Chinese: 第一章 完. Large red Chinese seal stamp composition, charming chunky brush characters in a gold-edged rectangular red seal, energetic stamped impression; do not add extra lettering. Bright original chibi game art for ages 8–12, bold dark outlines, high saturation, clean cel shading, cheerful mobile-game polish. Original ancient Chinese motifs. Standalone asset, complete silhouette with padding. No watermark, no existing IP. Render only the specified exact text.",
+        "source":  "art/source/generated/title_chapter_clear.png"
+    },
+    {
+        "name":  "bg_map_ch1_reference",
+        "width":  1920,
+        "height":  1080,
+        "batch":  2,
+        "transparent":  false,
+        "prompt":  "Use case: precise-object-edit. This is a developer coordinate REFERENCE COPY of the supplied chapter map, not a game asset. Keep map illustration and ALL NINE circular pads in exactly the same positions, shapes and sizes; do not move anything. Add ONLY a bold dark numeral inside each existing blank circular pad, sequentially along dotted route from village lower left to final camp upper right: 0 (leftmost low village), 1 (next upper-right), 2 (next high pad near yellow camp), 3 (next lower pad by waterfall), 4 (lowest central pad by river), 5 (next upward-right pad by mountain), 6 (next high pad under mountain right), 7 (next low pad by city), 8 (last upper-right pad under enemy camp). Exactly one numeral per pad. No additional pads, no labels elsewhere, no other modifications. Maintain original wide landscape framing.",
+        "source":  "art/source/generated/bg_map_ch1_reference.png",
+        "ref":  "art/source/generated/bg_map_ch1.png"
+    },
+    {
+        "name":  "btn_attack_disabled",
+        "width":  256,
+        "height":  256,
+        "batch":  3,
+        "transparent":  true,
+        "ref":  "art/source/generated/btn_attack.png",
+        "prompt":  "Use case: precise-object-edit. Create disabled/unavailable state of this EXACT round mobile game button. Change ONLY coloring/brightness: substantially darken and desaturate whole button into dark gray bronze with faint muted original hue. Keep same center symbol, all outlines, ornament, proportions, canvas, border shape and transparent exterior exactly aligned to input. No slash, no padlock, no extra symbol, no text. Symbol must still be readable, but unmistakably unavailable. Transparent PNG, 256x256.",
+        "source":  "art/source/generated/btn_attack_disabled.png"
+    },
+    {
+        "name":  "btn_pass_disabled",
+        "width":  256,
+        "height":  256,
+        "batch":  3,
+        "transparent":  true,
+        "ref":  "art/source/generated/btn_pass.png",
+        "prompt":  "Use case: precise-object-edit. Create disabled/unavailable state of this EXACT round mobile game button. Change ONLY coloring/brightness: substantially darken and desaturate whole button into dark gray bronze with faint muted original hue. Keep same center symbol, all outlines, ornament, proportions, canvas, border shape and transparent exterior exactly aligned to input. No slash, no padlock, no extra symbol, no text. Symbol must still be readable, but unmistakably unavailable. Transparent PNG, 256x256.",
+        "source":  "art/source/generated/btn_pass_disabled.png"
+    },
+    {
+        "name":  "btn_special_disabled",
+        "width":  256,
+        "height":  256,
+        "batch":  3,
+        "transparent":  true,
+        "ref":  "art/source/generated/btn_special.png",
+        "prompt":  "Use case: precise-object-edit. Create disabled/unavailable state of this EXACT round mobile game button. Change ONLY coloring/brightness: substantially darken and desaturate whole button into dark gray bronze with faint muted original hue. Keep same center symbol, all outlines, ornament, proportions, canvas, border shape and transparent exterior exactly aligned to input. No slash, no padlock, no extra symbol, no text. Symbol must still be readable, but unmistakably unavailable. Transparent PNG, 256x256.",
+        "source":  "art/source/generated/btn_special_disabled.png"
+    },
+    {
+        "name":  "hud_scoreboard",
+        "width":  1024,
+        "height":  192,
+        "batch":  3,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 1024x192 standalone game UI asset. Wide blank soccer scoreboard panel of ancient wooden plaques gold-like edging but GRAYSCALE ONLY for programmatic recoloring. Three clearly distinct BLANK compartments: large left team/score, small center timer, large right team/score. Symmetrical white and neutral gray materials, no lettering or numerals. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP.",
+        "source":  "art/source/generated/hud_scoreboard.png"
+    },
+    {
+        "name":  "btn_attack",
+        "width":  256,
+        "height":  256,
+        "batch":  3,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 256x256 standalone game UI asset. Single round mobile game button, warm red center and chunky gold rim, central simple symbol: one fist beside a soccer ball, attack/shoot. No letters. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP.",
+        "source":  "art/source/generated/btn_attack.png"
+    },
+    {
+        "name":  "btn_pass",
+        "width":  256,
+        "height":  256,
+        "batch":  3,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 256x256 standalone game UI asset. Single round mobile game button, blue center and chunky gold rim, central very simple symbol: TWO little person silhouettes and ONE clear curved passing arrow carrying a soccer ball between them. No letters. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP.",
+        "source":  "art/source/generated/btn_pass.png"
+    },
+    {
+        "name":  "btn_special",
+        "width":  256,
+        "height":  256,
+        "batch":  3,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 256x256 standalone game UI asset. Single round mobile game button, gold orange center and chunky gold rim, central very simple flaming starburst symbol for ultimate ability. No letters. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP.",
+        "source":  "art/source/generated/btn_special.png"
+    },
+    {
+        "name":  "icon_coin",
+        "width":  128,
+        "height":  128,
+        "batch":  3,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 128x128 standalone game UI asset. Single ancient golden Chinese coin with square hole, chunky rim, two small gold sparkles; clear silhouette. Absolutely no engraved writing. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP.",
+        "source":  "art/source/generated/icon_coin.png"
+    },
+    {
+        "name":  "icon_xp",
+        "width":  128,
+        "height":  128,
+        "batch":  3,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 128x128 standalone game UI asset. Single small unfurled parchment scroll with ONE bright gold five-pointed star, XP reward icon, no writing. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP.",
+        "source":  "art/source/generated/icon_xp.png"
+    },
+    {
+        "name":  "icon_level",
+        "width":  128,
+        "height":  128,
+        "batch":  3,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 128x128 standalone game UI asset. Single blue shield-shaped level badge with gold edge and small crown, LARGE EMPTY center for later programmatic number. No writing or numeral. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP.",
+        "source":  "art/source/generated/icon_level.png"
+    },
+    {
+        "name":  "bar_frame",
+        "width":  512,
+        "height":  64,
+        "batch":  3,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 512x64 standalone game UI asset. Extremely wide horizontal thin experience-bar FRAME ONLY. Dark bronze outer border gold corner caps, fully transparent long inner rectangular opening for separately added fill. Simple straight parallel edges, no icons. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP.",
+        "source":  "art/source/generated/bar_frame.png"
+    },
+    {
+        "name":  "bar_fill",
+        "width":  512,
+        "height":  64,
+        "batch":  3,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 512x64 standalone game UI asset. Extremely wide thin seamless rectangular green experience-bar fill material, luminous emerald #2FA84F horizontal gradient and faint repeating diagonal glints. Full rectangle, plain straight edges, no frame, no icons. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP.",
+        "source":  "art/source/generated/bar_fill.png"
+    },
+    {
+        "name":  "tut_keys",
+        "width":  1024,
+        "height":  512,
+        "batch":  3,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 1024x512 standalone game UI asset. PC control teaching graphic on transparent background, four separated icon groups: WASD movement arrow-key cluster; J keycap with fist and soccer ball; K keycap with two person pass-arrow symbol; L keycap with flame starburst. ONLY exact key letters W A S D J K L appear once on their correct keycaps; no other text. Cute chunky keyboard keycaps, clearly structured, large symbols. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP.",
+        "source":  "art/source/generated/tut_keys.png"
+    },
+    {
+        "name":  "tut_touch",
+        "width":  1024,
+        "height":  512,
+        "batch":  3,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 1024x512 standalone game UI asset. Mobile control teaching diagram on transparent background: simple wide landscape phone outline, floating movement joystick on LEFT under a fingertip, on RIGHT three circular controls: large red fist+soccer ball button lower right, smaller blue pass arrow above, gold flame star to left. Second fingertip points at attack button. No labels, no letters. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP.",
+        "source":  "art/source/generated/tut_touch.png"
+    },
+    {
+        "name":  "tut_arrow",
+        "width":  256,
+        "height":  256,
+        "batch":  3,
+        "transparent":  true,
+        "prompt":  "Use case: stylized-concept. Finished 256x256 standalone game UI asset. ONE large chunky curved tutorial pointer arrow, bright gold with orange bevel and thick dark border, pointing diagonally down-right, clear bold silhouette, no text. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP.",
+        "source":  "art/source/generated/tut_arrow.png"
+    },
+    {
+        "name":  "skill_guanyu",
+        "width":  256,
+        "height":  256,
+        "batch":  3,
+        "transparent":  true,
+        "ref":  "art-src/guanyu-fx.png",
+        "prompt":  "Use case: stylized-concept. Finished 256x256 standalone ultimate ability icon for guanyu. Green and gold dragon-headed MOTORCYCLE charging forward with bright green crescent guandao swoosh; simplified bold icon of Knight Impact. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP. No text, no character portrait, no decorative card frame. A single strong central ability symbol, big readable silhouettes; artwork is the icon, not a sheet. Input effect sheet is thematic color and motif reference only; simplify into ONE clear ability symbol.",
+        "source":  "art/source/generated/skill_guanyu.png"
+    },
+    {
+        "name":  "skill_zhangfei",
+        "width":  256,
+        "height":  256,
+        "batch":  3,
+        "transparent":  true,
+        "ref":  "art-src/zhangfei-fx.png",
+        "prompt":  "Use case: stylized-concept. Finished 256x256 standalone ultimate ability icon for zhangfei. Roaring gold TIGER FACE with concentric orange shockwave rings, symbol for mighty roar. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP. No text, no character portrait, no decorative card frame. A single strong central ability symbol, big readable silhouettes; artwork is the icon, not a sheet. Input effect sheet is thematic color and motif reference only; simplify into ONE clear ability symbol.",
+        "source":  "art/source/generated/skill_zhangfei.png"
+    },
+    {
+        "name":  "skill_zhaoyun",
+        "width":  256,
+        "height":  256,
+        "batch":  3,
+        "transparent":  true,
+        "ref":  "art-src/zhaoyun-fx.png",
+        "prompt":  "Use case: stylized-concept. Finished 256x256 standalone ultimate ability icon for zhaoyun. Silver spear piercing a winding bright blue dragon-shaped energy arc, swift dragon thrust. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP. No text, no character portrait, no decorative card frame. A single strong central ability symbol, big readable silhouettes; artwork is the icon, not a sheet. Input effect sheet is thematic color and motif reference only; simplify into ONE clear ability symbol.",
+        "source":  "art/source/generated/skill_zhaoyun.png"
+    },
+    {
+        "name":  "skill_zhugeliang",
+        "width":  256,
+        "height":  256,
+        "batch":  3,
+        "transparent":  true,
+        "ref":  "art-src/zhugeliang-fx.png",
+        "prompt":  "Use case: stylized-concept. Finished 256x256 standalone ultimate ability icon for zhugeliang. White feather fan casting ONE blue luminous magical orb through geometric magic ring, light projectile. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP. No text, no character portrait, no decorative card frame. A single strong central ability symbol, big readable silhouettes; artwork is the icon, not a sheet. Input effect sheet is thematic color and motif reference only; simplify into ONE clear ability symbol.",
+        "source":  "art/source/generated/skill_zhugeliang.png"
+    },
+    {
+        "name":  "skill_machao",
+        "width":  256,
+        "height":  256,
+        "batch":  3,
+        "transparent":  true,
+        "ref":  "art-src/machao-fx.png",
+        "prompt":  "Use case: stylized-concept. Finished 256x256 standalone ultimate ability icon for machao. Black gold armored HORSE HEAD with red plume and spear, sharp golden forward speed streaks, iron cavalry charge. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP. No text, no character portrait, no decorative card frame. A single strong central ability symbol, big readable silhouettes; artwork is the icon, not a sheet. Input effect sheet is thematic color and motif reference only; simplify into ONE clear ability symbol.",
+        "source":  "art/source/generated/skill_machao.png"
+    },
+    {
+        "name":  "skill_caocao",
+        "width":  256,
+        "height":  256,
+        "batch":  3,
+        "transparent":  true,
+        "ref":  "art-src/caocao-fx.png",
+        "prompt":  "Use case: stylized-concept. Finished 256x256 standalone ultimate ability icon for caocao. Gold sword with three clear layered blue crescent slash trails, royal consecutive cuts. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP. No text, no character portrait, no decorative card frame. A single strong central ability symbol, big readable silhouettes; artwork is the icon, not a sheet. Input effect sheet is thematic color and motif reference only; simplify into ONE clear ability symbol.",
+        "source":  "art/source/generated/skill_caocao.png"
+    },
+    {
+        "name":  "skill_xuchu",
+        "width":  256,
+        "height":  256,
+        "batch":  3,
+        "transparent":  true,
+        "ref":  "art-src/xuchu-fx.png",
+        "prompt":  "Use case: stylized-concept. Finished 256x256 standalone ultimate ability icon for xuchu. Open-mouthed orange tiger spirit swallowing a small soccer ball, mighty tiger devouring sky, playful not scary. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP. No text, no character portrait, no decorative card frame. A single strong central ability symbol, big readable silhouettes; artwork is the icon, not a sheet. Input effect sheet is thematic color and motif reference only; simplify into ONE clear ability symbol.",
+        "source":  "art/source/generated/skill_xuchu.png"
+    },
+    {
+        "name":  "skill_zhangliao",
+        "width":  256,
+        "height":  256,
+        "batch":  3,
+        "transparent":  true,
+        "ref":  "art-src/zhangliao-fx.png",
+        "prompt":  "Use case: stylized-concept. Finished 256x256 standalone ultimate ability icon for zhangliao. Purple black DOUBLE DRAGON-HEAD AXE with white wing flourishes and purple fear shockwave, menacing but cute. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP. No text, no character portrait, no decorative card frame. A single strong central ability symbol, big readable silhouettes; artwork is the icon, not a sheet. Input effect sheet is thematic color and motif reference only; simplify into ONE clear ability symbol.",
+        "source":  "art/source/generated/skill_zhangliao.png"
+    },
+    {
+        "name":  "skill_simayi",
+        "width":  256,
+        "height":  256,
+        "batch":  3,
+        "transparent":  true,
+        "ref":  "art-src/simayi-fx.png",
+        "prompt":  "Use case: stylized-concept. Finished 256x256 standalone ultimate ability icon for simayi. Dark black-gold EAGLE silhouette above angular WOLF head with small red eyes, violet wind arc, cunning eagle and wolf. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP. No text, no character portrait, no decorative card frame. A single strong central ability symbol, big readable silhouettes; artwork is the icon, not a sheet. Input effect sheet is thematic color and motif reference only; simplify into ONE clear ability symbol.",
+        "source":  "art/source/generated/skill_simayi.png"
+    },
+    {
+        "name":  "skill_zhenji",
+        "width":  256,
+        "height":  256,
+        "batch":  3,
+        "transparent":  true,
+        "ref":  "art-src/zhenji-fx.png",
+        "prompt":  "Use case: stylized-concept. Finished 256x256 standalone ultimate ability icon for zhenji. Three large blue ice crystals falling as icy rain with tiny sparkling snowflake, cool cyan violet. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP. No text, no character portrait, no decorative card frame. A single strong central ability symbol, big readable silhouettes; artwork is the icon, not a sheet. Input effect sheet is thematic color and motif reference only; simplify into ONE clear ability symbol.",
+        "source":  "art/source/generated/skill_zhenji.png"
+    },
+    {
+        "name":  "skill_sunce",
+        "width":  256,
+        "height":  256,
+        "batch":  3,
+        "transparent":  true,
+        "ref":  "art-src/sunce-fx.png",
+        "prompt":  "Use case: stylized-concept. Finished 256x256 standalone ultimate ability icon for sunce. Gold tiger-prowed wooden boat with RED SAIL cutting through stylized blue wave, charging ship. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP. No text, no character portrait, no decorative card frame. A single strong central ability symbol, big readable silhouettes; artwork is the icon, not a sheet. Input effect sheet is thematic color and motif reference only; simplify into ONE clear ability symbol.",
+        "source":  "art/source/generated/skill_sunce.png"
+    },
+    {
+        "name":  "skill_sunquan",
+        "width":  256,
+        "height":  256,
+        "batch":  3,
+        "transparent":  true,
+        "ref":  "art-src/sunquan-fx.png",
+        "prompt":  "Use case: stylized-concept. Finished 256x256 standalone ultimate ability icon for sunquan. Purple red gold royal BOAT SHIELD catching three arrows and one returning golden arrow, guarding at sea. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP. No text, no character portrait, no decorative card frame. A single strong central ability symbol, big readable silhouettes; artwork is the icon, not a sheet. Input effect sheet is thematic color and motif reference only; simplify into ONE clear ability symbol.",
+        "source":  "art/source/generated/skill_sunquan.png"
+    },
+    {
+        "name":  "skill_zhouyu",
+        "width":  256,
+        "height":  256,
+        "batch":  3,
+        "transparent":  true,
+        "ref":  "art-src/zhouyu-fx.png",
+        "prompt":  "Use case: stylized-concept. Finished 256x256 standalone ultimate ability icon for zhouyu. Red-white feather flourish pushing a golden EAST WIND spiral and red flame wave, naval wind magic. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP. No text, no character portrait, no decorative card frame. A single strong central ability symbol, big readable silhouettes; artwork is the icon, not a sheet. Input effect sheet is thematic color and motif reference only; simplify into ONE clear ability symbol.",
+        "source":  "art/source/generated/skill_zhouyu.png"
+    },
+    {
+        "name":  "skill_daqiao",
+        "width":  256,
+        "height":  256,
+        "batch":  3,
+        "transparent":  true,
+        "ref":  "art-src/daqiao-fx.png",
+        "prompt":  "Use case: stylized-concept. Finished 256x256 standalone ultimate ability icon for daqiao. Red-gold PEONY IRON FAN beside a radiant violet circular PORTAL, spatial gate. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP. No text, no character portrait, no decorative card frame. A single strong central ability symbol, big readable silhouettes; artwork is the icon, not a sheet. Input effect sheet is thematic color and motif reference only; simplify into ONE clear ability symbol.",
+        "source":  "art/source/generated/skill_daqiao.png"
+    },
+    {
+        "name":  "skill_xiaoqiao",
+        "width":  256,
+        "height":  256,
+        "batch":  3,
+        "transparent":  true,
+        "ref":  "art-src/xiaoqiao-fx.png",
+        "prompt":  "Use case: stylized-concept. Finished 256x256 standalone ultimate ability icon for xiaoqiao. Pink folding fan with TWO pink cherry petals riding a PINK TORNADO, blow-away wind. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP. No text, no character portrait, no decorative card frame. A single strong central ability symbol, big readable silhouettes; artwork is the icon, not a sheet. Input effect sheet is thematic color and motif reference only; simplify into ONE clear ability symbol.",
+        "source":  "art/source/generated/skill_xiaoqiao.png"
+    },
+    {
+        "name":  "skill_lord_sword",
+        "width":  256,
+        "height":  256,
+        "batch":  3,
+        "transparent":  true,
+        "ref":  null,
+        "prompt":  "Use case: stylized-concept. Finished 256x256 standalone ultimate ability icon for lord_sword. Golden imperial sword inside clear silver gold circular cyclone slash, whirlwind sword. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP. No text, no character portrait, no decorative card frame. A single strong central ability symbol, big readable silhouettes; artwork is the icon, not a sheet. ",
+        "source":  "art/source/generated/skill_lord_sword.png"
+    },
+    {
+        "name":  "skill_lord_spear",
+        "width":  256,
+        "height":  256,
+        "batch":  3,
+        "transparent":  true,
+        "ref":  null,
+        "prompt":  "Use case: stylized-concept. Finished 256x256 standalone ultimate ability icon for lord_spear. Golden dragon coiling around one rising spear with green gold upward energy trail, dragon ascent. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP. No text, no character portrait, no decorative card frame. A single strong central ability symbol, big readable silhouettes; artwork is the icon, not a sheet. ",
+        "source":  "art/source/generated/skill_lord_spear.png"
+    },
+    {
+        "name":  "skill_lord_fan",
+        "width":  256,
+        "height":  256,
+        "batch":  3,
+        "transparent":  true,
+        "ref":  null,
+        "prompt":  "Use case: stylized-concept. Finished 256x256 standalone ultimate ability icon for lord_fan. Phoenix-feather fan generating orange gold wing-shaped wind vortex, phoenix feather wind formation. Original bright polished cartoon for children 8–12, thick dark outlines, high saturation, crisp simple shapes; readable at 48x48 if icon. Ancient Chinese game theme. Entire silhouette visible with padding. PNG with true transparent exterior; no watermark, no existing game IP. No text, no character portrait, no decorative card frame. A single strong central ability symbol, big readable silhouettes; artwork is the icon, not a sheet. ",
+        "source":  "art/source/generated/skill_lord_fan.png"
+    }
 ]
