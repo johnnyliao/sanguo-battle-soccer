@@ -1,7 +1,5 @@
 import {
   BALL_RADIUS,
-  FIELD_D,
-  FIELD_W,
   GOAL_CELEBRATE_TICKS,
   HALFTIME_TICKS,
   KICKOFF_TICKS,
@@ -60,9 +58,9 @@ function updatePlay(state: GameState): void {
 function detectGoal(state: GameState): boolean {
   const b = state.ball;
   if (b.ownerIdx !== -1) return false;
-  if (b.x >= -BALL_RADIUS && b.x <= FIELD_W + BALL_RADIUS) return false;
+  if (b.x >= -BALL_RADIUS && b.x <= state.field.w + BALL_RADIUS) return false;
   const side: 0 | 1 = b.x < 0 ? 0 : 1;
-  const mouth = goalMouth(side);
+  const mouth = goalMouth(state, side);
   if (b.y < mouth.yMin || b.y > mouth.yMax) return false;
 
   // Side 0 is attacked by the team whose attack direction is -1.
@@ -117,7 +115,7 @@ export function resetForKickoff(state: GameState): void {
     if (p.rampageTicks > 0) endRampage(state, p);
     p.bumpCooldown = 0;
     const dir = attackDir(state, p.team);
-    const pos = formationPosition(p.idx % 5, dir);
+    const pos = formationPosition(state.field, state.teamSize, p.idx % state.teamSize, dir);
     p.x = pos.x;
     p.y = pos.y;
     p.z = 0;
@@ -134,13 +132,13 @@ export function resetForKickoff(state: GameState): void {
     p.chargeTicks = 0;
   }
 
-  const kicker = state.players[m.kickoffTeam * 5 + 4];
-  kicker.x = FIELD_W / 2 - attackDir(state, m.kickoffTeam) * KICKOFF_FW_OFFSET;
-  kicker.y = FIELD_D / 2;
+  const kicker = state.players[m.kickoffTeam * state.teamSize + state.teamSize - 1];
+  kicker.x = state.field.w / 2 - attackDir(state, m.kickoffTeam) * KICKOFF_FW_OFFSET;
+  kicker.y = state.field.d / 2;
 
   const b = state.ball;
-  b.x = FIELD_W / 2;
-  b.y = FIELD_D / 2;
+  b.x = state.field.w / 2;
+  b.y = state.field.d / 2;
   b.z = 0;
   b.vx = 0;
   b.vy = 0;

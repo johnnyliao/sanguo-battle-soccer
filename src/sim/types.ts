@@ -1,4 +1,4 @@
-import type { BodySize, CharacterDef, Role, SpecialKind, Stats } from '../data/types';
+import type { BodySize, CharacterDef, Role, SpecialKind, Stats, Weapon } from '../data/types';
 
 /** Held-button state for one tick. dash = virtual dash button. */
 export interface InputFrame {
@@ -35,7 +35,8 @@ export type PlayerAction =
   | 'tiger'
   | 'slash'
   | 'ride'
-  | 'icefield';
+  | 'icefield'
+  | 'dragon';
 
 export type AttackKind = 'punch' | 'tackle' | 'special';
 
@@ -75,8 +76,8 @@ export interface Player {
   rampageTicks: number;
   /** Ticks during which this player cannot be bumped by a rampaging opponent again. */
   bumpCooldown: number;
-  /** What the special button (L) does: a rampage, a roar (shockwave) for Zhang Fei, a lunge (long dash) for Zhao Yun, a beam (channel, then strikes one opponent) for Zhuge Liang, a summon (cavalry riders) for Ma Chao, a fear (opponents stand still) for Zhang Liao, or a tiger guard (swallows a shot, spits it at opponents) for Xu Chu. */
-  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger' | 'slash' | 'ride' | 'icefield' | 'sail' | 'gust' | 'portal' | 'arrowship' | 'eastwind';
+  /** What the special button (L) does: a rampage, a roar (shockwave) for Zhang Fei, a lunge (long dash) for Zhao Yun, a beam (channel, then strikes one opponent) for Zhuge Liang, a summon (cavalry riders) for Ma Chao, a fear (opponents stand still) for Zhang Liao, or a tiger guard (swallows a shot, spits it at opponents) for Xu Chu, or none (L does nothing; story soldiers). */
+  specialMode: 'none' | 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger' | 'slash' | 'ride' | 'icefield' | 'sail' | 'gust' | 'portal' | 'arrowship' | 'eastwind' | 'whirl' | 'dragonspear' | 'featherfan';
   /** Ticks until the special can be used again. Set when a rampage starts or a roar fires. */
   specialCooldown: number;
   /** Ticks left silenced (a leap landing): only movement works, no J, K or L. 0 = not silenced. */
@@ -95,6 +96,18 @@ export interface Player {
   sailPassenger: number;
   /** Idx of the sailing teammate whose boat this player is aboard, or -1. */
   sailPassengerOf: number;
+  /** The lord's weapon (changes the basic attack). Undefined for every other character. */
+  weapon?: Weapon;
+  /** Set by the server on a human-controlled player only. A basic attack with no ball first turns him to the nearest opponent in reach. Undefined = AI or no assist. */
+  humanAssist?: boolean;
+  /** Ticks left in the lord's whirl (旋風斬). 0 or undefined = not whirling. */
+  whirlTicks?: number;
+  /** The opponents this whirl has hit, with the whirl tick of their last hit (re-hit after LORD_WHIRL_REHIT_TICKS). Undefined when not whirling. */
+  whirlHits?: { idx: number; tick: number }[];
+  /** Ticks left on a featherfan slow (the lord's fan slowed him). 0 or undefined = not slowed by a fan. */
+  featherSlowTicks?: number;
+  /** Ticks left on the lord's featherfan speed boost (x LORD_FEATHER_BOOST_MULT). 0 or undefined = no boost. */
+  lordBoostTicks?: number;
   /** Ticks left on a buffered L press. A press made while busy waits here and fires once the player can act. 0 = none. */
   specialBuffer: number;
   specialKind: SpecialKind;
@@ -269,6 +282,40 @@ export interface TigerBall {
   hit: number[];
 }
 
+/**
+ * A windpuff from the lord's fan (羽扇). It flies straight from (x, y) along (dirX, dirY) and ends on the first opponent it
+ * touches or after LORD_WINDPUFF_RANGE px. Exists only while the phase is 'play'.
+ */
+export interface Windpuff {
+  id: number;
+  /** Idx of the lord who fired it. */
+  ownerIdx: number;
+  team: 0 | 1;
+  x: number;
+  y: number;
+  dirX: number;
+  dirY: number;
+  travelled: number;
+}
+
+/**
+ * A dragonspear from the lord's 龍騰 (破陣槍). It flies straight from (x, y) along (dirX, dirY) and pierces: every opponent on
+ * its path is hit once (ids in hit). It ends after LORD_DRAGON_RANGE px or at the field edge. Exists only while the phase is 'play'.
+ */
+export interface DragonSpear {
+  id: number;
+  /** Idx of the lord who fired it. */
+  ownerIdx: number;
+  team: 0 | 1;
+  x: number;
+  y: number;
+  dirX: number;
+  dirY: number;
+  travelled: number;
+  /** Idxs of the opponents already pierced by this spear. */
+  hit: number[];
+}
+
 export type SimEvent =
   | { type: 'pickup'; playerIdx: number }
   | { type: 'bounce'; strength: number }
@@ -389,6 +436,35 @@ export type SimEvent =
   | { type: 'arrowshipVolley'; shipId: number; x: number; y: number; dir: 1 | -1; len: number; halfW: number; arrows: number; victimIdxs: number[] }
   /** The ship is gone (volley fired, or the phase left play). */
   | { type: 'arrowshipEnd'; shipId: number }
+  /** Lord's whirl starts (cast with no ball needed). */
+  | { type: 'whirlStart'; playerIdx: number }
+  /** The whirl hits one opponent, once per whirl; x, y is the victim's position. */
+  | { type: 'whirlHit'; playerIdx: number; victimIdx: number; x: number; y: number }
+  /** The whirl ends (timer, or the phase left play). */
+  | { type: 'whirlEnd'; playerIdx: number }
+  /** Lord's dragonspear windup starts (the lord stands still). */
+  | { type: 'dragonCharge'; playerIdx: number }
+  /** The windup is cancelled because the lord was hit. */
+  | { type: 'dragonCancel'; playerIdx: number }
+  /** The spear flies from (x, y) along (dirX, dirY). */
+  /** withBall: the lord held the ball, which flies with the spear as a pierce special shot along (dirX, dirY). */
+  | { type: 'dragonFire'; playerIdx: number; spearId: number; x: number; y: number; dirX: number; dirY: number; withBall: boolean }
+  /** The spear pierces an opponent at (x, y) (the victim's position). */
+  | { type: 'dragonHit'; spearId: number; victimIdx: number; x: number; y: number }
+  /** The spear is gone (range, field edge, or the phase left play). */
+  | { type: 'dragonEnd'; spearId: number; x: number; y: number }
+  /** A windpuff is fired from (x, y) along (dirX, dirY) by a fan attack. */
+  | { type: 'windpuffSpawn'; playerIdx: number; puffId: number; x: number; y: number; dirX: number; dirY: number }
+  /** A windpuff hits an opponent at (x, y) (the victim's position). */
+  | { type: 'windpuffHit'; puffId: number; victimIdx: number; x: number; y: number }
+  /** A windpuff pushes a free ball at (x, y). */
+  | { type: 'windpuffBall'; puffId: number; x: number; y: number }
+  /** A windpuff is gone (hit, range, field edge, or the phase left play). */
+  | { type: 'windpuffEnd'; puffId: number; x: number; y: number }
+  /** Featherfan is cast: the cone from (x, y) along (dirX, dirY), radius px; victimIdxs are the opponents it slowed. */
+  | { type: 'featherStart'; playerIdx: number; x: number; y: number; dirX: number; dirY: number; radius: number; angleDeg: number; boostTicks: number; victimIdxs: number[] }
+  /** Featherfan pulls the ball to the lord (fromIdx is the previous holder, or -1 when it was free). x, y is the ball's position. */
+  | { type: 'featherPull'; playerIdx: number; fromIdx: number; x: number; y: number }
   | { type: 'whistle'; reason: 'kickoff' | 'half' | 'full' }
   | { type: 'goal'; team: 0 | 1; scorerIdx: number }
   | { type: 'matchEnd'; score: [number, number] }
@@ -404,7 +480,7 @@ export type PkStage = 'order' | 'aim' | 'flight' | 'result' | 'done';
 export interface PkState {
   stage: PkStage;
   stageTimer: number;
-  /** Player idxs per team (5 each), undefined until chosen. */
+  /** Player idxs per team (teamSize each), undefined until chosen. */
   order: [number[] | undefined, number[] | undefined];
   kicks: [('goal' | 'miss')[], ('goal' | 'miss')[]];
   kickingTeam: 0 | 1;
@@ -446,11 +522,25 @@ export interface MatchState {
   pk: PkState | undefined;
 }
 
+/** Size of the pitch in px. */
+export interface FieldSize {
+  /** Length along x: goal line to goal line. */
+  w: number;
+  /** Width along y: touchline to touchline. */
+  d: number;
+  /** Half the goal mouth width, centred on d / 2. */
+  goalHalfW: number;
+}
+
 export interface GameState {
   tick: number;
   /** mulberry32 state (uint32). */
   rng: number;
-  /** 10 players: idx 0-4 team 0, 5-9 team 1; slot order GK,DF,MF,MF,FW. */
+  /** Pitch size: w along x (goal line to goal line), d along y, goalHalfW = half the goal mouth width (centred on d / 2). */
+  field: FieldSize;
+  /** Players per team (1..5). players has 2 * teamSize entries: team t owns idx t*teamSize .. t*teamSize+teamSize-1. */
+  teamSize: number;
+  /** Slot order per team: 5 players GK,DF,MF,MF,FW; 4 GK,DF,MF,FW; 3 GK,DF,FW; 2 DF,FW; 1 FW (see field.ts). */
   players: Player[];
   /** Cavalry riders from a summon. Empty outside play. */
   riders: Rider[];
@@ -472,6 +562,12 @@ export interface GameState {
   portals: Portal[];
   /** Id given to the next portal. */
   nextPortalId: number;
+  /** Windpuffs from the lord's fan. Absent when none are in flight. */
+  windpuffs?: Windpuff[];
+  /** Dragonspears from the lord's 龍騰. Absent when none are in flight. */
+  dragonspears?: DragonSpear[];
+  /** Id given to the next windpuff or dragonspear (one counter for both). Absent until the first one is fired. */
+  nextLordId?: number;
   /** Eastwind fields from Zhou Yu's 赤壁東風. Empty outside play. */
   eastwinds: EastWind[];
   /** Id given to the next eastwind. */
@@ -484,10 +580,12 @@ export interface GameState {
 
 export interface MatchSetup {
   seed: number;
-  /** Each team is exactly 5 defs: GK, DF, MF, MF, FW. */
+  /** Each team is 1..5 defs, both teams the same length. Slot order by length: see GameState.players. */
   teams: [CharacterDef[], CharacterDef[]];
   /** Half length in seconds. Default 120. */
   halfSeconds?: number;
   /** Start in 'play' with no kickoff wait (for fixtures). */
   startInPlay?: boolean;
+  /** Pitch size. Default: FIELD_W, FIELD_D, GOAL_HALF_W (use defaultFieldFor in field.ts for smaller teams). */
+  field?: FieldSize;
 }

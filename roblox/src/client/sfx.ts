@@ -72,6 +72,8 @@ const CUES: Record<string, Cue> = {
 	sunquan_block: cue(9113160235, 0.5, 1.0, 0.15), // Arrow In And Hit 1
 	sunquan_volley: cue(9113166218, 0.6, 0, 0.3), // Arrow Out Whooshing Pass By 2
 	zhouyu_wind: cue(9120748924, 0.5, 0, 0.3), // Wind Burst Vortex Blasts 2
+	// --- lord weapons (existing picks, longer cut for the whirl) ---
+	lord_whirl: cue(9119749145, 0.5, 1.3, 0.3), // Sword Swish 102 (same file as swing_sword)
 };
 
 /** Weapon class per general (drives the swing and hit sounds). */
@@ -128,6 +130,15 @@ const BY_TYPE: Record<string, string> = {
 	arrowshipBlock: "sunquan_block",
 	arrowshipVolley: "sunquan_volley",
 	eastwindStart: "zhouyu_wind",
+	whirlStart: "lord_whirl",
+	whirlHit: "hit_sword",
+	dragonCharge: "zhugeliang_charge",
+	dragonFire: "zhaoyun_lunge",
+	dragonHit: "heavy",
+	windpuffSpawn: "swing_fan",
+	windpuffHit: "hit_fan",
+	featherStart: "zhouyu_wind",
+	featherPull: "xiaoqiao_gust",
 };
 
 const templates = new Map<string, Sound>();

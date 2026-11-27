@@ -4,7 +4,10 @@ import { FollowCamera } from "./camera";
 import * as fx from "./fx";
 import { createHud } from "./hud";
 import { FX, FX_BAD, type FxSheet } from "./fxIds";
+import { createStoryUi } from "./storyUi";
+import { createTutorialUi } from "./tutorialUi";
 import { startInput } from "./input";
+import { createActionBar, onActionSetup, onActionSnapshot, setActionMatch } from "./actionBar";
 import { Renderer } from "./render";
 import { buildWorld } from "./world";
 
@@ -37,17 +40,28 @@ const remotes = getRemotes();
 buildWorld();
 const renderer = new Renderer();
 const camera = new FollowCamera();
-const input = startInput(remotes);
-const hud = createHud(remotes, (cooldown, reason) => input.getTouch()?.setSpecialState(cooldown, reason));
+createActionBar();
+startInput(remotes);
+// The story menu is created after the HUD: it drives the HUD's country select and match reset.
+let story: { showMainMenu: () => void } | undefined;
+const hud = createHud(
+	remotes,
+	(on) => setActionMatch(on),
+	() => story?.showMainMenu(),
+);
+story = createStoryUi(remotes, hud);
+createTutorialUi(remotes);
 
 remotes.Setup.OnClientEvent.Connect((s: unknown) => {
 	renderer.onSetup(s as Setup);
 	hud.onSetup(s as Setup);
+	onActionSetup(s as Setup);
 });
 
 remotes.Snapshot.OnClientEvent.Connect((s: unknown) => {
 	renderer.onSnapshot(s as Snapshot);
 	hud.onSnapshot(s as Snapshot);
+	onActionSnapshot(s as Snapshot);
 });
 
 RunService.RenderStepped.Connect((dt) => {

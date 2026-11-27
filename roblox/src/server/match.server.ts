@@ -1,60 +1,45 @@
-// Authoritative 1-human vs AI 5v5 match. Runs the shared sim at 60Hz and streams snapshots to the human.
-import { computeAIInputs, createAIState, type AIState } from "shared/game/ai";
-import { getTeam, SIZE_PARAMS } from "shared/game/data";
+// Server match sessions. Each player has at most one MatchInstance (quick match or story stage) that only that player
+// sees. Routes Command/Input, steps every instance from Heartbeat, and pays story rewards to the profile.
+import { COUNTRY_INFO, getTeam, SIZE_PARAMS } from "shared/game/data";
+import { createInitialState, defaultFieldFor, type GameState, type MatchSetup } from "shared/game/sim";
+import { getRemotes, type Country, type Setup, type SetupPlayer, type StoryResult } from "shared/net";
+import { buildEnemyTeam, buildPlayerTeam, lordDef } from "shared/teamBuilder";
 import {
-	autoPkOrders,
-	createInitialState,
-	FIELD_D,
-	FIELD_W,
-	step,
-	type GameState,
-	type InputFrame,
-} from "shared/game/sim";
-import {
-	getRemotes,
-	SNAPSHOT_EVERY,
-	TICK_RATE,
-	type Country,
-	type Setup,
-	type SetupPlayer,
-	type SimEventLite,
-} from "shared/net";
-import { buildSnapshot } from "./snapshot";
+	clearedKey,
+	getStages,
+	isStarterFor,
+	isUnlocked,
+	LAST_STAGE_ID,
+	RIVAL,
+	TUTORIAL_HALF_SECONDS,
+	TUTORIAL_STAGE_ID,
+	type StageDef,
+} from "shared/story";
+import { parseLordWeapon } from "shared/profileTypes";
+import { loadProfile, updateProfile } from "./profile";
+import { MatchInstance } from "./matchInstance";
 
 const Players = game.GetService("Players");
 const RunService = game.GetService("RunService");
 
-const TICK_DT = 1 / TICK_RATE;
-/** Caps catch-up work per rendered frame; leftover time beyond this is dropped. */
-const MAX_TICKS_PER_FRAME = 4;
 const COUNTRIES: Country[] = ["shu", "wei", "wu"];
-/** Idx of the human-controlled player (home FW). */
+/** Idx of the human-controlled player in the quick match (home FW). */
 const HUMAN_IDX = 4;
-const HUMAN_MASK: boolean[] = [false, false, false, false, true, false, false, false, false, false];
+/** Story rewards. */
+const WIN_XP = 100;
+const WIN_COINS = 50;
+const LOSE_XP = 30;
+const LOSE_COINS = 10;
+const XP_PER_LEVEL_STEP = 100;
+const MAX_LORD_LEVEL = 30;
 
 const remotes = getRemotes();
 Players.CharacterAutoLoads = false;
 
-// Match session. state === undefined means no match is running.
-let humanPlayer: Player | undefined;
-let state: GameState | undefined;
-let ai: AIState | undefined;
-let held: InputFrame = { moveX: 0, moveY: 0, dash: false, j: false, k: false, l: false };
-/** Presses (j/k/l) seen since the last tick; consumed by the next tick. */
-const latch = { j: false, k: false, l: false };
-/** Events produced since the last Snapshot send. */
-let pending: SimEventLite[] = [];
-let acc = 0;
-let finishedAcc = 0;
-
-function isFulltime(s: GameState): boolean {
-	return s.match.phase === "fulltime";
-}
-
-function toDir(v: unknown): -1 | 0 | 1 {
-	if (!typeIs(v, "number") || v !== v) return 0;
-	return v > 0 ? 1 : v < 0 ? -1 : 0;
-}
+/** The one running match per player. */
+const sessions = new Map<Player, MatchInstance>();
+/** Story matches that have not reached fulltime yet (the lord's weapon cannot change while one runs). */
+const runningStories = new Set<MatchInstance>();
 
 function parseCountry(v: unknown): Country | undefined {
 	if (v === "shu" || v === "wei" || v === "wu") return v;
@@ -66,31 +51,20 @@ function pickAway(home: Country): Country {
 	return others[math.random(0, others.size() - 1)];
 }
 
-function stopMatch(): void {
-	humanPlayer = undefined;
-	state = undefined;
-	ai = undefined;
-	pending = [];
-	acc = 0;
-	finishedAcc = 0;
+function newSeed(): number {
+	return (os.time() + math.random(1, 1000000000)) % 2147483647;
 }
 
-function startMatch(player: Player, home: Country): void {
-	const away = pickAway(home);
-	const seed = (os.time() + math.random(1, 1000000000)) % 2147483647;
-	const s = createInitialState({ seed, teams: [getTeam(home), getTeam(away)] }, SIZE_PARAMS);
-	state = s;
-	ai = createAIState(seed);
-	humanPlayer = player;
-	held = { moveX: 0, moveY: 0, dash: false, j: false, k: false, l: false };
-	latch.j = false;
-	latch.k = false;
-	latch.l = false;
-	pending = [];
-	acc = 0;
-	finishedAcc = 0;
-
-	const players = s.players.map(
+function buildSetup(
+	state: GameState,
+	home: Country,
+	away: Country,
+	humanIdx: number,
+	mode: "quick" | "story",
+	stageId: number | undefined,
+	awayLabel: string,
+): Setup {
+	const players = state.players.map(
 		(p): SetupPlayer => ({
 			idx: p.idx,
 			charId: p.charId,
@@ -99,156 +73,216 @@ function startMatch(player: Player, home: Country): void {
 			role: p.role,
 			size: p.size,
 			radius: p.radius,
+			weapon: p.weapon,
 		}),
 	);
-	const setup: Setup = { home, away, humanIdx: HUMAN_IDX, halfTicks: s.match.halfTicks, players };
-	remotes.Setup.FireClient(player, setup);
-}
-
-function sendSnapshot(s: GameState): void {
-	const p = humanPlayer;
-	if (p === undefined) return;
-	remotes.Snapshot.FireClient(p, buildSnapshot(s, HUMAN_IDX, pending));
-	pending = [];
-}
-
-/** One 60Hz sim tick with the human's latched input. */
-function runTick(s: GameState, a: AIState): void {
-	const inputs = computeAIInputs(s, a, HUMAN_MASK);
-	inputs[HUMAN_IDX] = {
-		moveX: held.moveX,
-		moveY: held.moveY,
-		dash: held.dash,
-		j: held.j || latch.j,
-		k: held.k || latch.k,
-		l: held.l || latch.l,
+	return {
+		home,
+		away,
+		humanIdx,
+		halfTicks: state.match.halfTicks,
+		players,
+		teamSize: state.teamSize,
+		field: { w: state.field.w, d: state.field.d, goalHalfW: state.field.goalHalfW },
+		mode,
+		stageId,
+		awayLabel,
 	};
-	latch.j = false;
-	latch.k = false;
-	latch.l = false;
-
-	// Dev hook (off unless attribute set): press special for player idx 0-9 for one tick.
-	if (game.GetService("Workspace").GetAttribute("DebugNoAISpecial") === true) {
-		for (let i = 0; i < inputs.size(); i++) {
-			if (i !== HUMAN_IDX) inputs[i] = { ...inputs[i], l: false };
-		}
-	}
-	const dbg = game.GetService("Workspace").GetAttribute("DebugSpecialIdx");
-	if (typeIs(dbg, "number")) {
-		const di = math.floor(dbg);
-		if (di >= 0 && di < inputs.size()) {
-			inputs[di] = { ...inputs[di], l: true };
-		}
-		game.GetService("Workspace").SetAttribute("DebugSpecialIdx", undefined);
-	}
-
-	// Dev hook (off unless attribute set): DebugShootAtGoal = team (0/1) -> an opponent fires a shot at that team's goal.
-	const dbgShoot = game.GetService("Workspace").GetAttribute("DebugShootAtGoal");
-	if (typeIs(dbgShoot, "number")) {
-		game.GetService("Workspace").SetAttribute("DebugShootAtGoal", undefined);
-		const gk = s.players[dbgShoot === 0 ? 0 : 5];
-		let shooter = s.players[dbgShoot === 0 ? 9 : 4];
-		let bestD = 1e9;
-		for (const q of s.players) {
-			if (q.team === gk.team || q.role === "GK") continue;
-			const dd = math.abs(q.x - gk.x);
-			if (dd < bestD) {
-				bestD = dd;
-				shooter = q;
-			}
-		}
-		const dirX = gk.x < FIELD_W / 2 ? 1 : -1;
-		const goalX = gk.x < FIELD_W / 2 ? 0 : FIELD_W;
-		shooter.x = goalX + dirX * 130;
-		shooter.y = FIELD_D / 2;
-		shooter.vx = 0;
-		shooter.vy = 0;
-		const b = s.ball;
-		b.x = goalX + dirX * 100;
-		b.y = FIELD_D / 2;
-		b.z = 8;
-		b.vx = -dirX * 260;
-		b.vy = 0;
-		b.vz = 0;
-		b.ownerIdx = -1;
-		b.lastTouchIdx = shooter.idx;
-		b.special = undefined;
-		// Put one more opponent in the lob's landing zone so a tiger ball has someone to hit.
-		for (const q of s.players) {
-			if (q.team === gk.team || q.role === "GK" || q === shooter) continue;
-			q.x = goalX + dirX * 400;
-			q.y = FIELD_D / 2;
-			q.vx = 0;
-			q.vy = 0;
-			break;
-		}
-	}
-
-	step(s, inputs);
-	const pk = s.match.pk;
-	if (s.match.phase === "pk" && pk !== undefined && pk.stage === "order") {
-		autoPkOrders(s, -1);
-	}
-	for (const e of s.events) {
-		pending.push({ ...e } as SimEventLite);
-	}
 }
 
-// Start / rematch. A new start replaces any running match and makes the sender the human.
+/** Replaces the player's running match (if any) with inst. */
+function replaceSession(player: Player, inst: MatchInstance): void {
+	const old = sessions.get(player);
+	if (old !== undefined) {
+		old.destroy();
+		runningStories.delete(old);
+	}
+	sessions.set(player, inst);
+}
+
+function startQuick(player: Player, home: Country): void {
+	const away = pickAway(home);
+	const seed = newSeed();
+	const state = createInitialState({ seed, teams: [getTeam(home), getTeam(away)] }, SIZE_PARAMS);
+	const setup = buildSetup(state, home, away, HUMAN_IDX, "quick", undefined, COUNTRY_INFO[away].name);
+	replaceSession(player, new MatchInstance(player, state, seed, HUMAN_IDX, setup));
+}
+
+function isRivalStage(stage: StageDef): boolean {
+	return stage.enemy.size() === 1 && stage.enemy[0].kind === "rivalTeam";
+}
+
+function startStory(player: Player, raw: unknown): void {
+	if (!typeIs(raw, "number")) return;
+	const stageId = math.floor(raw);
+	const profile = loadProfile(player);
+	const country = profile.country;
+	const starter = profile.starter;
+	if (country === undefined || starter === undefined || !isStarterFor(country, starter)) {
+		warn(`[story] start ignored, no starter yet: ${player.Name}`);
+		return;
+	}
+	if (!isUnlocked(profile, stageId)) {
+		warn(`[story] stage ${stageId} is locked for ${player.Name}`);
+		return;
+	}
+	const stage = getStages(country, starter).find((st) => st.id === stageId);
+	if (stage === undefined) return;
+
+	const lord = lordDef(player.UserId, player.DisplayName, country, profile.lordLevel, profile.lordWeapon ?? "sword");
+	const home = buildPlayerTeam(profile, lord, stage.teamSize);
+	const away = buildEnemyTeam(stage, country);
+	const seed = newSeed();
+	const setupInput: MatchSetup = { seed, teams: [home, away], field: defaultFieldFor(stage.teamSize) };
+	// Tutorial and goal-target stages have no clock: the match ends by its steps or by the goal target.
+	if (stage.id === TUTORIAL_STAGE_ID || stage.goalTarget !== undefined) setupInput.halfSeconds = TUTORIAL_HALF_SECONDS;
+	const state = createInitialState(setupInput, SIZE_PARAMS);
+
+	// Dev hook (off unless attribute set): DebugStoryWin = true ends the stage at once as a 1-0 win.
+	if (player.GetAttribute("DebugStoryWin") === true) {
+		state.match.score[0] = 1;
+		state.match.score[1] = 0;
+		state.match.phase = "fulltime";
+	}
+
+	const humanIdx = stage.teamSize - 1; // home team's last slot is the lord (FW)
+	const awayLabel = isRivalStage(stage) ? COUNTRY_INFO[RIVAL[country]].name : "黃巾軍";
+	const setup = buildSetup(state, country, RIVAL[country], humanIdx, "story", stage.id, awayLabel);
+	if (stage.goalTarget !== undefined) setup.goalTarget = stage.goalTarget;
+	const inst = new MatchInstance(player, state, seed, humanIdx, setup, (done: MatchInstance) => {
+		task.spawn(finishStory, done, stage);
+	});
+	replaceSession(player, inst);
+	runningStories.add(inst);
+	print(`[story] start ${player.Name} stage ${stage.id} teamSize ${stage.teamSize}`);
+}
+
+/** Pays the rewards for a finished story match and tells the owner. Yields (profile update). */
+function finishStory(inst: MatchInstance, stage: StageDef): void {
+	const player = inst.player;
+	runningStories.delete(inst);
+	if (sessions.get(player) !== inst) return;
+	const s = inst.state;
+	const pk = s.match.pk;
+	const sc = pk === undefined || s.match.score[0] !== s.match.score[1] ? s.match.score : pk.score;
+	const humanTeam = inst.humanIdx < s.teamSize ? 0 : 1;
+	const won = sc[humanTeam] > sc[1 - humanTeam];
+
+	const xp = won ? WIN_XP : LOSE_XP;
+	const coins = won ? WIN_COINS : LOSE_COINS;
+	const before = loadProfile(player);
+	const levelBefore = before.lordLevel;
+	const newRecruit =
+		won && stage.recruit !== undefined && !before.recruited.includes(stage.recruit) ? stage.recruit : undefined;
+
+	const after = updateProfile(player, (p) => {
+		p.lordXp += xp;
+		p.coins += coins;
+		while (p.lordLevel < MAX_LORD_LEVEL && p.lordXp >= XP_PER_LEVEL_STEP * p.lordLevel) {
+			p.lordXp -= XP_PER_LEVEL_STEP * p.lordLevel;
+			p.lordLevel += 1;
+		}
+		if (won) {
+			const key = clearedKey(stage.id);
+			if (!p.cleared.includes(key)) p.cleared.push(key);
+			if (newRecruit !== undefined && !p.recruited.includes(newRecruit)) p.recruited.push(newRecruit);
+		}
+	});
+
+	const result: StoryResult = {
+		stageId: stage.id,
+		won,
+		xp,
+		coins,
+		levelBefore,
+		levelAfter: after.lordLevel,
+		recruited: newRecruit,
+		chapterClear: won && stage.id === LAST_STAGE_ID,
+	};
+	remotes.StoryResult.FireClient(player, result);
+	print(
+		`[story] result ${player.Name} stage ${stage.id} ${won ? "win" : "loss"} score ${sc[0]}-${sc[1]} ` +
+			`xp +${xp} coins +${coins} Lv ${levelBefore}->${after.lordLevel}` +
+			(newRecruit !== undefined ? ` recruited ${newRecruit}` : ""),
+	);
+}
+
+/** Sets the lord's weapon. Ignored while this player's story match is running (the sim fixes the weapon at kickoff). */
+function chooseWeapon(player: Player, rawWeapon: unknown): void {
+	const weapon = parseLordWeapon(rawWeapon);
+	if (weapon === undefined) {
+		warn(`[profile] chooseWeapon rejected from ${player.Name}`);
+		return;
+	}
+	const current = sessions.get(player);
+	if (current !== undefined && runningStories.has(current)) {
+		warn(`[profile] chooseWeapon ignored, story match running: ${player.Name}`);
+		return;
+	}
+	updateProfile(player, (p) => {
+		p.lordWeapon = weapon;
+	});
+	print(`[profile] weapon chosen ${player.Name} ${weapon}`);
+}
+
+function chooseStarter(player: Player, rawCountry: unknown, rawStarter: unknown): void {
+	const country = parseCountry(rawCountry);
+	if (country === undefined || !typeIs(rawStarter, "string") || !isStarterFor(country, rawStarter)) {
+		warn(`[story] chooseStarter rejected from ${player.Name}`);
+		return;
+	}
+	const starter: string = rawStarter;
+	const profile = loadProfile(player);
+	if (profile.starter !== undefined) {
+		warn(`[story] chooseStarter ignored, ${player.Name} already has a starter`);
+		return;
+	}
+	updateProfile(player, (p) => {
+		p.country = country;
+		p.starter = starter;
+	});
+	print(`[story] starter chosen ${player.Name} ${country} ${starter}`);
+}
+
+// Commands from the menu. "start" = quick match, "story" = story stage, "chooseStarter" = first story pick,
+// "chooseWeapon" = lord weapon.
 remotes.Command.OnServerEvent.Connect((player, raw) => {
 	if (!typeIs(raw, "table")) return;
-	const r = raw as { cmd?: unknown; country?: unknown };
-	if (r.cmd !== "start") return;
-	const country = parseCountry(r.country);
-	if (country === undefined) return;
-	startMatch(player, country);
+	const r = raw as { cmd?: unknown; country?: unknown; stageId?: unknown; starter?: unknown; weapon?: unknown };
+	if (r.cmd === "start") {
+		const country = parseCountry(r.country);
+		if (country === undefined) return;
+		startQuick(player, country);
+	} else if (r.cmd === "story") {
+		startStory(player, r.stageId);
+	} else if (r.cmd === "chooseStarter") {
+		chooseStarter(player, r.country, r.starter);
+	} else if (r.cmd === "chooseWeapon") {
+		chooseWeapon(player, r.weapon);
+	}
 });
 
-// Raw held buttons from the human. Untrusted: coerce every field.
+// Raw held buttons from each player go to that player's own match only.
 remotes.Input.OnServerEvent.Connect((player, raw) => {
-	if (player !== humanPlayer) return;
-	if (!typeIs(raw, "table")) return;
-	const r = raw as { moveX?: unknown; moveY?: unknown; dash?: unknown; j?: unknown; k?: unknown; l?: unknown };
-	held = {
-		moveX: toDir(r.moveX),
-		moveY: toDir(r.moveY),
-		dash: r.dash === true,
-		j: r.j === true,
-		k: r.k === true,
-		l: r.l === true,
-	};
-	if (held.j) latch.j = true;
-	if (held.k) latch.k = true;
-	if (held.l) latch.l = true;
+	const inst = sessions.get(player);
+	if (inst === undefined) return;
+	inst.setInput(raw);
 });
 
 Players.PlayerRemoving.Connect((player: Player) => {
-	if (player === humanPlayer) stopMatch();
+	const inst = sessions.get(player);
+	if (inst === undefined) return;
+	inst.destroy();
+	runningStories.delete(inst);
+	sessions.delete(player);
 });
 
 RunService.Heartbeat.Connect((dt: number) => {
-	const s = state;
-	const a = ai;
-	if (s === undefined || a === undefined || humanPlayer === undefined) return;
-
-	if (s.match.phase === "fulltime") {
-		// Match is over: stop stepping, keep sending the final state at the snapshot rate.
-		finishedAcc += dt;
-		if (finishedAcc >= SNAPSHOT_EVERY * TICK_DT) {
-			finishedAcc = 0;
-			sendSnapshot(s);
-		}
-		return;
+	const list: MatchInstance[] = [];
+	sessions.forEach((inst) => {
+		list.push(inst);
+	});
+	for (const inst of list) {
+		inst.update(dt);
 	}
-
-	const dbgSpeed = game.GetService("Workspace").GetAttribute("DebugMatchSpeed");
-	acc += typeIs(dbgSpeed, "number") && dbgSpeed > 0 ? dt * dbgSpeed : dt;
-	let ticks = 0;
-	while (acc >= TICK_DT && ticks < MAX_TICKS_PER_FRAME && !isFulltime(s)) {
-		runTick(s, a);
-		acc -= TICK_DT;
-		ticks++;
-		if (s.tick % SNAPSHOT_EVERY === 0) sendSnapshot(s);
-	}
-	if (acc >= TICK_DT) acc = 0;
 });

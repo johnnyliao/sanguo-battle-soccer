@@ -17,6 +17,8 @@ export function specialDescription(def: CharacterDef): { condition: string; effe
   const { kind, mode = 'rampage', noBall = false } = def.special;
   const condition = noBall ? '持球或不持球' : '持球';
   switch (mode) {
+    case 'none':
+      return { condition: '無', effect: '無' };
     case 'rampage':
       return { condition, effect: `無敵撞飛敵人，可帶球進門或射${SHOT_NAME[kind]}球` };
     case 'roar':
@@ -49,5 +51,11 @@ export function specialDescription(def: CharacterDef): { condition: string; effe
       return { condition: '持球或不持球', effect: '門前戰船擋射門與攻擊2秒，之後萬箭射回擊退扣30%' };
     case 'icefield':
       return { condition: '持球或不持球', effect: '原地冰雨4秒(半徑110)，內敵緩速85%、每0.5秒扣5%' };
+    case 'whirl':
+      return { condition: '持球或不持球', effect: '旋風斬2秒無敵、移速不變可帶球，周圍70px敵擊退扣15%、持球者掉球' };
+    case 'dragonspear':
+      return { condition: '持球或不持球', effect: '無敵集氣0.2秒後穿刺600px，路上敵擊倒1.25秒扣30%；持球則球隨槍射出' };
+    case 'featherfan':
+      return { condition: '持球或不持球', effect: '前方120度扇形220px內敵擊退扣10%、緩速65%3秒；扇中的球吸到腳下，自己加速30%' };
   }
 }

@@ -3,16 +3,14 @@ import {
   EASTWIND_RADIUS,
   EMPTY_INPUT,
   FEAR_RADIUS,
-  FIELD_D,
   FIELD_SCALE,
-  FIELD_W,
   GK_AREA_DEPTH,
-  GOAL_HALF_W,
   GUST_RADIUS,
   GUST_TARGET_RANGE,
   LEAP_BACK_DISTANCE,
   LEAP_FLY_DISTANCE,
   LEAP_RADIUS,
+  MAX_TEAM_SIZE,
   PORTAL_RADIUS,
   RIDE_DISTANCE,
   RIDE_LANE_HALF,
@@ -43,8 +41,12 @@ export interface AIState {
   pk: PkAIState;
 }
 
-const PLAYER_COUNT = 10;
-const CENTER_Y = FIELD_D / 2;
+/** Capacity of the per-player AI state (both teams at the largest team size). */
+const MAX_PLAYERS = 2 * MAX_TEAM_SIZE;
+/** Centre line (y) of the match's pitch. */
+function centreY(state: GameState): number {
+  return state.field.d / 2;
+}
 const EDGE_MARGIN = 20;
 
 const ATTACK_COOLDOWN = 40;
@@ -166,7 +168,7 @@ const NO_MOVE: Move = { moveX: 0, moveY: 0 };
 
 export function createAIState(seed: number): AIState {
   const perPlayer: AIState['perPlayer'] = [];
-  for (let i = 0; i < PLAYER_COUNT; i++) {
+  for (let i = 0; i < MAX_PLAYERS; i++) {
     perPlayer.push({ holdTicks: 0, cooldown: 0, intent: 'support' });
   }
   return {
@@ -192,7 +194,7 @@ function decide(state: GameState, ai: AIState, p: Player): InputFrame {
   // anyone else moves as usual with J, K and L held off.
   if (p.silenceTicks > 0 && p.action === 'normal' && state.ball.ownerIdx === p.idx) {
     s.intent = 'silencedDribble';
-    return frame(steerTo(p, opponentGoalX(state, p.team), CENTER_Y));
+    return frame(steerTo(p, opponentGoalX(state, p.team), centreY(state)));
   }
   const f = activeFrame(state, ai, p, s);
   return p.silenceTicks > 0 ? { ...f, j: false, k: false, l: false } : f;
@@ -249,16 +251,16 @@ function roarShotIncoming(state: GameState, p: Player): boolean {
   if (ball.ownerIdx !== -1 || ball.lastTouchIdx === -1 || state.players[ball.lastTouchIdx].team === p.team) return false;
   const goalX = ownGoalX(state, p.team);
   const towardGoal = goalX === 0 ? ball.vx < 0 : ball.vx > 0;
-  if (!towardGoal || !crossesGoalMouth(ball, goalX)) return false;
+  if (!towardGoal || !crossesGoalMouth(state, ball, goalX)) return false;
   const cx = p.x + p.facingX * ROAR_FORWARD;
   const cy = p.y + p.facingY * ROAR_FORWARD;
   return dist(ball.x, ball.y, cx, cy) <= ROAR_RADIUS;
 }
 
 /** True if the ball's straight xy path crosses the goal line at goalX inside the goal mouth. Mirrors crossesOwnMouth in sim/step.ts. */
-function crossesGoalMouth(ball: { x: number; y: number; vx: number; vy: number }, goalX: number): boolean {
+function crossesGoalMouth(state: GameState, ball: { x: number; y: number; vx: number; vy: number }, goalX: number): boolean {
   if (ball.vx === 0) return false;
-  const mouth = goalMouth(goalX === 0 ? 0 : 1);
+  const mouth = goalMouth(state, goalX === 0 ? 0 : 1);
   const t = (mouth.x - ball.x) / ball.vx;
   if (t <= 0) return false;
   const y = ball.y + ball.vy * t;
@@ -451,11 +453,11 @@ function ownerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPla
       nextRandom(ai) < SHOT_FULL_CHANCE;
     if (special) {
       s.intent = 'special';
-      return frame(steerTo(p, goalX, CENTER_Y), { l: true });
+      return frame(steerTo(p, goalX, centreY(state)), { l: true });
     }
     if (inShotRange && !p.prevInput.j) {
       s.intent = 'tap';
-      return frame(steerTo(p, goalX, CENTER_Y), { j: true });
+      return frame(steerTo(p, goalX, centreY(state)), { j: true });
     }
   }
 
@@ -471,7 +473,7 @@ function ownerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPla
   }
 
   s.intent = 'dribble';
-  const ty = CENTER_Y + (p.y - CENTER_Y) * 0.6;
+  const ty = centreY(state) + (p.y - centreY(state)) * 0.6;
   const dash =
     p.stamina > DRIBBLE_DASH_STAMINA_FRAC * p.maxStamina &&
     !opponentAhead(state, p, DRIBBLE_DASH_RANGE, DRIBBLE_DASH_LATERAL);
@@ -522,7 +524,7 @@ function offBallSpecialFrame(
         opponentsWithin(state, p, FEAR_RADIUS) >= FEAR_MIN_OPPONENTS;
       break;
     case 'beam':
-      wanted = enemyCarrier !== undefined && abs(enemyCarrier.x - ownGoalX(state, p.team)) < FIELD_W / 2;
+      wanted = enemyCarrier !== undefined && abs(enemyCarrier.x - ownGoalX(state, p.team)) < state.field.w / 2;
       break;
     case 'lunge':
       if (enemyCarrier !== undefined) {
@@ -612,7 +614,7 @@ function arrowshipWanted(state: GameState, p: Player): boolean {
   const ball = state.ball;
   if (ball.ownerIdx !== -1) {
     const carrier = state.players[ball.ownerIdx];
-    return carrier.team !== p.team && dist(carrier.x, carrier.y, goalX, CENTER_Y) <= ARROWSHIP_CARRIER_RANGE;
+    return carrier.team !== p.team && dist(carrier.x, carrier.y, goalX, centreY(state)) <= ARROWSHIP_CARRIER_RANGE;
   }
   if (ball.lastTouchIdx === -1 || state.players[ball.lastTouchIdx].team === p.team) return false;
   const towardGoal = goalX === 0 ? ball.vx < 0 : ball.vx > 0;
@@ -631,7 +633,7 @@ function leapLanding(p: Player): { x: number; y: number } {
 function leapOwnerWanted(state: GameState, p: Player): boolean {
   if (p.facingX * attackDir(state, p.team) <= 0) return false;
   const land = leapLanding(p);
-  if (land.x < 0 || land.x > FIELD_W || land.y < 0 || land.y > FIELD_D) return false;
+  if (land.x < 0 || land.x > state.field.w || land.y < 0 || land.y > state.field.d) return false;
   return (
     opponentsWithin(state, p, LEAP_OWNER_ESCAPE_RANGE) >= 1 ||
     opponentsNear(state, p.team, land.x, land.y, LEAP_RADIUS) >= LEAP_TARGET_MIN_OPPONENTS
@@ -646,7 +648,7 @@ function rideOwnerWanted(state: GameState, p: Player): boolean {
   if (p.facingX * attackDir(state, p.team) <= 0) return false;
   if (opponentsWithin(state, p, RIDE_OWNER_ESCAPE_RANGE) >= 1) return true;
   const goalX = opponentGoalX(state, p.team);
-  return abs(goalX - p.x) < RIDE_DISTANCE && abs(p.y - CENTER_Y) < GOAL_HALF_W;
+  return abs(goalX - p.x) < RIDE_DISTANCE && abs(p.y - centreY(state)) < state.field.goalHalfW;
 }
 
 /**
@@ -687,7 +689,7 @@ function sailFrame(state: GameState, p: Player, s: AIState['perPlayer'][number])
   if (state.ball.ownerIdx === p.idx) {
     const goalDist = abs(goalX - p.x);
     const shotRange = p.role === 'DF' ? SHOT_RANGE_DF : SHOT_RANGE_FWD;
-    const steer = steerTo(p, goalX, CENTER_Y);
+    const steer = steerTo(p, goalX, centreY(state));
     if (goalDist < shotRange && p.facingX * attackDir(state, p.team) > 0 && !p.prevInput.j) {
       s.intent = 'sailShot';
       return frame(steer, { j: true });
@@ -701,7 +703,7 @@ function sailFrame(state: GameState, p: Player, s: AIState['perPlayer'][number])
   s.intent = 'sailSteer';
   if (enemyCarrier !== undefined) return frame(steerTo(p, enemyCarrier.x, enemyCarrier.y));
   if (ball.ownerIdx === -1) return frame(steerTo(p, ball.x, ball.y));
-  return frame(steerTo(p, goalX, CENTER_Y));
+  return frame(steerTo(p, goalX, centreY(state)));
 }
 
 /**
@@ -814,7 +816,7 @@ function rampageFrame(state: GameState, p: Player, s: AIState['perPlayer'][numbe
   const goalDist = abs(goalX - p.x);
   const fireRange = p.specialKind === 'lob' ? RAMPAGE_FIRE_RANGE_LOB : RAMPAGE_FIRE_RANGE;
   const fire = goalDist < fireRange || p.rampageTicks < RAMPAGE_FIRE_LEFT;
-  return frame(steerTo(p, goalX, CENTER_Y), { j: fire });
+  return frame(steerTo(p, goalX, centreY(state)), { j: fire });
 }
 
 function gkOwnerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perPlayer'][number]): InputFrame {
@@ -823,7 +825,7 @@ function gkOwnerFrame(state: GameState, ai: AIState, p: Player, s: AIState['perP
     s.holdTicks = GK_HOLD_MIN + floor(nextRandom(ai) * GK_HOLD_SPAN);
   }
   // Facing up-field both while holding and on the pass press, so the owned ball never sits behind the goal line.
-  const upField = steerTo(p, p.x + attackDir(state, p.team) * GK_FORWARD_STEP, CENTER_Y);
+  const upField = steerTo(p, p.x + attackDir(state, p.team) * GK_FORWARD_STEP, centreY(state));
   if (s.holdTicks > 0) return frame(upField);
   return frame(upField, { k: !p.prevInput.k });
 }
@@ -878,8 +880,24 @@ function gkFreeFrame(state: GameState, p: Player, s: AIState['perPlayer'][number
     }
   }
 
-  const ty = clamp(ball.y, CENTER_Y - (GOAL_HALF_W - GK_MOUTH_MARGIN), CENTER_Y + (GOAL_HALF_W - GK_MOUTH_MARGIN));
+  const ty = clamp(ball.y, centreY(state) - (state.field.goalHalfW - GK_MOUTH_MARGIN), centreY(state) + (state.field.goalHalfW - GK_MOUTH_MARGIN));
   return frame(steerTo(p, goalX + inward * GK_LINE_OFFSET, ty));
+}
+
+/**
+ * Which lane a midfielder holds: -1 for the team's first midfielder (upper lane), 1 for a later one (lower lane),
+ * 0 when it is the team's only midfielder (centre). With the 5-player order GK,DF,MF,MF,FW this is slot 2 / slot 3.
+ */
+function mfLaneSide(state: GameState, p: Player): -1 | 0 | 1 {
+  let count = 0;
+  let first = -1;
+  for (const t of state.players) {
+    if (t.team !== p.team || t.role !== 'MF') continue;
+    if (first === -1) first = t.idx;
+    count++;
+  }
+  if (count === 1) return 0;
+  return p.idx === first ? -1 : 1;
 }
 
 /** Our team has the ball and this player is not the carrier. */
@@ -891,21 +909,25 @@ function supportFrame(state: GameState, p: Player, s: AIState['perPlayer'][numbe
   let ty: number;
   if (p.role === 'FW') {
     tx = ball.x + dir * FW_AHEAD;
-    ty = clamp(ball.y, CENTER_Y - GOAL_HALF_W, CENTER_Y + GOAL_HALF_W);
+    ty = clamp(ball.y, centreY(state) - state.field.goalHalfW, centreY(state) + state.field.goalHalfW);
   } else if (p.role === 'MF') {
-    if (p.idx % 5 === 2) {
+    const side = mfLaneSide(state, p);
+    if (side === -1) {
       tx = ball.x + dir * MF_AHEAD;
-      ty = CENTER_Y - MF_LANE;
+      ty = centreY(state) - MF_LANE;
+    } else if (side === 0) {
+      tx = ball.x + dir * MF_AHEAD;
+      ty = centreY(state);
     } else {
       tx = ball.x - dir * MF_BEHIND;
-      ty = CENTER_Y + MF_LANE;
+      ty = centreY(state) + MF_LANE;
     }
   } else {
     tx = ball.x - dir * DF_BEHIND;
-    ty = CENTER_Y + (ball.y - CENTER_Y) * 0.5;
+    ty = centreY(state) + (ball.y - centreY(state)) * 0.5;
   }
-  tx = clamp(tx, EDGE_MARGIN, FIELD_W - EDGE_MARGIN);
-  ty = clamp(ty, EDGE_MARGIN, FIELD_D - EDGE_MARGIN);
+  tx = clamp(tx, EDGE_MARGIN, state.field.w - EDGE_MARGIN);
+  ty = clamp(ty, EDGE_MARGIN, state.field.d - EDGE_MARGIN);
   const far = dist(p.x, p.y, tx, ty) > 120;
   return frame(steerTo(p, tx, ty), { dash: far && p.stamina > DASH_STAMINA_FRAC * p.maxStamina });
 }
@@ -950,9 +972,9 @@ function defendFrame(state: GameState, p: Player, s: AIState['perPlayer'][number
   const ball = state.ball;
   const goalX = ownGoalX(state, p.team);
   const frac = p.role === 'DF' ? DEFEND_FRAC.DF : p.role === 'MF' ? DEFEND_FRAC.MF : DEFEND_FRAC.FW;
-  const lane = p.role === 'MF' ? (p.idx % 5 === 2 ? -DEFEND_LANE : DEFEND_LANE) : 0;
-  const tx = clamp(goalX + (ball.x - goalX) * frac, EDGE_MARGIN, FIELD_W - EDGE_MARGIN);
-  const ty = clamp(CENTER_Y + (ball.y - CENTER_Y) * 0.6 + lane, EDGE_MARGIN, FIELD_D - EDGE_MARGIN);
+  const lane = p.role === 'MF' ? mfLaneSide(state, p) * DEFEND_LANE : 0;
+  const tx = clamp(goalX + (ball.x - goalX) * frac, EDGE_MARGIN, state.field.w - EDGE_MARGIN);
+  const ty = clamp(centreY(state) + (ball.y - centreY(state)) * 0.6 + lane, EDGE_MARGIN, state.field.d - EDGE_MARGIN);
   const far = dist(p.x, p.y, tx, ty) > 120;
   return frame(steerTo(p, tx, ty), { dash: far && p.stamina > DASH_STAMINA_FRAC * p.maxStamina });
 }

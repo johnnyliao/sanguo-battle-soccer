@@ -1,7 +1,8 @@
 // Client-side 3D renderer. Builds player / ball / zone instances from server snapshots and draws them
 // about 100 ms behind the newest snapshot, interpolated by tick. Call update(dt) from RenderStepped.
 import { Country, SetupPlayer, Setup, SimEventLite, SnapBall, SnapPlayer, Snapshot, STUDS_PER_PX, TICK_RATE, simToWorld } from "shared/net";
-import { colourOf } from "./world";
+import { buildPitchLayer, colourOf } from "./world";
+import { setCameraPitch } from "./camera";
 import { SPRITES, SpriteSheet, animFor } from "./sprites";
 import { AvatarView, drawAvatar, getAvatarTemplate, makeAvatar, triggerAttack, triggerSpecial } from "./avatars";
 import { MatchFx } from "./matchFx";
@@ -246,6 +247,7 @@ export class Renderer {
 				return v === undefined ? new Vector3(1, 0, 0) : new Vector3(v.fx, 0, v.fz);
 			},
 			chest: (i) => (this.players[i]?.foot ?? none).add(new Vector3(0, 4.6, 0)),
+			model: (i) => this.players[i]?.model,
 			hand: (i) => {
 				const v = this.players[i];
 				if (v === undefined) return none;
@@ -265,12 +267,16 @@ export class Renderer {
 			},
 			focusX: () => this.focusX,
 			focusZ: () => this.focusZ,
+			humanIdx: () => this.setup?.humanIdx ?? -1,
 			count: () => this.players.size(),
 		};
 	}
 
 	/** (Re)creates the 10 player actors and the ball. Old actors are removed. */
 	onSetup(s: Setup): void {
+		// Pitch size and centring come first: buildPitchLayer sets the sim offset that simToWorld applies to every position below.
+		buildPitchLayer(s.field, s.teamSize);
+		setCameraPitch(s.field, s.teamSize);
 		this.actors.ClearAllChildren();
 		this.arrow?.destroy();
 		this.arrow = createOffscreenArrow();
@@ -284,6 +290,10 @@ export class Renderer {
 		this.ball = this.makeBall();
 		this.evq = [];
 		this.mfx.reset();
+		// Camera starts at the pitch centre until the first snapshot places the ball.
+		const centre = simToWorld(s.field.w / 2, s.field.d / 2, 0);
+		this.focusX = centre.X;
+		this.focusZ = centre.Z;
 	}
 
 	/** Pushes a snapshot into the interpolation buffer. */
@@ -486,9 +496,12 @@ export class Renderer {
 					setMatchTrails(v.trails, on);
 				}
 			}
+			// The sword whirl spins the model (yaw override from the lord effects); the sim facing (v.fx / v.fz) stays as is.
+			const spin = this.mfx.spin(i);
+			const dirV = spin === 0 ? new Vector3(v.fx, 0, v.fz) : CFrame.Angles(0, spin, 0).VectorToWorldSpace(new Vector3(v.fx, 0, v.fz));
 			if (av !== undefined) {
 				const mo = this.mfx.mount(i, foot, new Vector3(v.fx, 0, v.fz), cur.sp);
-				drawAvatar(av, foot, v.fx, v.fz, act, now, mo?.cf, mo?.pose);
+				drawAvatar(av, foot, dirV.X, dirV.Z, act, now, mo?.cf, mo?.pose);
 				v.head.CFrame = new CFrame(foot.add(new Vector3(0, v.height + 0.2, 0)));
 				v.aura.CFrame = new CFrame(foot.add(new Vector3(0, v.height / 2, 0)));
 			} else {
@@ -498,7 +511,7 @@ export class Renderer {
 				else if (act === "dive") lean = -1.2;
 				const shake = act === "hitstun" || act === "fear" ? math.sin(now * 40) * 0.35 : 0;
 
-				const base = CFrame.lookAt(foot, foot.add(new Vector3(v.fx, 0, v.fz))).mul(new CFrame(shake, 0, 0));
+				const base = CFrame.lookAt(foot, foot.add(dirV)).mul(new CFrame(shake, 0, 0));
 				const bodyLen = v.height - 1.8;
 				const bodyCF = lying
 					? base.mul(new CFrame(0, 0.8, 0)).mul(CFrame.Angles(math.pi / 2, 0, 0))
@@ -572,7 +585,7 @@ export class Renderer {
 		let avatar: AvatarView | undefined;
 		const template = getAvatarTemplate(p.charId);
 		if (template !== undefined) {
-			avatar = makeAvatar(template, model, height, p.charId);
+			avatar = makeAvatar(template, model, height, p.charId, colourOf(hex), p.weapon);
 			body.Transparency = 1;
 			head.Transparency = 1;
 			ring.Color = colourOf(human ? HUMAN_RING_COLOUR : hex);
@@ -580,7 +593,7 @@ export class Renderer {
 		}
 
 		let trails: Trail[] = [];
-		if (avatar !== undefined) trails = initMatchWeapon(avatar.model, p.charId, avatar.root);
+		if (avatar !== undefined) trails = initMatchWeapon(avatar.model, p.charId, avatar.root, p.weapon);
 
 		const sheet = SPRITES[p.charId];
 		let sprite: SpriteView | undefined;

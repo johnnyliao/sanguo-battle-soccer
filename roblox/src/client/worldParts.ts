@@ -8,6 +8,11 @@ import { FIELD_D, FIELD_W } from "shared/game/sim/constants";
 export const FIELD_LEN = FIELD_W * STUDS_PER_PX; // along X
 export const FIELD_WID = FIELD_D * STUDS_PER_PX; // along Z
 
+/** Sim-px offset (x, y) that centres a w x d match pitch inside the default 5v5 field. (0, 0) for the default size. */
+export function pitchOffsetPx(w: number, d: number): [number, number] {
+	return [(FIELD_W - w) / 2, (FIELD_D - d) / 2];
+}
+
 /** 0xRRGGBB -> Color3. shade scales each channel (clamped to 255). */
 export function colourOf(hex: number, shade = 1): Color3 {
 	const r = math.min(255, math.floor((math.floor(hex / 65536) % 256) * shade));

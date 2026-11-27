@@ -2,11 +2,13 @@
 // weapon trails that are switched on during attacks. Swords and fans keep their hand weld.
 import { colorOf } from "./actor";
 import * as fx from "./fx";
+import type { LordWeapon } from "shared/net";
 import { initWeaponPose, startWeaponAttack } from "./weaponPose";
+import { weaponPoseIdFor } from "./weapons";
 
-/** Takes over the weapon pose of a match avatar and builds one trail per weapon part. */
-export function initMatchWeapon(model: Model, charId: string, root: BasePart): Trail[] {
-	initWeaponPose(model, charId, root);
+/** Takes over the weapon pose of a match avatar and builds one trail per weapon part. lordWeapon picks the pose of a lord's weapon. */
+export function initMatchWeapon(model: Model, charId: string, root: BasePart, lordWeapon?: LordWeapon): Trail[] {
+	initWeaponPose(model, weaponPoseIdFor(charId, lordWeapon), root);
 	const trails: Trail[] = [];
 	const weapon = model.FindFirstChild("Weapon");
 	if (weapon === undefined) return trails;

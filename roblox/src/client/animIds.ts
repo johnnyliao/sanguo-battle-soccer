@@ -1,4 +1,6 @@
 // Per-character AI-generated animations (Studio generate_animation), published asset ids.
+import type { LordWeapon } from "shared/net";
+
 export interface CharAnims { idle?: string; run?: string; attack?: string; special?: string }
 /** Shared reaction clips used by every general (showroom stage). Filled in as they are published. */
 export const SHARED_ANIMS: { hit?: string; knockdown?: string; getup?: string; stun?: string } = {
@@ -24,3 +26,32 @@ export const CHAR_ANIMS: Record<string, CharAnims | undefined> = {
 	machao: { idle: "rbxassetid://73924859379156", run: "rbxassetid://104853164895815", attack: "rbxassetid://100367276490268", special: "rbxassetid://136821611157205" },
 	zhaoyun: { idle: "rbxassetid://76108270503706", run: "rbxassetid://71657108155586", attack: "rbxassetid://100367276490268", special: "rbxassetid://89918665306088" }, // special reuses the spear thrust (own special generation failed twice)
 };
+/** Attack / special clips of a general, without its idle / run. */
+const attackSpecialOf = (charId: string): CharAnims => ({ attack: CHAR_ANIMS[charId]?.attack, special: CHAR_ANIMS[charId]?.special });
+/** Fallback clips for lord_<userId> (the player's Roblox avatar as lord, no dedicated clips), per lord weapon: sword = caocao, spear = zhaoyun, fan = zhugeliang attack / special. idle/run undefined = DEFAULT_IDLE_ID / DEFAULT_RUN_ID in avatars.ts. */
+export const LORD_ANIMS: Record<LordWeapon, CharAnims> = {
+	sword: attackSpecialOf("caocao"),
+	spear: attackSpecialOf("zhaoyun"),
+	fan: attackSpecialOf("zhugeliang"),
+};
+/** Fallback clips for generic soldiers (xiaobing_*): zhaoyun's spear attack / special. idle/run undefined = defaults. */
+export const SOLDIER_ANIMS: CharAnims = {
+	attack: "rbxassetid://100367276490268",
+	special: "rbxassetid://89918665306088",
+};
+/** True for the player-avatar lord charId ("lord_<userId>"). */
+export function isLordId(charId: string): boolean {
+	return string.sub(charId, 1, 5) === "lord_";
+}
+/** True for generic soldier charIds ("xiaobing_*"). */
+export function isSoldierId(charId: string): boolean {
+	return string.sub(charId, 1, 9) === "xiaobing_";
+}
+/** Anim set for a charId: its own CHAR_ANIMS entry, else the lord (by lord weapon; undefined = sword) / soldier fallback set, else undefined (default clips). */
+export function animsFor(charId: string, lordWeapon?: LordWeapon): CharAnims | undefined {
+	const own = CHAR_ANIMS[charId];
+	if (own !== undefined) return own;
+	if (isLordId(charId)) return LORD_ANIMS[lordWeapon ?? "sword"];
+	if (isSoldierId(charId)) return SOLDIER_ANIMS;
+	return undefined;
+}

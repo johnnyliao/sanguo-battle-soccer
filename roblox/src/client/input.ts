@@ -1,5 +1,6 @@
 import type { ClientInput, Remotes } from "../shared/net";
 import { TouchControls } from "./touch";
+import { actionHitTest, setActionPressed, type ActionKey } from "./actionBar";
 
 const Players = game.GetService("Players");
 const RunService = game.GetService("RunService");
@@ -46,6 +47,16 @@ const heldKeys = new Set<Enum.KeyCode>();
 let pendingJ = false;
 let pendingK = false;
 let pendingL = false;
+/** Mouse clicks on the action bar: which button is held by the left mouse button. */
+const mouseHeld: Record<ActionKey, boolean> = { j: false, k: false, l: false };
+let mouseKey: ActionKey | undefined;
+
+/** Queues a press of J / K / L for the next sample (same as a key press). */
+function pressAction(key: ActionKey): void {
+	if (key === "j") pendingJ = true;
+	else if (key === "k") pendingK = true;
+	else pendingL = true;
+}
 let inputEnabled = true;
 let touch: TouchControls | undefined;
 const dashDetector = new DashDetector();
@@ -102,9 +113,9 @@ function sample(): ClientInput {
 		moveX,
 		moveY,
 		dash: doubleTap || keyDown(Enum.KeyCode.LeftShift) || (t !== undefined && t.dash),
-		j: pressJ || keyDown(Enum.KeyCode.J) || (t !== undefined && t.j),
-		k: pressK || keyDown(Enum.KeyCode.K) || (t !== undefined && t.k),
-		l: pressL || keyDown(Enum.KeyCode.L) || (t !== undefined && t.l),
+		j: pressJ || keyDown(Enum.KeyCode.J) || (t !== undefined && t.j) || mouseHeld.j,
+		k: pressK || keyDown(Enum.KeyCode.K) || (t !== undefined && t.k) || mouseHeld.k,
+		l: pressL || keyDown(Enum.KeyCode.L) || (t !== undefined && t.l) || mouseHeld.l,
 	};
 }
 
@@ -130,7 +141,7 @@ function disableDefaultControls(): void {
  * Starts keyboard + touch input. Sends the merged ClientInput to the server on every change (and every 0.5 s).
  * Call once, before any match starts. Input starts enabled; call setInputEnabled(false) while menus are open.
  */
-export function startInput(remotes: Remotes): { getTouch(): TouchControls | undefined } {
+export function startInput(remotes: Remotes): void {
 	// PlayerModule may never appear (no avatar); never block startup on it.
 	task.spawn(disableDefaultControls);
 
@@ -148,9 +159,19 @@ export function startInput(remotes: Remotes): { getTouch(): TouchControls | unde
 	}
 
 	UserInputService.InputBegan.Connect((input, gameProcessed) => {
-		if (input.UserInputType !== Enum.UserInputType.Keyboard) return;
 		// Keys swallowed by chat or other GUI are ignored.
 		if (gameProcessed) return;
+		if (input.UserInputType === Enum.UserInputType.MouseButton1) {
+			// Clicking an action bar button presses it (the bar itself is hit-tested, see actionBar.ts).
+			const key = actionHitTest(input.Position.X, input.Position.Y);
+			if (key !== undefined) {
+				mouseKey = key;
+				mouseHeld[key] = true;
+				pressAction(key);
+			}
+			return;
+		}
+		if (input.UserInputType !== Enum.UserInputType.Keyboard) return;
 		heldKeys.add(input.KeyCode);
 		if (input.KeyCode === Enum.KeyCode.J) pendingJ = true;
 		else if (input.KeyCode === Enum.KeyCode.K) pendingK = true;
@@ -159,10 +180,15 @@ export function startInput(remotes: Remotes): { getTouch(): TouchControls | unde
 
 	UserInputService.InputEnded.Connect((input) => {
 		if (input.UserInputType === Enum.UserInputType.Keyboard) heldKeys.delete(input.KeyCode);
+		if (input.UserInputType === Enum.UserInputType.MouseButton1 && mouseKey !== undefined) {
+			mouseHeld[mouseKey] = false;
+			mouseKey = undefined;
+		}
 	});
 
 	RunService.Heartbeat.Connect((dt) => {
 		const nextInput = sample();
+		setActionPressed(nextInput.j, nextInput.k, nextInput.l);
 		sinceSend += dt;
 		if (lastSent === undefined || sinceSend >= KEEP_ALIVE_SECONDS || !sameInput(lastSent, nextInput)) {
 			remotes.Input.FireServer(nextInput);
@@ -170,21 +196,10 @@ export function startInput(remotes: Remotes): { getTouch(): TouchControls | unde
 			sinceSend = 0;
 		}
 	});
-
-	return {
-		getTouch() {
-			return touch;
-		},
-	};
 }
 
 /** Zeroes and blocks input while a menu is open; re-enables it when the match starts. Also shows/hides touch controls. */
 export function setInputEnabled(enabled: boolean): void {
 	inputEnabled = enabled;
 	if (touch !== undefined) touch.setVisible(enabled);
-}
-
-/** Penalty shootout on or off: relabels the touch J / K buttons and hides the special. */
-export function setPkMode(on: boolean): void {
-	if (touch !== undefined) touch.setPk(on);
 }

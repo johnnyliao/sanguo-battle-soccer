@@ -12,7 +12,7 @@ function ch(
   stats: [number, number, number, number, number],
   specialName: string,
   specialKind: SpecialKind,
-  specialMode: 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger' | 'slash' | 'ride' | 'icefield' | 'sail' | 'gust' | 'portal' | 'arrowship' | 'eastwind' = 'rampage',
+  specialMode: 'none' | 'rampage' | 'roar' | 'lunge' | 'beam' | 'summon' | 'fear' | 'leap' | 'tiger' | 'slash' | 'ride' | 'icefield' | 'sail' | 'gust' | 'portal' | 'arrowship' | 'eastwind' | 'whirl' | 'dragonspear' | 'featherfan' = 'rampage',
   opts: { noBall?: boolean; bumpPct?: number } = {},
 ): CharacterDef {
   const [power, speed, stamina, technique, defense] = stats;

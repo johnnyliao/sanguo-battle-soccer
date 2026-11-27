@@ -1,8 +1,9 @@
-import { round } from './num';
+import { len, fail, round } from './num';
 import type { BodySize, SizeParams } from '../data/types';
 import {
   FIELD_D,
   FIELD_W,
+  GOAL_HALF_W,
   KICKOFF_TICKS,
   STAMINA_BASE,
   STAMINA_PER_STAT,
@@ -10,18 +11,36 @@ import {
 } from './constants';
 import { attackDir, formationPosition } from './field';
 import { resetForKickoff } from './match';
-import { EMPTY_INPUT, type GameState, type MatchSetup, type Player } from './types';
+import { EMPTY_INPUT, type FieldSize, type GameState, type MatchSetup, type Player } from './types';
 
 const DEFAULT_HALF_SECONDS = 120;
+
+/** Most players per team the formations support. */
+export const MAX_TEAM_SIZE = 5;
 
 export function createInitialState(
   setup: MatchSetup,
   sizeParams: Record<BodySize, SizeParams>,
 ): GameState {
+  const teamSize = len(setup.teams[0]);
+  if (teamSize < 1 || teamSize > MAX_TEAM_SIZE || len(setup.teams[1]) !== teamSize) {
+    fail(
+      `createInitialState: teams need equal size 1..${MAX_TEAM_SIZE}, got ${teamSize} and ${len(setup.teams[1])}`,
+    );
+  }
+  const field: FieldSize =
+    setup.field === undefined
+      ? { w: FIELD_W, d: FIELD_D, goalHalfW: GOAL_HALF_W }
+      : { w: setup.field.w, d: setup.field.d, goalHalfW: setup.field.goalHalfW };
+  if (!(field.w > 0 && field.d > 0 && field.goalHalfW > 0)) {
+    fail(`createInitialState: field sizes must be positive, got w ${field.w}, d ${field.d}, goalHalfW ${field.goalHalfW}`);
+  }
   const halfTicks = round((setup.halfSeconds ?? DEFAULT_HALF_SECONDS) * TICK_HZ);
   const state: GameState = {
     tick: 0,
     rng: (setup.seed >>> 0) || 0x9e3779b9,
+    teamSize,
+    field,
     players: [],
     riders: [],
     waves: [],
@@ -36,8 +55,8 @@ export function createInitialState(
     arrowships: [],
     nextArrowShipId: 1,
     ball: {
-      x: FIELD_W / 2,
-      y: FIELD_D / 2,
+      x: field.w / 2,
+      y: field.d / 2,
       z: 0,
       vx: 0,
       vy: 0,
@@ -66,13 +85,13 @@ export function createInitialState(
   for (let t = 0; t < 2; t++) {
     const team = t as 0 | 1;
     const dir = attackDir(state, team);
-    for (let slot = 0; slot < 5; slot++) {
+    for (let slot = 0; slot < teamSize; slot++) {
       const def = setup.teams[team][slot];
       const size = sizeParams[def.size];
-      const pos = formationPosition(slot, dir);
+      const pos = formationPosition(field, teamSize, slot, dir);
       const maxStamina = STAMINA_BASE + def.stats.stamina * STAMINA_PER_STAT;
       const player: Player = {
-        idx: team * 5 + slot,
+        idx: team * teamSize + slot,
         charId: def.id,
         name: def.name,
         team,
@@ -114,6 +133,7 @@ export function createInitialState(
         specialName: def.special.name,
         specialNoBall: def.special.noBall ?? false,
         specialBumpPct: def.special.bumpPct ?? undefined,
+        weapon: def.weapon,
         prevInput: { ...EMPTY_INPUT },
       };
       state.players.push(player);

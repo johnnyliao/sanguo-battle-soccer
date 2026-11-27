@@ -17,6 +17,8 @@ import {
   type Portal,
   type Rider,
   type SpecialShot,
+  type DragonSpear,
+  type Windpuff,
 } from './types';
 
 /** Vertical gap under which an airborne hit still connects. */
@@ -63,6 +65,7 @@ export function updateAction(state: GameState, p: Player, input: InputFrame): vo
   tickRampage(state, p);
   tickTiger(state, p);
   tickSlash(state, p);
+  tickLord(state, p);
   tickSail(state, p);
   tickSpecialCooldown(state, p);
   if (p.silenceTicks > 0) p.silenceTicks--;
@@ -79,19 +82,19 @@ export function updateAction(state: GameState, p: Player, input: InputFrame): vo
       updateTackle(state, p);
       break;
     case 'dive':
-      updateDive(p);
+      updateDive(state, p);
       break;
     case 'hitstun':
-      if (coast(p, HITSTUN_DAMP)) toNormal(p);
+      if (coast(state, p, HITSTUN_DAMP)) toNormal(p);
       break;
     case 'down':
-      if (coast(p, DOWN_DAMP)) {
+      if (coast(state, p, DOWN_DAMP)) {
         toNormal(p);
         if (p.stamina <= 0) p.stamina = p.maxStamina * C.GETUP_STAMINA_RATIO;
       }
       break;
     case 'recover':
-      if (coast(p, RECOVER_DAMP)) toNormal(p);
+      if (coast(state, p, RECOVER_DAMP)) toNormal(p);
       break;
     case 'charge':
       updateCharge(state, p, input);
@@ -111,23 +114,26 @@ export function updateAction(state: GameState, p: Player, input: InputFrame): vo
     case 'ride':
       updateRide(state, p);
       break;
+    case 'dragon':
+      updateDragon(state, p);
+      break;
   }
 }
 
 /** Pushes a player back inside the field bounds in xy. */
-export function clampPlayerToField(p: Player): void {
+export function clampPlayerToField(state: GameState, p: Player): void {
   if (p.x < 0) {
     p.x = 0;
     p.vx = 0;
-  } else if (p.x > C.FIELD_W) {
-    p.x = C.FIELD_W;
+  } else if (p.x > state.field.w) {
+    p.x = state.field.w;
     p.vx = 0;
   }
   if (p.y < 0) {
     p.y = 0;
     p.vy = 0;
-  } else if (p.y > C.FIELD_D) {
-    p.y = C.FIELD_D;
+  } else if (p.y > state.field.d) {
+    p.y = state.field.d;
     p.vy = 0;
   }
 }
@@ -143,17 +149,17 @@ function applyGravity(p: Player): void {
   }
 }
 
-function integrate(p: Player): void {
+function integrate(state: GameState, p: Player): void {
   p.x += p.vx * C.DT;
   p.y += p.vy * C.DT;
-  clampPlayerToField(p);
+  clampPlayerToField(state, p);
 }
 
 /** Damps velocity, integrates, and counts down the action timer. Returns true when the timer ends. */
-function coast(p: Player, damp: number): boolean {
+function coast(state: GameState, p: Player, damp: number): boolean {
   p.vx *= damp;
   p.vy *= damp;
-  integrate(p);
+  integrate(state, p);
   p.actionTimer--;
   return p.actionTimer <= 0;
 }
@@ -161,8 +167,12 @@ function coast(p: Player, damp: number): boolean {
 /** Where an ice field, a portal or an eastwind slow a player, the lowest multiplier applies (the minimum, not the product). */
 function maxSpeedOf(state: GameState, p: Player): number {
   const sailMult = p.sailTicks > 0 ? C.SAIL_SPEED_MULT : 1;
-  const slowMult = min(iceSlowMult(state, p), portalSlowMult(state, p), eastwindSlowMult(state, p));
-  return (C.PLAYER_BASE_SPEED + p.stats.speed * C.PLAYER_SPEED_PER_STAT) * slowMult * sailMult;
+  const slowMult = min(
+    min(iceSlowMult(state, p), portalSlowMult(state, p), eastwindSlowMult(state, p)),
+    featherSlowMult(p),
+  );
+  const boostMult = p.lordBoostTicks !== undefined && p.lordBoostTicks > 0 ? C.LORD_FEATHER_BOOST_MULT : 1;
+  return (C.PLAYER_BASE_SPEED + p.stats.speed * C.PLAYER_SPEED_PER_STAT) * slowMult * sailMult * boostMult;
 }
 
 /**
@@ -253,7 +263,7 @@ function updateNormal(state: GameState, p: Player, input: InputFrame): void {
     if (input.k && !p.prevInput.k) {
       if (rampaging) endRampage(state, p);
       passBall(state, p);
-      integrate(p);
+      integrate(state, p);
       return;
     }
     if (input.j && !p.prevInput.j && rampaging) {
@@ -286,11 +296,12 @@ function updateNormal(state: GameState, p: Player, input: InputFrame): void {
       startDive(state, p, input);
       return;
     } else {
-      startAttack(state, p, 'punch', C.PUNCH_TICKS);
+      if (p.humanAssist === true) assistTurn(state, p);
+      startAttack(state, p, 'punch', punchTicksOf(p));
       p.vx *= PUNCH_WALK_MULT;
       p.vy *= PUNCH_WALK_MULT;
     }
-    integrate(p);
+    integrate(state, p);
     return;
   }
 
@@ -303,11 +314,15 @@ function updateNormal(state: GameState, p: Player, input: InputFrame): void {
   const k = min(1, (C.PLAYER_ACCEL * C.DT) / p.mass);
   p.vx += (dir.x * maxSpeed - p.vx) * k;
   p.vy += (dir.y * maxSpeed - p.vy) * k;
-  integrate(p);
+  integrate(state, p);
 }
 
 function updatePunch(state: GameState, p: Player): void {
-  const done = coast(p, PUNCH_DAMP);
+  if (p.weapon !== undefined) {
+    updateWeaponPunch(state, p);
+    return;
+  }
+  const done = coast(state, p, PUNCH_DAMP);
   const elapsed = C.PUNCH_TICKS - p.actionTimer;
   if (!p.hitDone && elapsed >= C.PUNCH_ACTIVE_FROM && elapsed <= C.PUNCH_ACTIVE_TO) {
     const reach = p.radius + C.PUNCH_RANGE;
@@ -325,7 +340,7 @@ function updatePunch(state: GameState, p: Player): void {
 }
 
 function updateTackle(state: GameState, p: Player): void {
-  const done = coast(p, TACKLE_DAMP);
+  const done = coast(state, p, TACKLE_DAMP);
   if (!p.hitDone) {
     const victim = findVictim(state, p, (v) => {
       return v.z < TACKLE_MAX_VICTIM_Z && distance(p.x, p.y, v.x, v.y) < p.radius + v.radius + TACKLE_CONTACT_PAD;
@@ -351,14 +366,14 @@ function startDive(state: GameState, p: Player, input: InputFrame): void {
   p.vy = p.facingY * C.GK_DIVE_SPEED;
   p.vz = GK_DIVE_VZ;
   state.events.push({ type: 'dive', playerIdx: p.idx });
-  integrate(p);
+  integrate(state, p);
 }
 
 /** Dive slides, decaying each tick, then turns into a recover. */
-function updateDive(p: Player): void {
+function updateDive(state: GameState, p: Player): void {
   p.vx *= GK_DIVE_DAMP;
   p.vy *= GK_DIVE_DAMP;
-  integrate(p);
+  integrate(state, p);
   p.actionTimer--;
   if (p.actionTimer <= 0) {
     p.action = 'recover';
@@ -398,7 +413,7 @@ function moveCharging(state: GameState, p: Player, input: InputFrame): void {
   const k = min(1, (C.PLAYER_ACCEL * C.DT) / p.mass);
   p.vx += (dir.x * maxSpeed - p.vx) * k;
   p.vy += (dir.y * maxSpeed - p.vy) * k;
-  integrate(p);
+  integrate(state, p);
 }
 
 /** Picks the shot on J release: a shot toward the goal (power by charge), else a clear. */
@@ -417,9 +432,10 @@ function releaseCharge(state: GameState, p: Player, input: InputFrame): void {
  * Buffered L press: starts the special if a press is buffered, the match is in play, and it is ready (cooldown 0,
  * enough stamina). A roar (Zhang Fei) and a fear (Zhang Liao) are instant. Every other special needs the ball unless
  * its character has specialNoBall; a rampage, lunge, beam, leap or ride starts at once, and a summon keeps the ball.
- * A special that cannot start yet keeps the buffer. Returns true if it started.
+ * A special that cannot start yet keeps the buffer. A 'none' special (story soldiers) never starts. Returns true if it started.
  */
 function trySpecial(state: GameState, p: Player, input: InputFrame): boolean {
+  if (p.specialMode === 'none') return false;
   if (p.specialBuffer === 0 || state.match.phase !== 'play' || p.silenceTicks > 0) return false;
   if (p.specialCooldown > 0 || p.stamina < C.SPECIAL_STAMINA_COST) return false;
   if (p.specialMode === 'roar') {
@@ -432,7 +448,9 @@ function trySpecial(state: GameState, p: Player, input: InputFrame): boolean {
     castFear(state, p);
     return true;
   }
-  if (!p.specialNoBall && state.ball.ownerIdx !== p.idx) return false;
+  // The lord's three specials (whirl, dragonspear, featherfan) need no ball, like a no-ball character's special.
+  const lordSpecial = p.specialMode === 'whirl' || p.specialMode === 'dragonspear' || p.specialMode === 'featherfan';
+  if (!p.specialNoBall && !lordSpecial && state.ball.ownerIdx !== p.idx) return false;
   p.specialBuffer = 0;
   if (p.specialMode === 'lunge') startLunge(state, p, input);
   else if (p.specialMode === 'beam') startBeamCast(state, p);
@@ -447,6 +465,9 @@ function trySpecial(state: GameState, p: Player, input: InputFrame): boolean {
   else if (p.specialMode === 'portal') startPortal(state, p);
   else if (p.specialMode === 'eastwind') startEastwind(state, p);
   else if (p.specialMode === 'arrowship') startArrowship(state, p);
+  else if (p.specialMode === 'whirl') startWhirl(state, p);
+  else if (p.specialMode === 'dragonspear') startDragon(state, p);
+  else if (p.specialMode === 'featherfan') startFeatherfan(state, p);
   else startRampage(state, p);
   return true;
 }
@@ -494,13 +515,13 @@ function updateLunge(state: GameState, p: Player): void {
   }
   const nextX = p.x + p.vx * C.DT;
   const nextY = p.y + p.vy * C.DT;
-  const atEdge = nextX < 0 || nextX > C.FIELD_W || nextY < 0 || nextY > C.FIELD_D;
+  const atEdge = nextX < 0 || nextX > state.field.w || nextY < 0 || nextY > state.field.d;
   // Reaching the opponent's goal line inside the mouth (ball radius inset) scores; the lunge never scores into his own goal.
   const side: 0 | 1 = attackDir(state, p.team) === 1 ? 1 : 0;
-  const mouth = goalMouth(side);
-  const onGoalLine = side === 1 ? nextX >= C.FIELD_W : nextX <= 0;
+  const mouth = goalMouth(state, side);
+  const onGoalLine = side === 1 ? nextX >= state.field.w : nextX <= 0;
   const inMouth = nextY >= mouth.yMin + C.BALL_RADIUS && nextY <= mouth.yMax - C.BALL_RADIUS;
-  integrate(p);
+  integrate(state, p);
   p.actionTimer--;
   if (onGoalLine && inMouth && state.ball.ownerIdx === p.idx) {
     ballIntoGoal(state, p, side, p.vx, p.vy);
@@ -517,7 +538,7 @@ function updateLunge(state: GameState, p: Player): void {
 function ballIntoGoal(state: GameState, p: Player, side: 0 | 1, vx: number, vy: number): void {
   releaseBall(state, p, vx, vy, 0);
   const ball = state.ball;
-  ball.x = side === 1 ? C.FIELD_W + C.BALL_RADIUS + 1 : -(C.BALL_RADIUS + 1);
+  ball.x = side === 1 ? state.field.w + C.BALL_RADIUS + 1 : -(C.BALL_RADIUS + 1);
   ball.y = p.y;
   ball.z = 0;
 }
@@ -578,7 +599,7 @@ function updateLeap(state: GameState, p: Player): void {
     p.vy = p.facingY * flySpeed;
     state.events.push({ type: 'leapFly', playerIdx: p.idx });
   }
-  integrate(p);
+  integrate(state, p);
   if (flyTick < 1) return;
   const t = min(1, flyTick / C.LEAP_FLY_TICKS);
   p.z = 4 * C.LEAP_PEAK_Z * t * (1 - t);
@@ -679,12 +700,12 @@ function updateRide(state: GameState, p: Player): void {
   }
   const nextX = p.x + p.vx * C.DT;
   const nextY = p.y + p.vy * C.DT;
-  const atEdge = nextX < 0 || nextX > C.FIELD_W || nextY < 0 || nextY > C.FIELD_D;
+  const atEdge = nextX < 0 || nextX > state.field.w || nextY < 0 || nextY > state.field.d;
   const side: 0 | 1 = attackDir(state, p.team) === 1 ? 1 : 0;
-  const mouth = goalMouth(side);
-  const onGoalLine = side === 1 ? nextX >= C.FIELD_W : nextX <= 0;
+  const mouth = goalMouth(state, side);
+  const onGoalLine = side === 1 ? nextX >= state.field.w : nextX <= 0;
   const inMouth = nextY >= mouth.yMin + C.BALL_RADIUS && nextY <= mouth.yMax - C.BALL_RADIUS;
-  integrate(p);
+  integrate(state, p);
   p.actionTimer--;
   rideHitLane(state, p);
   if (onGoalLine && inMouth && state.ball.ownerIdx === p.idx) {
@@ -765,7 +786,7 @@ function rideBump(state: GameState, p: Player, v: Player, lateral: number): void
 /** Unit direction from (x, y) to the centre of the goal the team attacks. Falls back to the attack direction on the line. */
 function aimAtGoalCentre(state: GameState, team: 0 | 1, x: number, y: number): { x: number; y: number } {
   const dx = opponentGoalX(state, team) - x;
-  const dy = C.FIELD_D / 2 - y;
+  const dy = state.field.d / 2 - y;
   const mag = sqrt(dx * dx + dy * dy);
   return mag > 0 ? { x: dx / mag, y: dy / mag } : { x: attackDir(state, team), y: 0 };
 }
@@ -860,8 +881,8 @@ function startSummon(state: GameState, p: Player): void {
   const claimed: number[] = [];
   for (let i = 0; i < C.SUMMON_RIDERS; i++) {
     const angle = baseAngle + (i * 2 * PI) / C.SUMMON_RIDERS;
-    const x = min(C.FIELD_W, max(0, p.x + cos(angle) * C.RIDER_SPAWN_RADIUS));
-    const y = min(C.FIELD_D, max(0, p.y + sin(angle) * C.RIDER_SPAWN_RADIUS));
+    const x = min(state.field.w, max(0, p.x + cos(angle) * C.RIDER_SPAWN_RADIUS));
+    const y = min(state.field.d, max(0, p.y + sin(angle) * C.RIDER_SPAWN_RADIUS));
     const rider: Rider = {
       // Unique per summon: one summon per tick at most, and every rider of it gets its own slot.
       id: state.tick * C.SUMMON_RIDERS + i,
@@ -1008,15 +1029,15 @@ function advanceRider(state: GameState, r: Rider): void {
   if (r.x < 0) {
     r.x = 0;
     r.vx = abs(r.vx);
-  } else if (r.x > C.FIELD_W) {
-    r.x = C.FIELD_W;
+  } else if (r.x > state.field.w) {
+    r.x = state.field.w;
     r.vx = -abs(r.vx);
   }
   if (r.y < 0) {
     r.y = 0;
     r.vy = abs(r.vy);
-  } else if (r.y > C.FIELD_D) {
-    r.y = C.FIELD_D;
+  } else if (r.y > state.field.d) {
+    r.y = state.field.d;
     r.vy = -abs(r.vy);
   }
   if (r.vx > 0) r.facingX = 1;
@@ -1574,8 +1595,8 @@ function startGust(state: GameState, p: Player): void {
     const mag = sqrt(p.facingX * p.facingX + p.facingY * p.facingY);
     const ux = mag === 0 ? attack : p.facingX / mag;
     const uy = mag === 0 ? 0 : p.facingY / mag;
-    x = min(C.FIELD_W, max(0, p.x + ux * C.GUST_FALLBACK_DIST));
-    y = min(C.FIELD_D, max(0, p.y + uy * C.GUST_FALLBACK_DIST));
+    x = min(state.field.w, max(0, p.x + ux * C.GUST_FALLBACK_DIST));
+    y = min(state.field.d, max(0, p.y + uy * C.GUST_FALLBACK_DIST));
   }
 
   const gustId = state.nextGustId++;
@@ -1700,8 +1721,8 @@ function summonTeammates(state: GameState, f: Portal): void {
   const summonedIdxs: number[] = [];
   mates.forEach((v, i) => {
     const angle = base + (2 * PI * i) / len(mates);
-    const x = min(C.FIELD_W, max(0, caster.x + C.PORTAL_RING_RADIUS * cos(angle)));
-    const y = min(C.FIELD_D, max(0, caster.y + C.PORTAL_RING_RADIUS * sin(angle)));
+    const x = min(state.field.w, max(0, caster.x + C.PORTAL_RING_RADIUS * cos(angle)));
+    const y = min(state.field.d, max(0, caster.y + C.PORTAL_RING_RADIUS * sin(angle)));
     v.x = x;
     v.y = y;
     v.vx = 0;
@@ -1779,11 +1800,11 @@ const EASTWIND_ANGLE_STEP = PI / 180;
  * pitch, otherwise the nearest angle, searched in EASTWIND_ANGLE_STEP steps alternating sides, whose ring point does. The
  * pitch is wider than the ring's diameter, so angle 0 or pi always lands on it and the search always finds an angle.
  */
-function eastwindPitchAngle(p: Player, radial: number, reach: number): number {
+function eastwindPitchAngle(state: GameState, p: Player, radial: number, reach: number): number {
   const onPitch = (a: number): boolean => {
     const x = p.x + cos(a) * reach;
     const y = p.y + sin(a) * reach;
-    return x >= 0 && x <= C.FIELD_W && y >= 0 && y <= C.FIELD_D;
+    return x >= 0 && x <= state.field.w && y >= 0 && y <= state.field.d;
   };
   for (let k = 0; k <= 180; k++) {
     for (const side of [1, -1]) {
@@ -1806,7 +1827,7 @@ function eastwindBlowOut(state: GameState, p: Player, v: Player): void {
   const dist = distance(p.x, p.y, v.x, v.y);
   const radial = dist > 0 ? atan2(v.y - p.y, v.x - p.x) : atan2(p.facingY, p.facingX);
   const reach = C.EASTWIND_RADIUS + C.EASTWIND_PUSH_MARGIN;
-  const angle = eastwindPitchAngle(p, radial, reach);
+  const angle = eastwindPitchAngle(state, p, radial, reach);
   const dirX = cos(angle);
   const dirY = sin(angle);
   v.x = p.x + dirX * reach;
@@ -1883,7 +1904,7 @@ function startArrowship(state: GameState, p: Player): void {
   const shipId = state.nextArrowShipId++;
   const dir = attackDir(state, p.team);
   const x = ownGoalX(state, p.team) + dir * C.ARROWSHIP_FORWARD;
-  const y = C.FIELD_D / 2;
+  const y = state.field.d / 2;
   state.arrowships.push({ id: shipId, ownerIdx: p.idx, team: p.team, x, y, dir, ticks: 0, arrows: 0 });
   p.action = 'normal';
   p.actionTimer = 0;
@@ -2138,7 +2159,7 @@ export function carryPassengers(state: GameState): void {
     mate.y = sailor.y;
     mate.vx = 0;
     mate.vy = 0;
-    clampPlayerToField(mate);
+    clampPlayerToField(state, mate);
   }
 }
 
@@ -2195,8 +2216,8 @@ function tickRampage(state: GameState, p: Player): void {
 /** True if the rampager stands on the goal line he attacks (the field clamp stops him there), inside the mouth. */
 function rampageAtGoalMouth(state: GameState, p: Player): boolean {
   const side: 0 | 1 = attackDir(state, p.team) === 1 ? 1 : 0;
-  const mouth = goalMouth(side);
-  const onGoalLine = side === 1 ? p.x >= C.FIELD_W : p.x <= 0;
+  const mouth = goalMouth(state, side);
+  const onGoalLine = side === 1 ? p.x >= state.field.w : p.x <= 0;
   return onGoalLine && p.y >= mouth.yMin + C.BALL_RADIUS && p.y <= mouth.yMax - C.BALL_RADIUS;
 }
 
@@ -2245,16 +2266,32 @@ function startSpecial(state: GameState, p: Player): void {
   const ball = state.ball;
   const goalX = opponentGoalX(state, p.team);
   const dx = goalX - ball.x;
-  const dy = C.FIELD_D / 2 - ball.y;
+  const dy = state.field.d / 2 - ball.y;
   const mag = sqrt(dx * dx + dy * dy);
   const dirX = mag > 0 ? dx / mag : attackDir(state, p.team);
   const dirY = mag > 0 ? dy / mag : 0;
   const speed = p.specialKind === 'lob' ? lobSpeed(mag) : specialSpeed(p.specialKind);
 
   p.stamina = max(0, p.stamina - C.SPECIAL_STAMINA_COST);
-  releaseBall(state, p, dirX * speed, dirY * speed, p.specialKind === 'lob' ? C.SPECIAL_LOB_VZ : 0);
+  launchSpecialShot(state, p, p.specialKind, dirX, dirY, speed, p.specialKind === 'lob' ? C.SPECIAL_LOB_VZ : 0);
+}
+
+/**
+ * The ball leaves the owner's feet as a special shot of `kind`, flying at `speed` along (dirX, dirY) with launch height speed `vz`.
+ * Costs no stamina; the caller pays.
+ */
+function launchSpecialShot(
+  state: GameState,
+  p: Player,
+  kind: SpecialKind,
+  dirX: number,
+  dirY: number,
+  speed: number,
+  vz: number,
+): void {
+  releaseBall(state, p, dirX * speed, dirY * speed, vz);
   const special: SpecialShot = {
-    kind: p.specialKind,
+    kind,
     shooterIdx: p.idx,
     team: p.team,
     ticks: 0,
@@ -2264,15 +2301,15 @@ function startSpecial(state: GameState, p: Player): void {
     hit: [],
     rolled: [],
   };
-  ball.special = special;
-  state.events.push({ type: 'specialShot', playerIdx: p.idx, kind: p.specialKind });
+  state.ball.special = special;
+  state.events.push({ type: 'specialShot', playerIdx: p.idx, kind });
 }
 
 function shoot(state: GameState, p: Player, input: InputFrame, charge: number): void {
   const ball = state.ball;
   const goalX = opponentGoalX(state, p.team);
   const aimY =
-    C.FIELD_D / 2 +
+    state.field.d / 2 +
     input.moveY * SHOT_AIM_OFFSET_Y +
     (rngNext(state) * 2 - 1) * (11 - p.stats.technique) * SHOT_AIM_SPREAD;
   const targetZ = 6 + rngNext(state) * (C.GOAL_H - 10);
@@ -2365,8 +2402,8 @@ function passBall(state: GameState, p: Player): void {
 }
 
 /**
- * Special-ball hit: stamina cost `cost` (default SPECIAL_HIT_STAMINA); pierce knocks down, other kinds hitstun.
- * Knockback follows the ball's direction.
+ * Special-ball hit: stamina cost `cost` (default SPECIAL_HIT_STAMINA); pierce knocks down for `downTicks`, other kinds hitstun.
+ * Knockback follows the ball's direction, scaled by knockMult.
  */
 export function applySpecialHit(
   state: GameState,
@@ -2376,6 +2413,8 @@ export function applySpecialHit(
   dirX: number,
   dirY: number,
   cost: number = C.SPECIAL_HIT_STAMINA,
+  knockMult: number = 1,
+  downTicks: number = C.DOWN_TICKS_KNOCKED,
 ): void {
   if (isInvincible(victim)) {
     arrowshipBlockAttack(state, victim);
@@ -2385,7 +2424,7 @@ export function applySpecialHit(
   victim.stamina = max(0, victim.stamina - cost);
   victim.chargeTicks = 0;
 
-  const knock = (C.KNOCKBACK_SPEED * shooter.mass) / victim.mass;
+  const knock = ((C.KNOCKBACK_SPEED * shooter.mass) / victim.mass) * knockMult;
   victim.vx = dirX * knock;
   victim.vy = dirY * knock;
   victim.vz = HIT_VZ;
@@ -2395,7 +2434,7 @@ export function applySpecialHit(
     setDown(victim, C.DOWN_TICKS_EXHAUSTED);
     down = true;
   } else if (kind === 'pierce') {
-    setDown(victim, C.DOWN_TICKS_KNOCKED);
+    setDown(victim, downTicks);
     down = true;
   } else {
     victim.action = 'hitstun';
@@ -2425,10 +2464,20 @@ function findVictim(
   return undefined;
 }
 
-/** Invincible players (rampaging, lunging, leaping, riding, under Sun Quan's arrowship, or on or aboard a sail) cannot be hit, tackled, stolen from, roared at, or pierced by a special. */
+/** True while the lord's whirl runs (see startWhirl). */
+function isWhirling(p: Player): boolean {
+  return p.whirlTicks !== undefined && p.whirlTicks > 0;
+}
+
+/**
+ * Invincible players (rampaging, lunging, leaping, riding, whirling, in the dragonspear windup, under Sun Quan's arrowship, or on or
+ * aboard a sail) cannot be hit, tackled, stolen from, roared at, or pierced by a special.
+ */
 export function isInvincible(p: Player): boolean {
   return (
     p.rampageTicks > 0 ||
+    isWhirling(p) ||
+    p.action === 'dragon' ||
     p.arrowshipUp ||
     p.action === 'lunge' ||
     p.action === 'leap' ||
@@ -2445,8 +2494,10 @@ export function isInvincible(p: Player): boolean {
 export function applyRampageBumps(state: GameState): void {
   for (const r of state.players) {
     // A leap hits only on landing (see landLeap), a ride hits only its lane (see rideHitLane), and a sail only through
-    // updateSails (a sailor or passenger does not bump), so none of them bump here.
+    // updateSails (a sailor or passenger does not bump), so none of them bump here. The lord's whirl hits in whirlHitTick and his
+    // dragonspear windup is still, so neither bumps here.
     if (!isInvincible(r) || r.action === 'leap' || r.action === 'ride' || r.sailTicks > 0 || r.sailPassengerOf !== -1 || r.arrowshipUp) continue;
+    if (isWhirling(r) || r.action === 'dragon') continue;
     for (const o of state.players) {
       if (o.team === r.team || o.action === 'down' || o.bumpCooldown > 0 || isInvincible(o)) continue;
       const dx = o.x - r.x;
@@ -2495,7 +2546,7 @@ function lungeHeal(state: GameState, p: Player): void {
  * One hit on a victim. Does not touch attacker.hitDone: a punch or tackle sets it itself, so a slash swing (which also calls
  * this) cannot cancel an attack that has not landed yet.
  */
-function applyHit(state: GameState, attacker: Player, victim: Player, kind: AttackKind): void {
+function applyHit(state: GameState, attacker: Player, victim: Player, kind: AttackKind, knockMult: number = 1): void {
   // An invincible victim (rampaging or lunging): the attack is spent and nothing else changes. A raised arrowship counts it.
   if (isInvincible(victim)) {
     arrowshipBlockAttack(state, victim);
@@ -2504,7 +2555,7 @@ function applyHit(state: GameState, attacker: Player, victim: Player, kind: Atta
   reportCastCancel(state, victim);
   victim.chargeTicks = 0;
 
-  let damage = max(3, round(8 + attacker.stats.power * 1.2 - victim.stats.defense * 0.5));
+  let damage = punchDamage(attacker, victim);
   if (kind !== 'punch') damage = round(damage * 1.5);
   victim.stamina = max(0, victim.stamina - damage);
 
@@ -2518,7 +2569,7 @@ function applyHit(state: GameState, attacker: Player, victim: Player, kind: Atta
     dirX /= mag;
     dirY /= mag;
   }
-  const knock = (C.KNOCKBACK_SPEED * attacker.mass) / victim.mass;
+  const knock = ((C.KNOCKBACK_SPEED * attacker.mass) / victim.mass) * knockMult;
   victim.vx = dirX * knock;
   victim.vy = dirY * knock;
   victim.vz = HIT_VZ;
@@ -2565,4 +2616,514 @@ function distance(ax: number, ay: number, bx: number, by: number): number {
   const dx = ax - bx;
   const dy = ay - by;
   return sqrt(dx * dx + dy * dy);
+}
+
+// ---------- Lord weapons and specials (constants in constants-skills-lord.ts) ----------
+
+/** Ticks of the player's basic attack: the weapon's duration (sword, spear), or PUNCH_TICKS with no weapon and for the fan. */
+function punchTicksOf(p: Player): number {
+  if (p.weapon === 'sword') return C.LORD_SWORD_TICKS;
+  if (p.weapon === 'spear') return C.LORD_SPEAR_TICKS;
+  return C.PUNCH_TICKS;
+}
+
+/**
+ * Reach used by assistTurn: how far from the attacker's centre an opponent may stand and still be turned to. The default
+ * punch reaches the strike circle (body radius + PUNCH_RANGE, x LORD_SPEAR_REACH_MULT for the spear) plus the hit radius and the
+ * victim's radius, plus PUNCH_ASSIST_PAD. The fan's windpuff uses half its range.
+ */
+function assistReach(p: Player, v: Player): number {
+  if (p.weapon === 'fan') return C.LORD_WINDPUFF_RANGE / 2;
+  const reachMult = p.weapon === 'spear' ? C.LORD_SPEAR_REACH_MULT : 1;
+  return (p.radius + C.PUNCH_RANGE) * reachMult + C.PUNCH_HIT_RADIUS + v.radius + C.PUNCH_ASSIST_PAD;
+}
+
+/**
+ * A human's basic attack (no ball) turns him to face the nearest standing opponent within assistReach, before the attack starts.
+ * No opponent in reach leaves the facing unchanged. AI players never reach this (humanAssist is unset).
+ */
+function assistTurn(state: GameState, p: Player): void {
+  let best: Player | undefined;
+  let bestDist = 0;
+  for (const v of state.players) {
+    if (v.team === p.team || v.action === 'down') continue;
+    const d = distance(p.x, p.y, v.x, v.y);
+    if (d > assistReach(p, v)) continue;
+    if (best === undefined || d < bestDist) {
+      best = v;
+      bestDist = d;
+    }
+  }
+  if (best === undefined || bestDist === 0) return;
+  p.facingX = (best.x - p.x) / bestDist;
+  p.facingY = (best.y - p.y) / bestDist;
+}
+
+/** Default punch damage an attacker deals to a victim. applyHit uses it, and the windpuff takes a share of it. */
+function punchDamage(attacker: Player, victim: Player): number {
+  return max(3, round(8 + attacker.stats.power * 1.2 - victim.stats.defense * 0.5));
+}
+
+/**
+ * A lord's weapon attack (see punchTicksOf). Sword: a hit check in the first window, then a second check
+ * LORD_SWORD_SECOND_DELAY ticks after that window opens, in the same direction, so one target can take both. Spear: one check
+ * with a longer reach and more knockback. Fan: no melee hit; a windpuff is fired on LORD_FAN_SPAWN_TICK.
+ */
+function updateWeaponPunch(state: GameState, p: Player): void {
+  const done = coast(state, p, PUNCH_DAMP);
+  const elapsed = punchTicksOf(p) - p.actionTimer;
+  if (p.weapon === 'fan') {
+    if (elapsed === C.LORD_FAN_SPAWN_TICK) spawnWindpuff(state, p);
+  } else if (p.weapon === 'spear') {
+    if (!p.hitDone && elapsed >= C.LORD_SPEAR_ACTIVE_FROM && elapsed <= C.LORD_SPEAR_ACTIVE_TO) {
+      p.hitDone = weaponStrike(state, p, C.LORD_SPEAR_REACH_MULT, C.LORD_SPEAR_KNOCK_MULT);
+    }
+  } else {
+    if (!p.hitDone && elapsed >= C.LORD_SWORD_ACTIVE_FROM && elapsed <= C.LORD_SWORD_ACTIVE_TO) {
+      p.hitDone = weaponStrike(state, p, 1, 1);
+    }
+    if (elapsed === C.LORD_SWORD_ACTIVE_FROM + C.LORD_SWORD_SECOND_DELAY) weaponStrike(state, p, 1, 1);
+  }
+  if (done) toNormal(p);
+}
+
+/**
+ * One weapon strike: the first opponent inside the strike circle takes a punch hit. The circle sits reachMult times the default
+ * reach (body radius + PUNCH_RANGE) in front of the lord. Returns true if someone was hit.
+ */
+function weaponStrike(state: GameState, p: Player, reachMult: number, knockMult: number): boolean {
+  const reach = (p.radius + C.PUNCH_RANGE) * reachMult;
+  const cx = p.x + p.facingX * reach;
+  const cy = p.y + p.facingY * reach;
+  const victim = findVictim(state, p, (v) => {
+    return abs(v.z - p.z) < AIR_HIT_Z && distance(cx, cy, v.x, v.y) < C.PUNCH_HIT_RADIUS + v.radius;
+  });
+  if (victim === undefined) return false;
+  applyHit(state, p, victim, 'punch', knockMult);
+  return true;
+}
+
+/** Id for the next windpuff or dragonspear: one counter for both, starting at 1. */
+function nextLordId(state: GameState): number {
+  const id = state.nextLordId ?? 1;
+  state.nextLordId = id + 1;
+  return id;
+}
+
+/** The fan's attack fires a windpuff from the front of the lord's body, along his facing. */
+function spawnWindpuff(state: GameState, p: Player): void {
+  const reach = p.radius + C.PUNCH_RANGE;
+  const puff: Windpuff = {
+    id: nextLordId(state),
+    ownerIdx: p.idx,
+    team: p.team,
+    x: p.x + p.facingX * reach,
+    y: p.y + p.facingY * reach,
+    dirX: p.facingX,
+    dirY: p.facingY,
+    travelled: 0,
+  };
+  const list = state.windpuffs ?? [];
+  list.push(puff);
+  state.windpuffs = list;
+  state.events.push({
+    type: 'windpuffSpawn',
+    playerIdx: p.idx,
+    puffId: puff.id,
+    x: puff.x,
+    y: puff.y,
+    dirX: puff.dirX,
+    dirY: puff.dirY,
+  });
+}
+
+/**
+ * One tick for every windpuff in play. Runs before the ball moves, so a push shows on this tick. Only in play: when the phase
+ * leaves play, endLordProjectiles ends them.
+ */
+export function updateWindpuffs(state: GameState): void {
+  const list = state.windpuffs;
+  if (list === undefined || state.match.phase !== 'play') return;
+  const kept = list.filter((w) => advanceWindpuff(state, w));
+  state.windpuffs = len(kept) === 0 ? undefined : kept;
+}
+
+/** Moves one windpuff. Returns false on the tick it ends (its end event is already pushed). */
+function advanceWindpuff(state: GameState, w: Windpuff): boolean {
+  const step = C.LORD_WINDPUFF_STEP;
+  w.x += w.dirX * step;
+  w.y += w.dirY * step;
+  w.travelled += step;
+  const victim = state.players.find(
+    (v) =>
+      v.team !== w.team &&
+      v.action !== 'down' &&
+      !isInvincible(v) &&
+      distance(w.x, w.y, v.x, v.y) < v.radius + C.LORD_WINDPUFF_RADIUS,
+  );
+  if (victim !== undefined) {
+    windpuffVictim(state, state.players[w.ownerIdx], w, victim);
+    state.events.push({ type: 'windpuffEnd', puffId: w.id, x: w.x, y: w.y });
+    return false;
+  }
+  pushFreeBall(state, w);
+  const outside = w.x < 0 || w.x > state.field.w || w.y < 0 || w.y > state.field.d;
+  if (w.travelled >= C.LORD_WINDPUFF_RANGE || outside) {
+    state.events.push({ type: 'windpuffEnd', puffId: w.id, x: w.x, y: w.y });
+    return false;
+  }
+  return true;
+}
+
+/**
+ * A free ball (unowned, not a special shot or tiger ball, low) that the windpuff touches is pushed along the puff direction.
+ * The windpuff keeps flying.
+ */
+function pushFreeBall(state: GameState, w: Windpuff): void {
+  const b = state.ball;
+  if (b.ownerIdx !== -1 || b.special !== undefined || b.tiger !== undefined || b.z >= C.LORD_WINDPUFF_BALL_MAX_Z) return;
+  if (distance(w.x, w.y, b.x, b.y) >= C.BALL_RADIUS + C.LORD_WINDPUFF_RADIUS) return;
+  b.vx = w.dirX * C.LORD_WINDPUFF_BALL_SPEED;
+  b.vy = w.dirY * C.LORD_WINDPUFF_BALL_SPEED;
+  state.events.push({ type: 'windpuffBall', puffId: w.id, x: b.x, y: b.y });
+}
+
+/**
+ * One windpuff hit: loses LORD_WINDPUFF_DAMAGE_RATIO of the default punch damage, is pushed along the puff direction and stunned
+ * (knocked down only if his stamina runs out). Going to zero stamina knocks him down. A ball he holds stays with him.
+ */
+function windpuffVictim(state: GameState, attacker: Player, w: Windpuff, v: Player): void {
+  reportCastCancel(state, v);
+  v.chargeTicks = 0;
+  const damage = round(C.LORD_WINDPUFF_DAMAGE_RATIO * punchDamage(attacker, v));
+  v.stamina = max(0, v.stamina - damage);
+  v.vx = w.dirX * C.LORD_WINDPUFF_PUSH_SPEED;
+  v.vy = w.dirY * C.LORD_WINDPUFF_PUSH_SPEED;
+
+  let down = false;
+  if (v.stamina <= 0) {
+    setDown(v, C.DOWN_TICKS_EXHAUSTED);
+    down = true;
+  } else {
+    v.action = 'hitstun';
+    v.actionTimer = C.HITSTUN_TICKS;
+  }
+
+  state.events.push({ type: 'hit', attackerIdx: attacker.idx, victimIdx: v.idx, kind: 'punch', damage });
+  state.events.push({ type: 'windpuffHit', puffId: w.id, victimIdx: v.idx, x: v.x, y: v.y });
+  if (down) state.events.push({ type: 'down', playerIdx: v.idx });
+}
+
+/**
+ * Lord's 龍騰 (破陣槍): the lord stands still and invincible for LORD_DRAGON_WINDUP_TICKS, then the spear flies along his facing (see
+ * updateDragon). The windup cannot be cancelled. Cost and cooldown are paid up front, like a beam.
+ */
+function startDragon(state: GameState, p: Player): void {
+  const mag = sqrt(p.facingX * p.facingX + p.facingY * p.facingY);
+  if (mag > 0) {
+    p.facingX /= mag;
+    p.facingY /= mag;
+  } else {
+    p.facingX = attackDir(state, p.team);
+    p.facingY = 0;
+  }
+  p.stamina -= C.SPECIAL_STAMINA_COST;
+  p.specialCooldown = C.SPECIAL_COOLDOWN_TICKS;
+  p.chargeTicks = 0;
+  p.vx = 0;
+  p.vy = 0;
+  p.action = 'dragon';
+  p.actionTimer = C.LORD_DRAGON_WINDUP_TICKS;
+  state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
+  state.events.push({ type: 'dragonCharge', playerIdx: p.idx });
+}
+
+/** One tick of the dragonspear windup: the lord stands still and ignores input; the spear flies when the windup ends. */
+function updateDragon(state: GameState, p: Player): void {
+  if (state.match.phase !== 'play') {
+    state.events.push({ type: 'dragonCancel', playerIdx: p.idx });
+    toNormal(p);
+    return;
+  }
+  p.vx = 0;
+  p.vy = 0;
+  p.actionTimer--;
+  if (p.actionTimer > 0) return;
+  toNormal(p);
+  fireDragonspear(state, p);
+}
+
+/**
+ * The spear leaves the lord's position along his facing. If the lord holds the ball, it flies with the spear as a pierce special
+ * shot, at the spear's speed (or the pierce speed, if that is faster).
+ */
+function fireDragonspear(state: GameState, p: Player): void {
+  const withBall = state.ball.ownerIdx === p.idx;
+  const spear: DragonSpear = {
+    id: nextLordId(state),
+    ownerIdx: p.idx,
+    team: p.team,
+    x: p.x,
+    y: p.y,
+    dirX: p.facingX,
+    dirY: p.facingY,
+    travelled: 0,
+    hit: [],
+  };
+  const list = state.dragonspears ?? [];
+  list.push(spear);
+  state.dragonspears = list;
+  state.events.push({
+    type: 'dragonFire',
+    playerIdx: p.idx,
+    spearId: spear.id,
+    x: spear.x,
+    y: spear.y,
+    dirX: spear.dirX,
+    dirY: spear.dirY,
+    withBall,
+  });
+  if (withBall) {
+    const speed = max(C.SPECIAL_PIERCE_SPEED, C.LORD_DRAGON_STEP * C.TICK_HZ);
+    launchSpecialShot(state, p, 'pierce', spear.dirX, spear.dirY, speed, 0);
+  }
+}
+
+/** One tick for every dragonspear in play. Only in play: when the phase leaves play, endLordProjectiles ends them. */
+export function updateDragonspears(state: GameState): void {
+  const list = state.dragonspears;
+  if (list === undefined || state.match.phase !== 'play') return;
+  const kept = list.filter((s) => advanceDragonspear(state, s));
+  state.dragonspears = len(kept) === 0 ? undefined : kept;
+}
+
+/**
+ * Moves one spear a step and pierces every opponent that the step sweeps across within LORD_DRAGON_HALF_WIDTH of the path.
+ * Each victim is pierced once. Invincible and downed opponents are passed over. Returns false on the tick it ends.
+ */
+function advanceDragonspear(state: GameState, s: DragonSpear): boolean {
+  const step = C.LORD_DRAGON_STEP;
+  const startX = s.x;
+  const startY = s.y;
+  s.x += s.dirX * step;
+  s.y += s.dirY * step;
+  s.travelled += step;
+  for (const v of state.players) {
+    if (v.team === s.team || v.action === 'down' || isInvincible(v) || s.hit.includes(v.idx)) continue;
+    const dx = v.x - startX;
+    const dy = v.y - startY;
+    const along = dx * s.dirX + dy * s.dirY;
+    if (along < 0 || along > step) continue;
+    const lateral = dx * -s.dirY + dy * s.dirX;
+    if (abs(lateral) > C.LORD_DRAGON_HALF_WIDTH) continue;
+    s.hit.push(v.idx);
+    dragonspearHit(state, s, v);
+  }
+  const outside = s.x < 0 || s.x > state.field.w || s.y < 0 || s.y > state.field.d;
+  if (s.travelled >= C.LORD_DRAGON_RANGE || outside) {
+    state.events.push({ type: 'dragonEnd', spearId: s.id, x: s.x, y: s.y });
+    return false;
+  }
+  return true;
+}
+
+/**
+ * One pierce: a special-hit knockdown for LORD_DRAGON_DOWN_TICKS, losing LORD_DRAGON_STAMINA_RATIO of maxStamina. A ball holder
+ * drops the ball, credited to the lord.
+ */
+function dragonspearHit(state: GameState, s: DragonSpear, v: Player): void {
+  const lord = state.players[s.ownerIdx];
+  const holder = state.ball.ownerIdx === v.idx;
+  applySpecialHit(state, lord, v, 'pierce', s.dirX, s.dirY, C.LORD_DRAGON_STAMINA_RATIO * v.maxStamina, 1, C.LORD_DRAGON_DOWN_TICKS);
+  if (holder) knockLooseBall(state, lord, v, s.dirX, s.dirY);
+  state.events.push({ type: 'dragonHit', spearId: s.id, victimIdx: v.idx, x: v.x, y: v.y });
+}
+
+/** Ends every windpuff and dragonspear (the phase left play). Each is reported as an end; nothing else happens. */
+export function endLordProjectiles(state: GameState): void {
+  for (const w of state.windpuffs ?? []) state.events.push({ type: 'windpuffEnd', puffId: w.id, x: w.x, y: w.y });
+  for (const s of state.dragonspears ?? []) state.events.push({ type: 'dragonEnd', spearId: s.id, x: s.x, y: s.y });
+  state.windpuffs = undefined;
+  state.dragonspears = undefined;
+}
+
+/**
+ * Lord's 旋風斬 (天子劍): an instant cast, with or without the ball. For LORD_WHIRL_TICKS the lord is invincible (see isInvincible),
+ * moves at his normal speed, keeps any ball as in normal play, and hits each opponent within LORD_WHIRL_RADIUS (see whirlHitTick).
+ */
+function startWhirl(state: GameState, p: Player): void {
+  p.stamina -= C.SPECIAL_STAMINA_COST;
+  p.specialCooldown = C.SPECIAL_COOLDOWN_TICKS;
+  p.chargeTicks = 0;
+  p.whirlTicks = C.LORD_WHIRL_TICKS;
+  p.whirlHits = [];
+  state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
+  state.events.push({ type: 'whirlStart', playerIdx: p.idx });
+}
+
+/**
+ * Counts the lord's per-tick timers down: the whirl (running its hits, and ending at once when the phase leaves play), the
+ * featherfan slow and the featherfan speed boost.
+ */
+function tickLord(state: GameState, p: Player): void {
+  if (p.featherSlowTicks !== undefined && p.featherSlowTicks > 0) p.featherSlowTicks--;
+  if (p.lordBoostTicks !== undefined && p.lordBoostTicks > 0) p.lordBoostTicks--;
+  if (p.whirlTicks === undefined || p.whirlTicks === 0) return;
+  if (state.match.phase !== 'play') {
+    endWhirl(state, p);
+    return;
+  }
+  whirlHitTick(state, p, C.LORD_WHIRL_TICKS - p.whirlTicks);
+  p.whirlTicks--;
+  if (p.whirlTicks === 0) endWhirl(state, p);
+}
+
+function endWhirl(state: GameState, p: Player): void {
+  p.whirlTicks = 0;
+  p.whirlHits = undefined;
+  state.events.push({ type: 'whirlEnd', playerIdx: p.idx });
+}
+
+/**
+ * The whirl's hits this tick (`elapsed` is the whirl's tick count): every standing, non-invincible opponent within LORD_WHIRL_RADIUS
+ * (in idx order) is hit, unless this whirl hit it less than LORD_WHIRL_REHIT_TICKS ago.
+ */
+function whirlHitTick(state: GameState, p: Player, elapsed: number): void {
+  const hits = p.whirlHits;
+  if (hits === undefined) return;
+  for (const v of state.players) {
+    if (v.team === p.team || v.action === 'down' || isInvincible(v)) continue;
+    const dist = distance(p.x, p.y, v.x, v.y);
+    if (dist > C.LORD_WHIRL_RADIUS) continue;
+    const rec = hits.find((h) => h.idx === v.idx);
+    if (rec === undefined) {
+      hits.push({ idx: v.idx, tick: elapsed });
+    } else if (elapsed - rec.tick >= C.LORD_WHIRL_REHIT_TICKS) {
+      rec.tick = elapsed;
+    } else {
+      continue;
+    }
+    whirlHit(state, p, v, dist);
+  }
+}
+
+/** One whirl victim: a straight special hit (knocked back outward and stunned), loses the whirl's stamina share; a holder drops the ball. */
+function whirlHit(state: GameState, p: Player, v: Player, dist: number): void {
+  const dirX = dist > 0 ? (v.x - p.x) / dist : p.facingX;
+  const dirY = dist > 0 ? (v.y - p.y) / dist : p.facingY;
+  const holder = state.ball.ownerIdx === v.idx;
+  applySpecialHit(state, p, v, 'straight', dirX, dirY, C.LORD_WHIRL_STAMINA_RATIO * v.maxStamina, C.LORD_WHIRL_KNOCK_MULT);
+  if (holder) knockLooseBall(state, p, v, dirX, dirY);
+  state.events.push({ type: 'whirlHit', playerIdx: p.idx, victimIdx: v.idx, x: v.x, y: v.y });
+}
+
+/**
+ * Lord's 鳳翼扇 (羽風陣): an instant cast, with or without the ball. He turns to his facing (his attack direction when he has
+ * none). Opponents in the LORD_FEATHER_ANGLE_DEG cone within LORD_FEATHER_RADIUS are pushed and stunned (see featherVictim). He
+ * then gets a speed boost for LORD_FEATHER_BOOST_TICKS, and a ball in range of the cone comes to his feet (see pullBall).
+ */
+function startFeatherfan(state: GameState, p: Player): void {
+  const mag = sqrt(p.facingX * p.facingX + p.facingY * p.facingY);
+  if (mag > 0) {
+    p.facingX /= mag;
+    p.facingY /= mag;
+  } else {
+    p.facingX = attackDir(state, p.team);
+    p.facingY = 0;
+  }
+  p.stamina -= C.SPECIAL_STAMINA_COST;
+  p.specialCooldown = C.SPECIAL_COOLDOWN_TICKS;
+  p.chargeTicks = 0;
+  state.events.push({ type: 'special', playerIdx: p.idx, kind: p.specialKind, name: p.specialName });
+  p.lordBoostTicks = C.LORD_FEATHER_BOOST_TICKS;
+
+  const victimIdxs: number[] = [];
+  for (const v of state.players) {
+    if (v.team === p.team || v.action === 'down' || isInvincible(v) || !inLordCone(p, v.x, v.y, C.LORD_FEATHER_RADIUS)) continue;
+    featherVictim(state, p, v);
+    victimIdxs.push(v.idx);
+  }
+  state.events.push({
+    type: 'featherStart',
+    playerIdx: p.idx,
+    x: p.x,
+    y: p.y,
+    dirX: p.facingX,
+    dirY: p.facingY,
+    radius: C.LORD_FEATHER_RADIUS,
+    angleDeg: C.LORD_FEATHER_ANGLE_DEG,
+    boostTicks: C.LORD_FEATHER_BOOST_TICKS,
+    victimIdxs,
+  });
+  pullBall(state, p);
+}
+
+/**
+ * One featherfan victim: pushed straight away from the lord at LORD_FEATHER_PUSH_SPEED and stunned for LORD_FEATHER_HITSTUN_TICKS,
+ * loses LORD_FEATHER_STAMINA_RATIO of maxStamina (down when that empties him), and is slowed for LORD_FEATHER_SLOW_TICKS.
+ */
+function featherVictim(state: GameState, p: Player, v: Player): void {
+  reportCastCancel(state, v);
+  v.chargeTicks = 0;
+  const dist = distance(p.x, p.y, v.x, v.y);
+  const dirX = dist > 0 ? (v.x - p.x) / dist : p.facingX;
+  const dirY = dist > 0 ? (v.y - p.y) / dist : p.facingY;
+  const cost = C.LORD_FEATHER_STAMINA_RATIO * v.maxStamina;
+  v.stamina = max(0, v.stamina - cost);
+  v.featherSlowTicks = C.LORD_FEATHER_SLOW_TICKS;
+  v.vx = dirX * C.LORD_FEATHER_PUSH_SPEED;
+  v.vy = dirY * C.LORD_FEATHER_PUSH_SPEED;
+
+  let down = false;
+  if (v.stamina <= 0) {
+    setDown(v, C.DOWN_TICKS_EXHAUSTED);
+    down = true;
+  } else {
+    v.action = 'hitstun';
+    v.actionTimer = C.LORD_FEATHER_HITSTUN_TICKS;
+  }
+
+  state.events.push({ type: 'hit', attackerIdx: p.idx, victimIdx: v.idx, kind: 'special', damage: cost });
+  if (down) state.events.push({ type: 'down', playerIdx: v.idx });
+}
+
+/**
+ * The featherfan's pull: a ball that is free or held by an opponent, within LORD_FEATHER_PULL_RANGE of the lord, inside the cone
+ * and below LORD_FEATHER_PULL_MAX_Z, becomes his (placed at his feet by updatePossession). An opponent holder simply loses it.
+ * A tiger ball held in Xu Chu's mouth is left alone; a free special shot or tiger ball in flight is stopped.
+ */
+function pullBall(state: GameState, p: Player): void {
+  const b = state.ball;
+  if (b.ownerIdx === p.idx || b.tiger?.phase === 'hold' || b.z >= C.LORD_FEATHER_PULL_MAX_Z) return;
+  if (b.ownerIdx !== -1 && state.players[b.ownerIdx].team === p.team) return;
+  if (!inLordCone(p, b.x, b.y, C.LORD_FEATHER_PULL_RANGE)) return;
+  const fromIdx = b.ownerIdx;
+  if (b.special !== undefined) {
+    b.special = undefined;
+    state.events.push({ type: 'specialEnd' });
+  }
+  b.tiger = undefined;
+  b.ownerIdx = p.idx;
+  b.lastTouchIdx = p.idx;
+  b.vx = 0;
+  b.vy = 0;
+  b.vz = 0;
+  b.z = 0;
+  state.events.push({ type: 'featherPull', playerIdx: p.idx, fromIdx, x: b.x, y: b.y });
+}
+
+/** True if (x, y) is within `range` px of the lord and inside his featherfan cone: along his facing, 90 degrees wide. */
+function inLordCone(p: Player, x: number, y: number, range: number): boolean {
+  const dx = x - p.x;
+  const dy = y - p.y;
+  const d2 = dx * dx + dy * dy;
+  if (d2 > range * range) return false;
+  const along = dx * p.facingX + dy * p.facingY;
+  return along > 0 && along * along >= C.LORD_FEATHER_CONE_COS2 * d2;
+}
+
+/** Speed multiplier from the lord's featherfan slow: LORD_FEATHER_SLOW_MULT while the slow runs. Invincible players are unaffected. */
+function featherSlowMult(p: Player): number {
+  if (isInvincible(p)) return 1;
+  return p.featherSlowTicks !== undefined && p.featherSlowTicks > 0 ? C.LORD_FEATHER_SLOW_MULT : 1;
 }

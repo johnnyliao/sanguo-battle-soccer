@@ -1,18 +1,23 @@
 import type { Command, Country, Remotes, Setup, SnapPk, Snapshot } from "../shared/net";
 import { TICK_RATE } from "../shared/net";
-import { setInputEnabled, setPkMode } from "./input";
+import { TUTORIAL_STAGE_ID } from "../shared/story";
+import { setInputEnabled } from "./input";
 import { openShowroom } from "./showroom";
 import { setBgm } from "./bgm";
+import { ART } from "./artIds";
+import { artCard, picture } from "./artUi";
 
 const Players = game.GetService("Players");
 const UserInputService = game.GetService("UserInputService");
 
-const COUNTRY_NAME: Record<Country, string> = { shu: "蜀", wei: "魏", wu: "吳" };
-const COUNTRY_COLOR: Record<Country, Color3> = {
+export const COUNTRY_NAME: Record<Country, string> = { shu: "蜀", wei: "魏", wu: "吳" };
+export const COUNTRY_COLOR: Record<Country, Color3> = {
 	shu: Color3.fromRGB(0x2f, 0xa8, 0x4f),
 	wei: Color3.fromRGB(0x2f, 0x6f, 0xd8),
 	wu: Color3.fromRGB(0xd8, 0x3a, 0x2f),
 };
+/** Country banner art (512×1024) for the country select cards. */
+export const COUNTRY_BANNER: Record<Country, string> = { shu: ART.banner_shu, wei: ART.banner_wei, wu: ART.banner_wu };
 const GENERALS: Record<Country, string> = {
 	shu: "張飛\n關羽\n諸葛亮\n馬超\n趙雲",
 	wei: "許褚\n曹操\n甄姬\n司馬懿\n張遼",
@@ -20,13 +25,13 @@ const GENERALS: Record<Country, string> = {
 };
 const COUNTRIES: Country[] = ["shu", "wei", "wu"];
 
-const WHITE = Color3.fromRGB(255, 255, 255);
-const BLACK = Color3.fromRGB(0, 0, 0);
-const GOLD = Color3.fromRGB(255, 217, 138);
-const GREY = Color3.fromRGB(90, 90, 90);
+export const WHITE = Color3.fromRGB(255, 255, 255);
+export const BLACK = Color3.fromRGB(0, 0, 0);
+export const GOLD = Color3.fromRGB(255, 217, 138);
+export const GREY = Color3.fromRGB(90, 90, 90);
 const BANNER_SECONDS = 2;
 
-function frame(parent: Instance, size: UDim2, pos: UDim2, color: Color3, transparency: number): Frame {
+export function frame(parent: Instance, size: UDim2, pos: UDim2, color: Color3, transparency: number): Frame {
 	const f = new Instance("Frame");
 	f.Size = size;
 	f.Position = pos;
@@ -38,7 +43,7 @@ function frame(parent: Instance, size: UDim2, pos: UDim2, color: Color3, transpa
 }
 
 /** Scaled text label: the box size controls the font size. */
-function text(parent: Instance, content: string, size: UDim2, pos: UDim2, anchor?: Vector2): TextLabel {
+export function text(parent: Instance, content: string, size: UDim2, pos: UDim2, anchor?: Vector2): TextLabel {
 	const t = new Instance("TextLabel");
 	t.BackgroundTransparency = 1;
 	t.Size = size;
@@ -54,7 +59,7 @@ function text(parent: Instance, content: string, size: UDim2, pos: UDim2, anchor
 	return t;
 }
 
-function button(parent: Instance, content: string, size: UDim2, pos: UDim2, color: Color3): TextButton {
+export function button(parent: Instance, content: string, size: UDim2, pos: UDim2, color: Color3): TextButton {
 	const b = new Instance("TextButton");
 	b.Size = size;
 	b.Position = pos;
@@ -82,8 +87,14 @@ function pad2(n: number): string {
  */
 export function createHud(
 	remotes: Remotes,
-	onSpecialState: (cooldown: number, reason: string) => void,
-): { onSetup(s: Setup): void; onSnapshot(s: Snapshot): void } {
+	onMatchUi: (on: boolean) => void,
+	onBackToMenu: () => void,
+): {
+	onSetup(s: Setup): void;
+	onSnapshot(s: Snapshot): void;
+	showCountrySelect(): void;
+	clearMatchUi(): void;
+} {
 	const playerGui = Players.LocalPlayer.WaitForChild("PlayerGui") as PlayerGui;
 	const gui = new Instance("ScreenGui");
 	gui.Name = "HudGui";
@@ -92,14 +103,35 @@ export function createHud(
 	gui.DisplayOrder = 10;
 	gui.Parent = playerGui;
 
-	// Top scoreboard: home name, score, away name, then half and clock below.
-	const top = frame(gui, UDim2.fromScale(0.44, 0.17), UDim2.fromScale(0.5, 0.01), BLACK, 0.4);
+	// Top scoreboard: home name, score, away name; the clock / status is a pill under the plate.
+	const top = picture(gui, ART.hud_scoreboard, UDim2.fromScale(0.44, 0.17), UDim2.fromScale(0.5, 0.01));
 	top.AnchorPoint = new Vector2(0.5, 0);
+	// Art ratio 1024:192 (height follows the width); the team colours go on the names, the board stays neutral.
+	const topRatio = new Instance("UIAspectRatioConstraint");
+	topRatio.AspectRatio = 1024 / 192;
+	topRatio.DominantAxis = Enum.DominantAxis.Width;
+	topRatio.Parent = top;
 	top.Visible = false;
 	const homeName = text(top, "", UDim2.fromScale(0.2, 0.45), UDim2.fromScale(0.02, 0.05));
 	const scoreLabel = text(top, "0 - 0", UDim2.fromScale(0.48, 0.55), UDim2.fromScale(0.26, 0.02));
 	const awayName = text(top, "", UDim2.fromScale(0.2, 0.45), UDim2.fromScale(0.78, 0.05));
-	const clockLabel = text(top, "", UDim2.fromScale(0.6, 0.35), UDim2.fromScale(0.2, 0.6));
+	// Team names: inset from the plate edges and capped in size so 黃巾軍 and the like stay inside the plate.
+	for (const nameLabel of [homeName, awayName]) {
+		const pad = new Instance("UIPadding");
+		pad.PaddingLeft = new UDim(0.08, 0);
+		pad.PaddingRight = new UDim(0.08, 0);
+		pad.Parent = nameLabel;
+		const cap = new Instance("UITextSizeConstraint");
+		cap.MaxTextSize = 40;
+		cap.Parent = nameLabel;
+	}
+	// Match status (clock, 先得 N 分獲勝, PK, 教學): a small pill just below the plate, not on its ornaments.
+	const clockPill = frame(top, UDim2.fromScale(0.5, 0.22), UDim2.fromScale(0.5, 1.06), BLACK, 0.25);
+	clockPill.AnchorPoint = new Vector2(0.5, 0);
+	const clockCorner = new Instance("UICorner");
+	clockCorner.CornerRadius = new UDim(0.5, 0);
+	clockCorner.Parent = clockPill;
+	const clockLabel = text(clockPill, "", UDim2.fromScale(0.9, 0.7), UDim2.fromScale(0.05, 0.15));
 
 	// Centre banner on phase changes and goals.
 	const banner = text(gui, "", UDim2.fromScale(0.6, 0.14), UDim2.fromScale(0.5, 0.42), new Vector2(0.5, 0.5));
@@ -173,6 +205,14 @@ export function createHud(
 			clockLabel.Text = "PK 大戰";
 			return;
 		}
+		if (setup !== undefined && setup.mode === "story" && setup.stageId === TUTORIAL_STAGE_ID) {
+			clockLabel.Text = "教學";
+			return;
+		}
+		if (setup !== undefined && setup.goalTarget !== undefined) {
+			clockLabel.Text = `先得 ${setup.goalTarget} 分獲勝`;
+			return;
+		}
 		const secs = math.floor(s.clockTicks / TICK_RATE);
 		const half = s.half >= 2 ? "下半場" : "上半場";
 		clockLabel.Text = `${half} ${pad2(math.floor(secs / 60))}:${pad2(secs % 60)}`;
@@ -180,7 +220,6 @@ export function createHud(
 
 	const updatePk = (pk: SnapPk | undefined): void => {
 		const live = pk !== undefined && pk.stage !== "done";
-		setPkMode(live);
 		pkPanel.Visible = live;
 		if (pk === undefined || !live) return;
 
@@ -222,6 +261,8 @@ export function createHud(
 	// Country select (declared before the handlers that reference it; drawn above the other panels).
 	const countrySelect = frame(gui, UDim2.fromScale(1, 1), UDim2.fromScale(0, 0), BLACK, 0.25);
 	text(countrySelect, "三國戰鬥足球", UDim2.fromScale(0.8, 0.14), UDim2.fromScale(0.1, 0.04));
+	// Hidden until the story menu's 快速比賽 button opens it.
+	countrySelect.Visible = false;
 
 	const startMatch = (country: Country): void => {
 		lastCountry = country;
@@ -240,13 +281,27 @@ export function createHud(
 		hint.Visible = false;
 		countrySelect.Visible = true;
 		setInputEnabled(false);
+		onMatchUi(false);
 		setBgm("menu");
 	};
 
+	// Hides the match panels and blocks snapshots until the next Setup (story mode takes over the menus).
+	const clearMatchUi = (): void => {
+		ignoreSnaps = true;
+		fulltime.Visible = false;
+		top.Visible = false;
+		hint.Visible = false;
+		countrySelect.Visible = false;
+		setInputEnabled(false);
+		onMatchUi(false);
+	};
+
 	COUNTRIES.forEach((c, i) => {
-		const b = button(countrySelect, "", UDim2.fromScale(0.28, 0.52), UDim2.fromScale(0.05 + i * 0.317, 0.22), COUNTRY_COLOR[c]);
-		text(b, COUNTRY_NAME[c], UDim2.fromScale(0.92, 0.2), UDim2.fromScale(0.04, 0.02));
-		text(b, GENERALS[c], UDim2.fromScale(0.84, 0.7), UDim2.fromScale(0.08, 0.27));
+		// Banner card (1:2), centred in its slot.
+		const b = artCard(countrySelect, COUNTRY_BANNER[c], 0.5, UDim2.fromScale(0.28, 0.52), UDim2.fromScale(0.05 + i * 0.317 + 0.14, 0.22));
+		b.AnchorPoint = new Vector2(0.5, 0);
+		text(b, COUNTRY_NAME[c], UDim2.fromScale(0.7, 0.12), UDim2.fromScale(0.15, 0.36));
+		text(b, GENERALS[c], UDim2.fromScale(0.7, 0.2), UDim2.fromScale(0.15, 0.5));
 		b.Activated.Connect(() => {
 			startMatch(c);
 		});
@@ -255,6 +310,14 @@ export function createHud(
 	const showroomBtn = button(countrySelect, "武將展示", UDim2.fromScale(0.3, 0.06), UDim2.fromScale(0.35, 0.755), GREY);
 	showroomBtn.Activated.Connect(() => {
 		openShowroom();
+	});
+	const backBtn = button(countrySelect, "返回", UDim2.fromScale(0.16, 0.09), UDim2.fromScale(0.02, 0.89), GREY);
+	const backMin = new Instance("UISizeConstraint");
+	backMin.MinSize = new Vector2(60, 60);
+	backMin.Parent = backBtn;
+	backBtn.Activated.Connect(() => {
+		countrySelect.Visible = false;
+		onBackToMenu();
 	});
 	setInputEnabled(false);
 	setBgm("menu");
@@ -273,11 +336,11 @@ export function createHud(
 		countrySelect.Visible = false;
 		fulltime.Visible = false;
 		pkPanel.Visible = false;
-		setPkMode(false);
 		top.Visible = true;
+		onMatchUi(true);
 		homeName.Text = COUNTRY_NAME[s.home];
 		homeName.TextColor3 = COUNTRY_COLOR[s.home];
-		awayName.Text = COUNTRY_NAME[s.away];
+		awayName.Text = s.awayLabel;
 		awayName.TextColor3 = COUNTRY_COLOR[s.away];
 		hint.Visible = !UserInputService.TouchEnabled;
 		setInputEnabled(true);
@@ -286,7 +349,6 @@ export function createHud(
 
 	const onSnapshot = (s: Snapshot): void => {
 		if (ignoreSnaps) return;
-		onSpecialState(s.cooldown, s.blockReason);
 		updateTop(s);
 		if (s.phase !== prevPhase) {
 			prevPhase = s.phase;
@@ -294,7 +356,7 @@ export function createHud(
 			if (s.phase === "pk") setBgm("pk");
 			else if (s.phase === "fulltime") {
 				// Victory jingle only when the human's team won (regulation score, then PK score); otherwise fade out.
-				const myTeam = setup !== undefined && setup.humanIdx >= 5 ? 1 : 0;
+				const myTeam = setup !== undefined && setup.humanIdx >= setup.players.size() / 2 ? 1 : 0;
 				const sc = s.score[0] !== s.score[1] || s.pk === undefined ? s.score : s.pk.score;
 				const won = sc[myTeam] > sc[1 - myTeam];
 				setBgm(won ? "victory" : "none");
@@ -302,8 +364,10 @@ export function createHud(
 		}
 		updatePk(s.pk);
 		const over = s.phase === "fulltime";
-		fulltime.Visible = over;
+		// Story stages show the result screen (storyUi.ts) instead of this panel.
+		fulltime.Visible = over && !(setup !== undefined && setup.mode === "story");
 		if (over) {
+			onMatchUi(false);
 			finalScore.Text = `${s.score[0]} - ${s.score[1]}` + (s.pk !== undefined ? `   PK ${s.pk.score[0]} - ${s.pk.score[1]}` : "");
 			setInputEnabled(false);
 		}
@@ -315,6 +379,12 @@ export function createHud(
 		},
 		onSnapshot(s: Snapshot) {
 			onSnapshot(s);
+		},
+		showCountrySelect() {
+			changeCountry();
+		},
+		clearMatchUi() {
+			clearMatchUi();
 		},
 	};
 }

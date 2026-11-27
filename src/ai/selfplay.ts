@@ -14,12 +14,12 @@ export const R0_HOME: Country = 'shu';
 export const R0_AWAY: Country = 'wei';
 export const R0_CHECKPOINT = 600;
 
-const NO_HUMANS: boolean[] = [false, false, false, false, false, false, false, false, false, false];
+const NO_HUMANS: boolean[] = [];
 
 export interface SelfPlay {
   /** Ticks simulated so far (the state's tick). */
   tick: number;
-  /** Advances up to n ticks with all 10 players AI-controlled; stops early when the match is finished. */
+  /** Advances up to n ticks with every player AI-controlled; stops early when the match is finished. */
   step(n: number): void;
   /** True once the match is at full time (penalty shootouts included). */
   done(): boolean;

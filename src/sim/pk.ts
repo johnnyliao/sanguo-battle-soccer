@@ -1,5 +1,5 @@
 import { min, max, len, fail, sortBy } from './num';
-import { FIELD_D, FIELD_W, GOAL_H, GOAL_HALF_W } from './constants';
+import { GOAL_H } from './constants';
 import { endRampage } from './actions';
 import { rngInt, rngNext } from './rng';
 import {
@@ -15,22 +15,12 @@ export const PK_METER_PERIOD = 80;
 export const PK_FLIGHT_TICKS = 40;
 export const PK_RESULT_TICKS = 90;
 
-/** Kicks per team before sudden death. */
-const PK_ROUNDS = 5;
-/** Players per team; every one of them kicks once per round. */
-const TEAM_SIZE = 5;
 const PK_DEFAULT_POWER = 0.5;
 
-const CENTER_Y = FIELD_D / 2;
-const SPOT_X = FIELD_W - 110;
 const SHOOTER_BACK = 14;
-const KEEPER_X = FIELD_W - 6;
-const ROW_X = FIELD_W - 330;
 const ROW_Y0 = 20;
 const ROW_STEP = 32;
 const COL_SPACING = 28;
-const WIDE_MISS_Y = GOAL_HALF_W + 12;
-const GOAL_TARGET_X = FIELD_W + 8;
 const LOW_Z = 6;
 const HIGH_Z = 26;
 const KEEPER_HIGH_Z = 18;
@@ -60,8 +50,22 @@ function requirePk(state: GameState): PkState {
   return pk;
 }
 
-function teamIdxs(team: 0 | 1): number[] {
-  return [0, 1, 2, 3, 4].map((i) => team * TEAM_SIZE + i);
+/** Every player idx of a team. */
+function teamIdxs(state: GameState, team: 0 | 1): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < state.teamSize; i++) out.push(team * state.teamSize + i);
+  return out;
+}
+
+/**
+ * The defending team's goalkeeper (GK role) if it has one, otherwise its slot 0 player. The keeper for a kick
+ * is chosen this way.
+ */
+function keeperIdxOf(state: GameState, team: 0 | 1): number {
+  for (const p of state.players) {
+    if (p.team === team && p.role === 'GK') return p.idx;
+  }
+  return team * state.teamSize;
 }
 
 /** Starts the shootout in the 'order' stage. Called by updateMatch when the 2nd half ends level. */
@@ -94,22 +98,22 @@ export function startPk(state: GameState): void {
   placeBall(state);
 }
 
-/** Team's 5 idxs sorted by power + technique, highest first; ties go to the lowest idx. */
+/** Team's idxs sorted by power + technique, highest first; ties go to the lowest idx. */
 export function defaultPkOrder(state: GameState, team: 0 | 1): number[] {
   const rating = (idx: number): number => {
     const s = state.players[idx].stats;
     return s.power + s.technique;
   };
-  return sortBy(teamIdxs(team), (a, b) => rating(b) - rating(a) || a - b);
+  return sortBy(teamIdxs(state, team), (a, b) => rating(b) - rating(a) || a - b);
 }
 
 /** Stores a team's kicking order. When both orders are set, the first kick begins. */
 export function submitPkOrder(state: GameState, team: 0 | 1, order: number[]): void {
   const pk = requirePk(state);
   if (pk.stage !== 'order') fail('penalty order is locked');
-  const expected = teamIdxs(team);
+  const expected = teamIdxs(state, team);
   const valid =
-    len(order) === TEAM_SIZE &&
+    len(order) === state.teamSize &&
     sortBy(order, (a, b) => a - b).every((idx, i) => idx === expected[i]);
   if (!valid) fail(`invalid penalty order for team ${team}: ${order.join(',')}`);
   pk.order[team] = [...order];
@@ -131,8 +135,8 @@ function beginKick(state: GameState, pk: PkState): void {
   const team = pk.kickingTeam;
   const order = pk.order[team];
   if (order === undefined) fail(`no penalty order for team ${team}`);
-  pk.shooterIdx = order[len(pk.kicks[team]) % TEAM_SIZE];
-  pk.keeperIdx = (1 - team) * TEAM_SIZE;
+  pk.shooterIdx = order[len(pk.kicks[team]) % state.teamSize];
+  pk.keeperIdx = keeperIdxOf(state, team === 0 ? 1 : 0);
   pk.stage = 'aim';
   pk.stageTimer = PK_AIM_TICKS;
   pk.meterTicks = -1;
@@ -160,25 +164,49 @@ function placeAt(p: Player, x: number, y: number, facingX: 1 | -1): void {
   p.actionTimer = 0;
 }
 
+/** Penalty spots and offsets on the match's pitch (read from state.field). */
+interface PkSpots {
+  centerY: number;
+  spotX: number;
+  keeperX: number;
+  rowX: number;
+  wideMissY: number;
+  goalTargetX: number;
+}
+
+function pkSpots(state: GameState): PkSpots {
+  const f = state.field;
+  return {
+    centerY: f.d / 2,
+    spotX: f.w - 110,
+    keeperX: f.w - 6,
+    rowX: f.w - 330,
+    wideMissY: f.goalHalfW + 12,
+    goalTargetX: f.w + 8,
+  };
+}
+
 /** Shooter and keeper go to their spots; everyone else stands in a row away from the action. */
 function placePlayers(state: GameState, shooterIdx: number, keeperIdx: number): void {
+  const s = pkSpots(state);
   let row = 0;
   for (const p of state.players) {
     if (p.idx === shooterIdx) {
-      placeAt(p, SPOT_X - SHOOTER_BACK, CENTER_Y, 1);
+      placeAt(p, s.spotX - SHOOTER_BACK, s.centerY, 1);
     } else if (p.idx === keeperIdx) {
-      placeAt(p, KEEPER_X, CENTER_Y, -1);
+      placeAt(p, s.keeperX, s.centerY, -1);
     } else {
-      placeAt(p, ROW_X, ROW_Y0 + row * ROW_STEP, 1);
+      placeAt(p, s.rowX, ROW_Y0 + row * ROW_STEP, 1);
       row++;
     }
   }
 }
 
 function placeBall(state: GameState): void {
+  const s = pkSpots(state);
   const b = state.ball;
-  b.x = SPOT_X;
-  b.y = CENTER_Y;
+  b.x = s.spotX;
+  b.y = s.centerY;
   b.z = 0;
   b.vx = 0;
   b.vy = 0;
@@ -273,17 +301,18 @@ function rollOutcome(
 }
 
 function tickFlight(state: GameState, pk: PkState): void {
+  const s = pkSpots(state);
   pk.stageTimer--;
   const t = (PK_FLIGHT_TICKS - pk.stageTimer) / PK_FLIGHT_TICKS;
-  const to = ballTarget(pk);
+  const to = ballTarget(state, pk);
   const b = state.ball;
-  b.x = lerp(SPOT_X, to.x, t);
-  b.y = lerp(CENTER_Y, to.y, t);
+  b.x = lerp(s.spotX, to.x, t);
+  b.y = lerp(s.centerY, to.y, t);
   b.z = lerp(0, to.z, t);
 
-  const dive = diveTarget(pk);
+  const dive = diveTarget(state, pk);
   const keeper = state.players[pk.keeperIdx];
-  keeper.y = lerp(CENTER_Y, dive.y, t);
+  keeper.y = lerp(s.centerY, dive.y, t);
   keeper.z = lerp(0, dive.z, t);
 
   if (pk.stageTimer <= 0 && pk.outcome !== undefined) enterResult(state, pk, pk.outcome);
@@ -303,7 +332,7 @@ function enterResult(state: GameState, pk: PkState, outcome: 'goal' | 'save' | '
 function tickResult(state: GameState, pk: PkState): void {
   pk.stageTimer--;
   if (pk.stageTimer > 0) return;
-  const winner = checkWinner(pk);
+  const winner = checkWinner(pk, state.teamSize);
   if (winner !== -1) {
     finish(state, pk, winner);
     return;
@@ -313,16 +342,17 @@ function tickResult(state: GameState, pk: PkState): void {
 }
 
 /**
- * Regulation (both teams within 5 kicks): a team wins once the other cannot catch up with its remaining kicks.
- * Sudden death (past 5 kicks): decided only when both teams have the same number of kicks and the scores differ.
+ * Regulation (both teams within `rounds` kicks, one per player): a team wins once the other cannot catch up with
+ * its remaining kicks. Sudden death (past `rounds`): decided only when both teams have the same number of kicks
+ * and the scores differ.
  */
-function checkWinner(pk: PkState): -1 | 0 | 1 {
+function checkWinner(pk: PkState, rounds: number): -1 | 0 | 1 {
   const taken0 = len(pk.kicks[0]);
   const taken1 = len(pk.kicks[1]);
-  if (taken0 <= PK_ROUNDS && taken1 <= PK_ROUNDS) {
+  if (taken0 <= rounds && taken1 <= rounds) {
     for (const team of [0, 1] as const) {
       const other: 0 | 1 = team === 0 ? 1 : 0;
-      const remaining = max(0, PK_ROUNDS - len(pk.kicks[other]));
+      const remaining = max(0, rounds - len(pk.kicks[other]));
       if (pk.score[team] > pk.score[other] + remaining) return team;
     }
     return -1;
@@ -341,27 +371,29 @@ function finish(state: GameState, pk: PkState, winner: 0 | 1): void {
 }
 
 /** Keeper's dive end point: stays on the goal line, moves to the guessed column. */
-function diveTarget(pk: PkState): { y: number; z: number } {
+function diveTarget(state: GameState, pk: PkState): { y: number; z: number } {
+  const s = pkSpots(state);
   return {
-    y: CENTER_Y + (pk.guessCol - 1) * COL_SPACING,
+    y: s.centerY + (pk.guessCol - 1) * COL_SPACING,
     z: pk.guessHigh ? KEEPER_HIGH_Z : 0,
   };
 }
 
 /** Where the ball ends its flight: the save point, a wide or over-the-bar miss, or the aimed goal spot. */
-function ballTarget(pk: PkState): Vec3 {
+function ballTarget(state: GameState, pk: PkState): Vec3 {
+  const s = pkSpots(state);
   if (pk.outcome === 'save') {
-    const d = diveTarget(pk);
-    return { x: KEEPER_X, y: d.y, z: d.z };
+    const d = diveTarget(state, pk);
+    return { x: s.keeperX, y: d.y, z: d.z };
   }
   const z = pk.aimHigh ? HIGH_Z : LOW_Z;
   if (pk.outcome === 'miss' && pk.aimCol === 1) {
-    return { x: GOAL_TARGET_X, y: CENTER_Y, z: OVER_BAR_Z };
+    return { x: s.goalTargetX, y: s.centerY, z: OVER_BAR_Z };
   }
   if (pk.outcome === 'miss') {
-    return { x: GOAL_TARGET_X, y: CENTER_Y + (pk.aimCol - 1) * WIDE_MISS_Y, z };
+    return { x: s.goalTargetX, y: s.centerY + (pk.aimCol - 1) * s.wideMissY, z };
   }
-  return { x: GOAL_TARGET_X, y: CENTER_Y + (pk.aimCol - 1) * COL_SPACING, z };
+  return { x: s.goalTargetX, y: s.centerY + (pk.aimCol - 1) * COL_SPACING, z };
 }
 
 function lerp(a: number, b: number, t: number): number {

@@ -1,5 +1,6 @@
 // 3D R15 avatar models for match players. Templates are cloned from ReplicatedStorage.Avatars (copied there by server/avatars.server.ts).
-import { CHAR_ANIMS, SHARED_ANIMS } from "./animIds";
+import type { LordWeapon } from "shared/net";
+import { CHAR_ANIMS, SHARED_ANIMS, animsFor, isLordId, isSoldierId } from "./animIds";
 import { attachWeapons } from "./weapons";
 
 const ReplicatedStorage = game.GetService("ReplicatedStorage");
@@ -73,6 +74,8 @@ export interface AvatarView {
 	/** Last horizontal facing (unit vector). Kept when a zero facing arrives. */
 	facing: Vector3;
 	charId: string;
+	/** A lord's weapon (sword / spear / fan); undefined for every other avatar. */
+	lordWeapon: LordWeapon | undefined;
 	/** Action clips (attack / special / hit / knockdown / ...) loaded once per asset id. */
 	tracks: Map<string, AnimationTrack>;
 	/** Current action key ("" = none): attack | hit | stun | down | dive | getup | charge | special. */
@@ -151,12 +154,68 @@ function preloadAnimations(): void {
 	});
 }
 
+/** Seconds a lord_ template may take to replicate before the generic fallback is used. */
+const LORD_TEMPLATE_WAIT = 5;
+/** Generic template cloned for lord_ and xiaobing_ charIds whose own model is missing (the caller tints it by team). */
+const GENERIC_TEMPLATE = "zhaoyun";
+/** Lord width limit: bbox width may be at most this fraction of its height (wider models are scaled down uniformly). */
+const LORD_MAX_WIDTH_RATIO = 0.7;
+/** charIds that already had their one-time wait for a missing lord template. */
+const waitedIds = new Set<string>();
+/** charIds already logged as using a fallback template. */
+const loggedIds = new Set<string>();
+
+/**
+ * Returns the template for a charId. A lord_ id waits up to LORD_TEMPLATE_WAIT seconds once for its model to replicate.
+ * lord_ / xiaobing_ ids without a model fall back to the GENERIC_TEMPLATE model (returned as-is; makeAvatar tints it).
+ * Other ids without a model return undefined (the caller draws its placeholder).
+ */
 export function getAvatarTemplate(charId: string): Model | undefined {
 	const folder = getAvatarFolder();
 	if (folder === undefined) return undefined;
-	const found = folder.FindFirstChild(charId);
+	let found = folder.FindFirstChild(charId);
+	if (found === undefined && isLordId(charId) && !waitedIds.has(charId)) {
+		waitedIds.add(charId);
+		found = folder.WaitForChild(charId, LORD_TEMPLATE_WAIT);
+	}
 	if (found !== undefined && found.IsA("Model")) return found;
+	if (!isLordId(charId) && !isSoldierId(charId)) return undefined;
+	if (!loggedIds.has(charId)) {
+		loggedIds.add(charId);
+		print(`[avatars] no model for ${charId}, using ${GENERIC_TEMPLATE} fallback`);
+	}
+	const generic = folder.FindFirstChild(GENERIC_TEMPLATE);
+	if (generic !== undefined && generic.IsA("Model")) return generic;
 	return undefined;
+}
+
+/**
+ * Axis-aligned size of the body parts only (Accessory handles excluded). A freshly built avatar's accessories are not
+ * welded yet and can float several studs away from the body (e.g. hair 5 studs behind), which inflates GetBoundingBox.
+ */
+function bodyExtents(model: Model): Vector3 {
+	let minV: Vector3 | undefined;
+	let maxV: Vector3 | undefined;
+	for (const d of model.GetDescendants()) {
+		if (!d.IsA("BasePart") || d.FindFirstAncestorOfClass("Accessory") !== undefined) continue;
+		const half = d.Size.div(2);
+		const lo = d.Position.sub(half);
+		const hi = d.Position.add(half);
+		minV = minV === undefined ? lo : minV.Min(lo);
+		maxV = maxV === undefined ? hi : maxV.Max(hi);
+	}
+	if (minV === undefined || maxV === undefined) return model.GetBoundingBox()[1];
+	return maxV.sub(minV);
+}
+
+/** Scales a lord model down uniformly when its bbox is wider than LORD_MAX_WIDTH_RATIO x its height (height measured incl. accessories). */
+function clampLordWidth(model: Model): void {
+	const size = bodyExtents(model);
+	const width = math.max(size.X, size.Z);
+	const maxWidth = LORD_MAX_WIDTH_RATIO * size.Y;
+	if (width > maxWidth && width > 0) {
+		model.ScaleTo(model.GetScale() * (maxWidth / width));
+	}
 }
 
 function loadTrack(animator: Animator, anim: Animation): AnimationTrack | undefined {
@@ -220,23 +279,29 @@ function ensureIdle(v: AvatarView): AnimationTrack | undefined {
 	return v.idle;
 }
 
-export function makeAvatar(template: Model, parent: Instance, height: number, charId: string): AvatarView {
+/**
+ * Builds the avatar view. `tint` (team colour) is applied only when `template` is a generic fallback (its name differs from charId).
+ */
+export function makeAvatar(template: Model, parent: Instance, height: number, charId: string, tint?: Color3, lordWeapon?: LordWeapon): AvatarView {
 	preloadAnimations();
-	const charAnims = CHAR_ANIMS[charId];
+	const charAnims = animsFor(charId, lordWeapon);
 	const idleId = charAnims?.idle ?? DEFAULT_IDLE_ID;
 	const runId = charAnims?.run ?? DEFAULT_RUN_ID;
+	const fallbackModel = template.Name !== charId;
 
 	const model = template.Clone();
 	// Measure the template's own rest height first: AI-generated templates have different native scales.
-	const [, restSize] = model.GetBoundingBox();
-	const h0 = restSize.Y;
+	// Lords (real player avatars) are measured without accessories: unwelded hats/hair would skew the size.
+	const h0 = isLordId(charId) ? bodyExtents(model).Y : model.GetBoundingBox()[1].Y;
 	if (h0 > 0) {
 		model.ScaleTo(model.GetScale() * (height / h0));
 	}
+	if (isLordId(charId)) clampLordWidth(model);
 
 	const root = model.FindFirstChild("HumanoidRootPart") as BasePart;
 	for (const d of model.GetDescendants()) {
 		if (d.IsA("BasePart")) {
+			if (tint !== undefined && fallbackModel) d.Color = tint;
 			d.Anchored = d === root;
 			d.CanCollide = false;
 			d.CanQuery = false;
@@ -266,7 +331,7 @@ export function makeAvatar(template: Model, parent: Instance, height: number, ch
 	const footOffset = root.Position.Y - (boxCF.Y - boxSize.Y / 2);
 	// Weapons go on after the body measurements so the sword/spear does not change the foot offset.
 	const templateScale = template.GetScale();
-	attachWeapons(model, charId, templateScale > 0 ? model.GetScale() / templateScale : 1);
+	attachWeapons(model, charId, templateScale > 0 ? model.GetScale() / templateScale : 1, lordWeapon);
 
 	const view: AvatarView = {
 		model,
@@ -302,6 +367,7 @@ export function makeAvatar(template: Model, parent: Instance, height: number, ch
 		sit: undefined,
 		sitOn: false,
 		hasClips: animator !== undefined && SHARED_ANIMS.knockdown !== undefined,
+		lordWeapon,
 	};
 
 	if (animator !== undefined) {
@@ -377,7 +443,7 @@ function lingerFor(key: string): number {
 
 /** Maps the snapshot action to an action clip (priority over idle / run) and starts / stops it on changes. */
 function updateAction(v: AvatarView, act: string, now: number): void {
-	const ca = CHAR_ANIMS[v.charId];
+	const ca = animsFor(v.charId, v.lordWeapon);
 	let want = "";
 	if (act === "down") want = "down";
 	else if (act === "hitstun") want = v.curKey === "stun" || (v.curKey === "hit" && now - v.curSince > STUN_AFTER) ? "stun" : "hit";

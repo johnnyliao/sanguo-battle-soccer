@@ -22,7 +22,16 @@ export function canonical(v: unknown): string {
   return parts.join('');
 }
 
-/** Digest of a whole game state: FNV-1a over the UTF-8 bytes of its canonical text, 8 hex chars. */
+/**
+ * Digest of a whole game state: FNV-1a over the UTF-8 bytes of its canonical text, 8 hex chars.
+ * teamSize and field are left out: the player list already implies the team size, the default field is the constants, and
+ * leaving both out keeps the 5v5 digests unchanged.
+ */
 export function stateDigest(state: GameState): string {
-  return fnv1aUtf8(canonical(state));
+  const parts: string[] = ['{'];
+  for (const [key, value] of entriesSorted(state)) {
+    if (key !== 'teamSize' && key !== 'field') parts.push(`${key}=${canonical(value)};`);
+  }
+  parts.push('}');
+  return fnv1aUtf8(parts.join(''));
 }

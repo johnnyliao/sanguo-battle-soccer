@@ -4,8 +4,12 @@ import {
 	EASTWIND_RADIUS,
 	GUST_RADIUS,
 	ICE_RADIUS,
+	LORD_DRAGON_HALF_WIDTH,
+	LORD_WHIRL_RADIUS,
+	LORD_WINDPUFF_RADIUS,
 	PORTAL_RADIUS,
 	isInvincible,
+	SPECIAL_STAMINA_COST,
 	pkMeterValue,
 	type GameState,
 	type Player,
@@ -19,6 +23,13 @@ function specialOf(p: Player): string {
 	if (p.tigerTicks > 0) return "tiger";
 	if (p.slashTicks > 0) return "slash";
 	if (p.action === "ride") return "ride";
+	return "";
+}
+
+/** Why the human's special cannot start for lack of stamina or the ball ("" = none). Cooldown is sent separately. */
+function specialBlockReason(state: GameState, human: Player, humanIdx: number): string {
+	if (human.stamina < SPECIAL_STAMINA_COST) return "體力不足";
+	if (!human.specialNoBall && state.ball.ownerIdx !== humanIdx) return "需持球";
 	return "";
 }
 
@@ -64,6 +75,18 @@ export function buildSnapshot(state: GameState, humanIdx: number, events: SimEve
 	for (const w of state.waves) {
 		zones.push({ k: "wave", x: w.x, y: w.y, r: 0, team: w.team, dir: dirSign(w.dirX) });
 	}
+	// Lord specials: the whirl circle around a spinning player, and the flying spear and windpuff (dx, dy = unit direction).
+	for (const p of state.players) {
+		if (p.whirlTicks !== undefined && p.whirlTicks > 0) {
+			zones.push({ k: "whirl", x: p.x, y: p.y, r: LORD_WHIRL_RADIUS, team: p.team, dir: 0, idx: p.idx });
+		}
+	}
+	for (const sp of state.dragonspears ?? []) {
+		zones.push({ k: "spear", x: sp.x, y: sp.y, r: LORD_DRAGON_HALF_WIDTH, team: sp.team, dir: 0, dx: sp.dirX, dy: sp.dirY });
+	}
+	for (const wp of state.windpuffs ?? []) {
+		zones.push({ k: "puff", x: wp.x, y: wp.y, r: LORD_WINDPUFF_RADIUS, team: wp.team, dir: 0, dx: wp.dirX, dy: wp.dirY });
+	}
 
 	const pkState = state.match.pk;
 	const pk: SnapPk | undefined =
@@ -99,7 +122,7 @@ export function buildSnapshot(state: GameState, humanIdx: number, events: SimEve
 		zones,
 		pk,
 		cooldown: human.specialCooldown,
-		blockReason: "",
+		blockReason: specialBlockReason(state, human, humanIdx),
 		events,
 	};
 }

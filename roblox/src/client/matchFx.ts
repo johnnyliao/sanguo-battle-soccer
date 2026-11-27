@@ -7,6 +7,8 @@ import { MatchCtx, Mount, SpecialModule, WHITE, en, higher, hitSpark, impactFx, 
 import { ShuFx } from "./matchShu";
 import { WeiFx } from "./matchWei";
 import { WuFx } from "./matchWu";
+import { LordFx } from "./lordFx";
+import { damageNumber, flashVictim, knockDust } from "./hitFeedback";
 
 const Workspace = game.GetService("Workspace");
 
@@ -19,8 +21,11 @@ export class MatchFx {
 	private folder: Folder;
 	private mods: SpecialModule[];
 	private wei: WeiFx;
+	private lord: LordFx;
 	private hitCount = 0;
 	private hitWindowStart = 0;
+	/** Modules (by index in mods) that already logged an error; each is logged once. */
+	private readonly failed = new Set<number>();
 
 	constructor(c: MatchCtx) {
 		this.c = c;
@@ -32,7 +37,8 @@ export class MatchFx {
 		}
 		this.folder = folder;
 		this.wei = new WeiFx(c);
-		this.mods = [new ShuFx(c), this.wei, new WuFx(c)];
+		this.lord = new LordFx(c);
+		this.mods = [new ShuFx(c), this.wei, new WuFx(c), this.lord];
 		fx.setRoot(folder);
 	}
 
@@ -64,16 +70,31 @@ export class MatchFx {
 		else if (t === "special") {
 			const idx = en(e, "playerIdx");
 			const charId = this.c.charOf(idx);
-			for (const m of this.mods) m.special(idx, charId);
+			this.each((m) => m.special(idx, charId));
 		}
-		for (const m of this.mods) m.handle(e);
+		this.each((m) => m.handle(e));
 	}
 
 	/** Called every frame with the nearest snapshot's zones and the ball. */
 	frame(dt: number, zones: SnapZone[], ballPos: Vector3, ballSpecial: string): void {
 		this.ensureRoot();
-		for (const m of this.mods) m.frame(dt, zones);
+		this.each((m) => m.frame(dt, zones));
 		this.wei.ball(dt, ballPos, ballSpecial);
+	}
+
+	/**
+	 * Runs one call on every module. A module that throws is logged once and its call skipped, so the others (the lord FX
+	 * last in the list) still run.
+	 */
+	private each(fn: (m: SpecialModule) => void): void {
+		for (let i = 0; i < this.mods.size(); i++) {
+			const m = this.mods[i];
+			const [ok, err] = pcall(() => fn(m));
+			if (!ok && !this.failed.has(i)) {
+				this.failed.add(i);
+				warn(`[matchFx] module ${i} error: ${tostring(err)}`);
+			}
+		}
 	}
 
 	/** Mount placement (bike / boat / seat) for one player this frame, or undefined when he is on foot. */
@@ -83,6 +104,11 @@ export class MatchFx {
 			if (r !== undefined) return r;
 		}
 		return undefined;
+	}
+
+	/** Extra yaw (rad) for one player's model this frame: the sword whirl spins the lord (0 otherwise). */
+	spin(idx: number): number {
+		return this.lord.spinOf(idx);
 	}
 
 	/** Stars above a stunned player's head while ctx.stunned(idx) holds. */
@@ -119,10 +145,32 @@ export class MatchFx {
 		c.trails(idx, 0.4);
 	}
 
+	/** Victim feedback for every hit, not counted in the hit budget: red flash, damage number and knock dust. */
+	private hitFeedback(attacker: number, victim: number, damage: number): void {
+		const c = this.c;
+		const vf = c.foot(victim);
+		const af = c.foot(attacker);
+		let dx = vf.X - af.X;
+		let dz = vf.Z - af.Z;
+		const mag = math.sqrt(dx * dx + dz * dz);
+		if (mag > 0.01) {
+			dx /= mag;
+			dz /= mag;
+		} else {
+			const f = c.facing(attacker);
+			dx = f.X;
+			dz = f.Z;
+		}
+		flashVictim(c.model(victim));
+		damageNumber(c.chest(victim).add(new Vector3(0, 2, 0)), dx, dz, damage);
+		knockDust(vf, dx, dz);
+	}
+
 	private hit(e: SimEventLite): void {
-		if (!this.allowHit()) return;
 		const attacker = en(e, "attackerIdx");
 		const victim = en(e, "victimIdx");
+		this.hitFeedback(attacker, victim, en(e, "damage"));
+		if (!this.allowHit()) return;
 		const kind = e["kind"] as string | undefined;
 		const c = this.c;
 		const col = colorOf(c.charOf(attacker));

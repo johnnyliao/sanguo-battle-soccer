@@ -496,3 +496,81 @@ Roblox 版遊戲場地真的放大 1.5 倍（sim FIELD 1200×260 → 1800×390�
 - 場地放大後進球變少：使用者決定不調（2026-11-26）。
 - 2026-11-26：match BGM＝A/D/F 三首隨機（晨风剑影破长空、以鋒對鋒、峰頂之敵）；馬超 summonStart＝Horse Neigh 2 (117237268224853)。
 - 關羽騎士衝擊（共用 sim，網頁同步）：0.75 秒、判定 ±70px、接觸 35px、前推 300；Roblox 特效放大（光環 16 studs、兩側能量粒子）。Studio 實測 OK。
+
+---
+# Goal R2：故事模式「主公征戰」＋收集（Roblox，2026-11-27 起）
+玩家自己的 Roblox 角色當主公，親自上場。開場選陣營（魏蜀吳），再選一位初始武將當手下，接著照簡單劇情一關一關打。故事前幾關是 1v1，人數慢慢加到 5v5。打贏魔王就收服他，主公升級，進度存檔。
+動機：參考 RIVALS／Steal an Egg／Dragon Arena 的研究（收集、短局、存檔成長、可炫耀）；現況是「踢完一場就走」。
+整體順序（使用者 2026-11-27 同意）：**R2 故事＋收集 → R3 開放式主城（取代選單、展示武將、社交）→ R4 擂台快速 1v1 真人單挑＋排行榜**。
+
+# Constraints / decisions
+- **2026-11-27 使用者決定：以後只做 Roblox 版，網頁版不再維護。** 共用 sim（src/sim、ai、data）可以直接為 Roblox 修改，不必顧網頁渲染、gh-pages 和網頁 e2e；網頁程式碼先留著不刪。vitest 和 R0 golden 照用（改了規則就重產 golden）。R0 的 Luau 相容寫法規則照舊。
+- 主公上場（使用者選 A）：玩家預設操控主公；切換操控武將排在後面。
+- **人數可變**：sim 改成每隊 N 人（1～5），故事關卡從 1v1 → 2v2 → 3v3 → 5v5。現在寫死 5 人的地方：state.ts:69-75、types.ts:487、field.ts:52-58、match.ts:120、pk.ts:21/64/134、ai.ts:896/953、match.server.ts:32-33。
+- 小人數的預設（我先定，使用者不滿意再改）：1v1、2v2 用**小場地＋小球門、沒有守門員**（AI 不撲救）；3v3 起有守門員、正常場地。場地大小改成每場的設定（取代寫死的 FIELD_SCALE）。PK：1v1 兩人輪流射門、對方守門；N 人時每人都要踢。
+- 隊伍在 Roblox 端組裝：主公、小兵的 CharacterDef 在 Roblox 端建立；故事隊伍**不經過 normalizeTeam**（否則小兵變弱、主公成長會被抵銷）。武將的 role 衝突時複製 def 改 role。
+- 主公大招：第一版先借用一個現有 special mode（步驟 6 決定），新招「主公號令」排到 R2 之後。
+- **伺服器要支援多場比賽同時進行**（為 R3 主城預留）：比賽改成「一個玩家一個 MatchInstance」，各自有狀態、真人名單和場地位置。R2 只實作伺服器端的多場結構，畫面一次只顯示自己那場；場地錯開擺放留到 R3。
+- 存檔用 DataStoreService；Studio 需要已發佈的 place＋開啟「Studio Access to API Services」，拿不到時退回記憶體存檔並印警告。
+- 初始武將（使用者 2026-11-27 確認）：蜀 關羽／趙雲／諸葛亮；魏 張遼／許褚／司馬懿；吳 周瑜／孫策／小喬。曹操、孫權、張飛等留到故事後期當魔王收服。
+- 派工：每份 delegation 都寫上「同一個問題試 3 次失敗就停下回報」。
+
+# Steps R2
+- [ ] 0. 前置：確認 Studio place 已發佈、DataStore 可用（list_roblox_studios 看 persistedToCloud；不行就請使用者發佈）— me
+- [x] 1a. 人數可變（state.teamSize、各人數陣型、開球、PK 每人踢／無 GK 時 slot 0 守門、AI 中場分路、digest 略過 teamSize）— 2026-11-27 完成：709 tests PASS、golden 不變、roblox build OK（未 commit）
+- [x] 1b. 場地／球門大小改成每場設定（state.field、defaultFieldFor：1人 0.5×0.75、2人 0.6×0.8、3–4人 0.8×0.9；陣型按比例）— 2026-11-27 完成：713 tests、golden 不變、build OK
+- （原步驟 1 全文）sim 人數可變：MatchSetup 改成每隊 1～5 個 def；各人數的陣型表、開球位置、開球者、AI 分路（ai.ts 的 idx % 5）、PK（TEAM_SIZE、守門員 index）、沒有 GK 時的處理；場地／球門大小改成 MatchSetup 設定（Roblox 1.5 倍的大場地是 5v5 預設，sync-game 的 FIELD_SCALE patch 拿掉或改成預設值）— files: src/sim/{state,types,field,match,pk,step,constants-core}.ts、src/ai/ai.ts、roblox/scripts/sync-game.mjs — verify: npx vitest run（新增 1v1／2v2／3v3 測試：跑完整場＋PK 不出錯、有進球）＋重產 golden＋roblox npm run build — worker（effort high）
+- [x] 2. 存檔模組（profileTypes.ts、profile.ts、profile.server.ts；讀檔失敗＝本局唯讀）：roblox/src/server/profile.ts — schema {version, country?, starter?, lordLevel, lordXp, coins, recruited: charId[], stage, cleared: string[]}；缺少的欄位補預設值；每 60 秒＋PlayerRemoving＋BindToClose 存檔；UpdateAsync＋重試；Studio 沒有 API 時用記憶體 — files: profile.ts（新）、net.ts — verify: build＋Studio Play 印出載入／存檔 log — worker
+- [ ] 3. 多場比賽伺服器：match.server.ts 重構成 MatchInstance（每位玩家一場、各自 tick／輸入／廣播只給該玩家）；新增 {cmd:"story", stageId}（伺服器從 profile 組隊，不信任 client 傳的隊伍）；保留 {cmd:"start", country} 快速比賽 — files: match.server.ts、matchInstance.ts（新）、net.ts、client 收狀態的地方 — verify: build＋Studio 開故事關卡和快速比賽都正常 — worker
+- [ ] 4. 隊伍組裝：roblox/src/shared/teamBuilder.ts — buildStoryTeam({country, lordLevel, generals, size}) → N 個 def（主公一定上場、武將填入、空位補小兵）；buildEnemyTeam(stageDef)；主公、小兵數值表（主公隨等級成長）— files: teamBuilder.ts、storyStats.ts（新）— verify: build＋Studio 開 1v1（主公對小兵）、2v2、5v5 各跑完一場 — worker
+- [ ] 5. 小兵 3D 模型：黃巾（黃）＋魏蜀吳三色，R15，放 ServerStorage.Avatars（xiaobing_huangjin／_wei／_shu／_wu），配長槍；動畫用預設 idle/run＋共用 hit — files: sanguo.rbxl（MCP generate_avatar）、animIds.ts — verify: studio-checker 截圖 — me＋worker
+- [ ] 6. 主公模型：伺服器用 GetHumanoidDescriptionFromUserId＋CreateHumanoidModelFromDescription(R15) 建模型，放 ReplicatedStorage.Avatars.lord_<userId>；client 用 bbox 縮放成統一身高（處理極端體型）；配通用的劍；動畫和大招借用某位武將 — files: lordAvatar.server.ts（新）、avatars.ts、weapons.ts、animIds.ts — verify: studio-checker（玩家造型、身高正常、拿武器、動作正常）— worker
+- [ ] 7. 開場流程 UI：第一次進遊戲 → 軍帳旁白 → 選陣營 → 選初始武將（3 選 1 卡片）→ 存 profile → 進第一關；舊玩家直接到關卡地圖 — files: storyUi.ts（新）、hud.ts、main.client.ts — verify: studio-checker 走完一遍 — worker
+- [ ] 8. 故事資料＋關卡地圖：roblox/src/shared/story.ts — 每個陣營第一章約 6 關，人數 1v1 → 1v1 魔王 → 2v2 → 3v3 → 5v5（敵隊組成、魔王武將、收服獎勵、1～2 句對話）；關卡地圖 UI（已過／目前／鎖住）— **關卡內容先給使用者看過再寫** — files: story.ts（新）、storyUi.ts — verify: build＋studio-checker — me 設計，worker 實作
+- [ ] 9. 結算與成長：勝負 → 經驗、銅錢（輸了也給少量經驗）→ 主公升級 → 打贏魔王跳「收服 XXX！」橫幅並寫入 recruited → 解鎖下一關；存檔 — files: story.server.ts（新）、storyUi.ts、profile.ts — verify: Studio 打兩關、重進遊戲進度還在 — worker
+- [ ] 10. 整合測試：npm test、roblox npm run build、R0 PASS、Studio 從新玩家玩到第 3 關、重進確認存檔；更新 CLAUDE.md（網頁版停止維護、R2 新架構）；commit — me
+
+# 之後（另開計畫）
+- R3 主城：取代選單；主公在城裡走動、收服的武將跟著或站在自己營帳展示；「出征」入口進故事、「擂台」入口；多場比賽的場地錯開擺放。
+- R4 擂台：主公對主公 1v1 真人單挑、排行榜／段位。
+- 其他：切換操控武將、主公號令、每日任務、外觀商店。
+
+# Lessons learned R2
+
+## R2 故事設計草案（第一章，me 2026-11-27）
+- 每國 5 將。初始三選一 s；其餘兩位初始候選 a、b ＋ 兩位非候選 c、d 依序在故事裡收服。
+  - 蜀：候選 關羽／趙雲／諸葛亮；c=張飛、d=馬超。魏：候選 張遼／許褚／司馬懿；c=甄姬、d=曹操。吳：候選 周瑜／孫策／小喬；c=大喬、d=孫權。
+- 上場名單（第一版自動）：主公一定上（FW 位）＋ s ＋ 依收服順序補滿 N-1 人；不夠就補我方小兵。
+- 關卡：
+  1. 1v1 對 黃巾兵（教學：移動、射門）
+  2. 1v1 對 黃巾頭目（教學：攻擊搶球、大招）
+  3. 1v1 魔王 a（單挑招賢）→ 收服 a
+  4. 2v2（主公＋s）對 黃巾兵×2（教學：傳球）
+  5. 2v2 魔王 b＋黃巾兵 → 收服 b
+  6. 3v3 魔王 c＋黃巾兵×2 → 收服 c
+  7. 4v4 魔王 d＋黃巾兵×3 → 收服 d
+  8. 5v5 對 敵國完整隊伍（蜀→魏、魏→吳、吳→蜀）→ 第一章完
+- 魔王數值 ×0.75（關卡內可調），黃巾兵 3/4/4/3/3、頭目 5/5/5/4/4（力/速/體/技/守）。
+- 主公：Lv1 5/6/6/5/4、體型中；每升 1 級總和 +1（輪流加，單項上限 9，Lv 上限 30）；大招借用「rampage」（3 秒無敵帶球衝），名稱「主公衝鋒」。
+- 結算：贏 經驗 100、銅錢 50；輸 經驗 30、銅錢 10。升到 Lv n+1 需 100×n 經驗。銅錢第一版只存不花（之後商店／主城用）。
+- 對話：每關開場 1～2 句（武將名套模板），收服時一句台詞。
+
+---
+# Goal R2b：主公三武器＋教學關（2026-11-27 使用者同意設計）
+主公開場選武器（劍／槍／扇，地圖上可隨時換），每把武器有自己的普攻和大招；新增第 0 關教學；第 4 關（第一次 2v2）開場提示傳球。
+
+# 設計（定案）
+| 武器 | 普攻 | 大招（不需持球，冷卻 12 秒、耗體力 20，與其他武將同規則） |
+|---|---|---|
+| 劍 sword | 快速二連斬：出手比預設快（約 0.7 倍時間），一次攻擊判定兩下（第二下約 0.15 秒後），距離同預設 | 天子劍・旋風斬 whirl：原地旋轉 1.2 秒（可慢速移動 50%），半徑 90px 內敵人各被打中一次：向外擊退、扣 20%、持球者掉球 |
+| 槍 spear | 突刺：距離 1.5 倍、出手 1.2 倍時間、擊退 1.3 倍 | 破陣槍・龍騰 dragonspear：0.25 秒蓄力後往面向方向射出金龍槍氣，直線穿透 400px，路徑敵人倒地 1 秒、扣 25%、持球者掉球 |
+| 扇 fan | 扇風彈：射出小風團（約 160px），打中敵人推開約 60px、傷害為一般普攻 30%；碰到自由球會推動球 | 鳳翼扇・羽風陣 featherfan：前方 90° 扇形、半徑 160px：範圍內敵人速度剩 50% 持續 3 秒；範圍內 200px 以內的球（自由球或敵人持球）被吸到主公腳下（變成主公持球） |
+教學關 stage 0：主公＋所選武器 對 1 名黃巾兵（先不動）。步驟：移動到球 → 帶球射進空門 → 黃巾兵開始動並搶球、打他搶回 → 按大招 → 完成「你已經是合格的主公了！」。每步做到自動下一步，大字提示＋箭頭，鍵盤與觸控提示都要有。
+
+# Steps R2b
+- [x] W1. （2026-11-27 完成：736 tests、golden 不變；常數在 constants-skills-lord.ts；client 事件 whirl*/dragon*/windpuff*/feather*、zone whirl/spear/puff）sim：CharacterDef 加 weapon?: 'sword'|'spear'|'fan'（只有主公用）；三種普攻差異；三個新 special mode（whirl／dragonspear／featherfan）＋測試；不影響現有 15 將（golden 不變）— files: src/data/types.ts、src/sim/*、src/ai/ai.ts（AI 不用管新招，只要不壞）— verify: npx vitest run、golden 不變、roblox build — worker（effort high）
+- [x] W2. 存檔＋伺服器＋UI：profile.lordWeapon、{cmd:"chooseWeapon"}、lordDef 帶 weapon 與對應 special；開場流程加「選主公武器」三張卡；地圖上可換武器 — files: profileTypes.ts、profile.ts、teamBuilder.ts、match.server.ts、net.ts、storyUi.ts — worker
+- [x] W3. 畫面：三種武器模型（劍＝caocao 劍、槍＝zhaoyun 槍、扇＝zhugeliang／xiaoqiao 扇模板）、動作、扇風彈與三招特效（旋風斬刀光環、金龍槍氣、羽毛旋風＋吸球軌跡）、音效 — files: client（weapons.ts、animIds.ts、specials*.ts、matchFx 等）— worker＋studio-checker
+- [x] W4. 教學關：story stage 0（伺服器：黃巾兵 AI 依步驟開關）、client 教學提示層（偵測移動到球、進球、搶回球、放大招）；新玩家選完武將先進第 0 關；地圖顯示第 0 關可重玩 — files: story.ts、matchInstance.ts、match.server.ts、tutorialUi.ts（新）、storyUi.ts — worker
+- [x] W5. 第 4 關開場傳球提示（第一次）— files: storyUi.ts／tutorialUi.ts — worker
+- [ ] W6. Studio 全流程測試（studio-checker）、使用者試玩、commit — me

@@ -1,6 +1,6 @@
 // Shared building blocks for the in-match combat effects (matchFx / matchShu / matchWei / matchWu): the context the
 // effect modules read the live players through, event field readers, zone syncing and a few small effect helpers.
-import { STUDS_PER_PX, type SimEventLite, type SnapZone } from "shared/net";
+import { simToWorld, type SimEventLite, type SnapZone } from "shared/net";
 import * as fx from "./fx";
 import { FX, FX_BAD } from "./fxIds";
 
@@ -13,6 +13,8 @@ export interface MatchCtx {
 	foot: (idx: number) => Vector3;
 	facing: (idx: number) => Vector3;
 	chest: (idx: number) => Vector3;
+	/** The player's character model (undefined when not spawned). */
+	model: (idx: number) => Model | undefined;
 	hand: (idx: number) => Vector3;
 	charOf: (idx: number) => string;
 	teamOf: (idx: number) => number;
@@ -23,6 +25,8 @@ export interface MatchCtx {
 	trails: (idx: number, dur: number) => void;
 	focusX: () => number;
 	focusZ: () => number;
+	/** Index of the local human's player (-1 when none). */
+	humanIdx: () => number;
 	count: () => number;
 }
 
@@ -50,9 +54,9 @@ export function ea(e: SimEventLite, k: string): number[] {
 	return (e[k] as number[] | undefined) ?? [];
 }
 
-/** Sim px position -> world ground / height position. */
+/** Sim px position (with the match centring offset) -> world ground position, lifted h studs. */
 export function W(x: number, y: number, h = 0): Vector3 {
-	return new Vector3(x * STUDS_PER_PX, h, y * STUDS_PER_PX);
+	return simToWorld(x, y, 0).add(new Vector3(0, h, 0));
 }
 
 export function higher(v: Vector3, h: number): Vector3 {

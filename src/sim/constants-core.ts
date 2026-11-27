@@ -45,6 +45,8 @@ export const PUNCH_ACTIVE_FROM = 4;
 export const PUNCH_ACTIVE_TO = 8;
 export const PUNCH_RANGE = 8;
 export const PUNCH_HIT_RADIUS = 10;
+/** A human-controlled player's basic attack turns him to the nearest opponent within the punch reach plus this many px (see assistTurn). */
+export const PUNCH_ASSIST_PAD = 12;
 export const TACKLE_TICKS = 24;
 export const TACKLE_SPEED_MULT = 1.6;
 export const RECOVER_TICKS = 12;

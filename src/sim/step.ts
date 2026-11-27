@@ -7,8 +7,6 @@ import {
   BALL_STOP_SPEED,
   DRIBBLE_OFFSET,
   DT,
-  FIELD_D,
-  FIELD_W,
   GK_DIVE_EXTRA_REACH,
   GK_EXTRA_REACH,
   GK_FAST_SHOT_SPEED,
@@ -42,6 +40,7 @@ import {
   endEastwinds,
   endGusts,
   endIcefields,
+  endLordProjectiles,
   endPortals,
   endSails,
   endSlashWindows,
@@ -51,12 +50,14 @@ import {
   updateAction,
   updateArrowships,
   updateBladeWaves,
+  updateDragonspears,
   updateEastwinds,
   updateGusts,
   updateIcefields,
   updatePortals,
   updateRiders,
   updateSails,
+  updateWindpuffs,
 } from './actions';
 import { attackDir, inOwnArea, goalMouth, isInGoalMouth } from './field';
 import { updateMatch } from './match';
@@ -111,8 +112,10 @@ export function step(state: GameState, inputs: InputFrame[]): GameState {
     updateEastwinds(state);
     updateArrowships(state);
     updateSails(state);
+    updateWindpuffs(state);
+    updateDragonspears(state);
     applyRampageBumps(state);
-    resolvePlayerCollisions(state.players);
+    resolvePlayerCollisions(state, state.players);
     clampArrowshipBarrier(state);
     carryPassengers(state);
     updatePossession(state);
@@ -131,6 +134,7 @@ export function step(state: GameState, inputs: InputFrame[]): GameState {
       endEastwinds(state);
       endArrowships(state);
       endSails(state);
+      endLordProjectiles(state);
     }
   }
 
@@ -146,7 +150,7 @@ export function step(state: GameState, inputs: InputFrame[]): GameState {
  * Pushes overlapping players apart in xy; the push is split by inverse mass (lighter moves more). Downed players are skipped.
  * An invincible player (rampaging or lunging) has infinite mass: it is not pushed, and an opponent takes the whole push.
  */
-function resolvePlayerCollisions(players: Player[]): void {
+function resolvePlayerCollisions(state: GameState, players: Player[]): void {
   for (let i = 0; i < len(players); i++) {
     for (let j = i + 1; j < len(players); j++) {
       const a = players[i];
@@ -173,8 +177,8 @@ function resolvePlayerCollisions(players: Player[]): void {
       a.y -= ny * pushA;
       b.x += nx * pushB;
       b.y += ny * pushB;
-      clampPlayerToField(a);
-      clampPlayerToField(b);
+      clampPlayerToField(state, a);
+      clampPlayerToField(state, b);
     }
   }
 }
@@ -187,8 +191,8 @@ function updatePossession(state: GameState): void {
   const p = state.players[ball.ownerIdx];
   const offset = p.radius + DRIBBLE_OFFSET;
   // Kept inside the field: an owned ball behind the goal line would score for the opponent on release.
-  ball.x = clamp(p.x + p.facingX * offset, BALL_RADIUS + 1, FIELD_W - BALL_RADIUS - 1);
-  ball.y = clamp(p.y + p.facingY * offset, 0, FIELD_D);
+  ball.x = clamp(p.x + p.facingX * offset, BALL_RADIUS + 1, state.field.w - BALL_RADIUS - 1);
+  ball.y = clamp(p.y + p.facingY * offset, 0, state.field.d);
   ball.z = 0;
   ball.vx = p.vx;
   ball.vy = p.vy;
@@ -204,7 +208,7 @@ function updateBall(state: GameState): void {
 
   if (b.special !== undefined) {
     // A special ball that ends this tick still gets the wall / goal-net handling below.
-    if (!advanceSpecial(state)) bounceOffWalls(b);
+    if (!advanceSpecial(state)) bounceOffWalls(state, b);
     return;
   }
 
@@ -233,27 +237,27 @@ function updateBall(state: GameState): void {
     b.vy = 0;
   }
 
-  bounceOffWalls(b);
+  bounceOffWalls(state, b);
 }
 
 /** Side walls and end walls (through the goal mouth into the net, otherwise bounce off). */
-function bounceOffWalls(b: Ball): void {
+function bounceOffWalls(state: GameState, b: Ball): void {
   // Side walls.
   if (b.y < 0) {
     b.y = -b.y;
     b.vy = -b.vy * WALL_BOUNCE;
-  } else if (b.y > FIELD_D) {
-    b.y = 2 * FIELD_D - b.y;
+  } else if (b.y > state.field.d) {
+    b.y = 2 * state.field.d - b.y;
     b.vy = -b.vy * WALL_BOUNCE;
   }
 
   // End walls: through the goal mouth into the net, otherwise bounce off.
-  if (b.x < 0 || b.x > FIELD_W) {
+  if (b.x < 0 || b.x > state.field.w) {
     const side: 0 | 1 = b.x < 0 ? 0 : 1;
-    const netX = side === 0 ? -GOAL_DEPTH : FIELD_W + GOAL_DEPTH;
+    const netX = side === 0 ? -GOAL_DEPTH : state.field.w + GOAL_DEPTH;
     const inNet = side === 0 ? b.x <= netX : b.x >= netX;
-    if (inNet || isInGoalMouth(b.y, b.z)) {
-      const mouth = goalMouth(side);
+    if (inNet || isInGoalMouth(state, b.y, b.z)) {
+      const mouth = goalMouth(state, side);
       b.x = netX;
       b.vx = 0;
       if (b.y < mouth.yMin) {
@@ -267,7 +271,7 @@ function bounceOffWalls(b: Ball): void {
       b.x = -b.x;
       b.vx = -b.vx * WALL_BOUNCE;
     } else {
-      b.x = 2 * FIELD_W - b.x;
+      b.x = 2 * state.field.w - b.x;
       b.vx = -b.vx * WALL_BOUNCE;
     }
   }
@@ -307,7 +311,7 @@ function advanceSpecial(state: GameState): boolean {
   if (resolveSpecialContacts(state, sp)) return false;
 
   const landed = sp.kind === 'lob' && b.z <= 0;
-  const outOfPlay = b.x < 0 || b.x > FIELD_W || b.y < 0 || b.y > FIELD_D;
+  const outOfPlay = b.x < 0 || b.x > state.field.w || b.y < 0 || b.y > state.field.d;
   if (sp.ticks > SPECIAL_MAX_TICKS || outOfPlay || landed) {
     if (landed) b.z = 0;
     b.special = undefined;
@@ -382,7 +386,7 @@ function tryTigerSwallow(state: GameState): boolean {
 function crossesOwnMouth(state: GameState, team: 0 | 1, b: Ball): boolean {
   if (b.vx === 0) return false;
   const side: 0 | 1 = attackDir(state, team) === 1 ? 0 : 1;
-  const mouth = goalMouth(side);
+  const mouth = goalMouth(state, side);
   const t = (mouth.x - b.x) / b.vx;
   if (t <= 0) return false;
   const y = b.y + b.vy * t;
@@ -441,7 +445,7 @@ function advanceTigerBall(state: GameState): boolean {
     b.tiger = undefined;
     return true;
   }
-  if (b.x < 0 || b.x > FIELD_W || b.y < 0 || b.y > FIELD_D) {
+  if (b.x < 0 || b.x > state.field.w || b.y < 0 || b.y > state.field.d) {
     b.tiger = undefined;
     return false;
   }
@@ -539,7 +543,7 @@ function parryFastBall(state: GameState, gk: Player): void {
  */
 function updatePickup(state: GameState): void {
   const ball = state.ball;
-  const inNet = ball.x < 0 || ball.x > FIELD_W;
+  const inNet = ball.x < 0 || ball.x > state.field.w;
   if (state.match.phase === 'play' && ball.ownerIdx === -1 && ball.special === undefined && ball.tiger === undefined && !inNet) {
     let best = -1;
     let bestDist = INF;
