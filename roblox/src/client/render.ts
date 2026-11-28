@@ -11,7 +11,8 @@ import { cheer } from "./worldCrowd";
 import type { MatchCtx } from "./matchUtil";
 import { initMatchWeapon, setMatchTrails, swingMatchWeapon } from "./matchWeapons";
 import { makeStaminaBar, StaminaBar } from "./staminaBar";
-import { applyRankGear } from "./rankGear";
+import { applyLook } from "./rankGear";
+import { lookForTier } from "shared/cosmetics";
 import { parseLordClass } from "shared/loadout";
 import { rankByTier } from "shared/rank";
 import { createOffscreenArrow, OffscreenArrow } from "./offscreenArrow";
@@ -615,9 +616,11 @@ export class Renderer {
 		const template = getAvatarTemplate(p.charId);
 		if (template !== undefined) {
 			avatar = makeAvatar(template, model, height, p.charId, colourOf(hex), p.weapon);
-			// The lord's rank gear (applied after makeAvatar scaled the model, so the parts are sized to the body).
+			// The lord's cosmetic gear (applied after makeAvatar scaled the model, so the parts are sized to the body). Without
+			// a look (older server) the rank tier's latest parts are worn.
 			const gearClass = p.lordClass !== undefined ? parseLordClass(p.lordClass) : undefined;
-			if (p.rankTier !== undefined && gearClass !== undefined) applyRankGear(avatar.model, p.rankTier, gearClass);
+			const look = p.look ?? (p.rankTier !== undefined ? lookForTier(p.rankTier) : undefined);
+			if (look !== undefined && gearClass !== undefined) applyLook(avatar.model, look, gearClass);
 			body.Transparency = 1;
 			head.Transparency = 1;
 			ring.Color = colourOf(human ? HUMAN_RING_COLOUR : hex);

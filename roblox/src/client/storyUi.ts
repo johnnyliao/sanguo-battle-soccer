@@ -33,6 +33,8 @@ import {
 } from "shared/story";
 import { lineupFor, type LineupSlot } from "shared/teamBuilder";
 import { nextRank, rankByTier, rankFor, xpToNext } from "shared/rank";
+import { unlockedBetween, type Slot } from "shared/cosmetics";
+import { renderLookPage, type LookActions } from "./lookUi";
 import { setBgm } from "./bgm";
 import { ART, ART4, portraitFor, skillIconFor, SKILL_ICON, WEAPON_ICON } from "./artIds";
 import { artButton, artCard, CARD_ASPECT, picture, type ArtSkin } from "./artUi";
@@ -591,6 +593,8 @@ export function createStoryUi(remotes: Remotes, hud: MatchHooks): { showMainMenu
 	let pendingClass = false;
 	let classAttempt = 0;
 	let campSlot: CampSlot | undefined;
+	/** The appearance page (camp → 外觀): the slot whose parts are listed. */
+	let lookSlot: Slot = "helmet";
 	/** Scripted scene on the dialog box (the recruit scene): its lines, the current one, and what runs when it ends. */
 	let scene: SceneLine[] | undefined;
 	let sceneIndex = 0;
@@ -681,6 +685,7 @@ export function createStoryUi(remotes: Remotes, hud: MatchHooks): { showMainMenu
 
 	// ---------- lord camp (from the stage map header; rebuilt on every profile change) ----------
 	const campScreen = screen(0.05, BG);
+	const lookScreen = screen(0.05, BG);
 
 	// ---------- stage map (rebuilt on every show) ----------
 	const mapScreen = screen(0.08, BG);
@@ -1105,6 +1110,8 @@ export function createStoryUi(remotes: Remotes, hud: MatchHooks): { showMainMenu
 		const back = bigArt(campScreen, "blue", "返回地圖", new UDim2(0.16, 0, 0, HEADER_H), new UDim2(0.02, 0, 0, campTop));
 		back.Activated.Connect(() => leaveCamp());
 		text(campScreen, "主公營帳", new UDim2(0.3, 0, 0, HEADER_H), new UDim2(0.35, 0, 0, campTop));
+		const lookBtn = bigArt(campScreen, "gold", "外觀", new UDim2(0.16, 0, 0, HEADER_H), new UDim2(0.8, 0, 0, campTop));
+		lookBtn.Activated.Connect(() => showLook());
 		// Everything below the header goes in body, so its fractions start under the header.
 		const body = frame(campScreen, new UDim2(1, 0, 1, -bodyTop), new UDim2(0, 0, 0, bodyTop), BLACK, 1);
 
@@ -1208,6 +1215,36 @@ export function createStoryUi(remotes: Remotes, hud: MatchHooks): { showMainMenu
 	const leaveCamp = (): void => {
 		campSlot = undefined;
 		showMap();
+	};
+
+	/** Appearance page (camp → 外觀). Rebuilt from the profile; taps send the cosmetic commands. */
+	const renderLook = (): void => {
+		const p = profile;
+		if (p === undefined || p.lordClass === undefined) return;
+		const actions: LookActions = {
+			onSelect: (slot) => {
+				lookSlot = slot;
+				renderLook();
+			},
+			onPick: (slot, id) => {
+				const cmd: Command = { cmd: "cosmetic", slot, id };
+				remotes.Command.FireServer(cmd);
+			},
+			onAuto: () => {
+				const cmd: Command = { cmd: "cosmeticAuto" };
+				remotes.Command.FireServer(cmd);
+			},
+			onBack: () => showCamp(),
+		};
+		renderLookPage(lookScreen, p, lookSlot, headerTopPx(), actions);
+	};
+
+	/** Opens the appearance page from the lord camp. */
+	const showLook = (): void => {
+		if (profile === undefined || profile.lordClass === undefined) return;
+		renderLook();
+		show(lookScreen);
+		setBgm("menu");
 	};
 
 	/**
@@ -1620,7 +1657,7 @@ export function createStoryUi(remotes: Remotes, hud: MatchHooks): { showMainMenu
 	};
 
 	/** Rank-up panel over the result: gold 「晉升！」, the new rank and the unlocked look. Grows and fades in over 1.5 s; a tap closes it. */
-	const showPromotion = (parent: Instance, toTier: number): void => {
+	const showPromotion = (parent: Instance, fromTier: number, toTier: number): void => {
 		const rank = rankByTier(toTier);
 		const panel = frame(parent, UDim2.fromScale(1, 1), UDim2.fromScale(0, 0), BLACK, 1);
 		panel.Name = "Promotion";
@@ -1641,9 +1678,17 @@ export function createStoryUi(remotes: Remotes, hud: MatchHooks): { showMainMenu
 		rankLabel.TextTransparency = 1;
 		const unlocked = text(panel, "新外觀已解鎖", UDim2.fromScale(0.5, 0.07), UDim2.fromScale(0.25, 0.6));
 		unlocked.TextTransparency = 1;
+		// Parts this rank unlocks: up to six names, then the count of the rest.
+		const gained = unlockedBetween(fromTier, toTier);
+		let names = "";
+		for (let i = 0; i < gained.size() && i < 6; i++) names += (i > 0 ? "、" : "") + gained[i].name;
+		const total = gained.size();
+		const partList = text(panel, total > 6 ? `${names} 等 ${total} 件` : names, UDim2.fromScale(0.8, 0.12), UDim2.fromScale(0.1, 0.68));
+		partList.TextWrapped = true;
+		partList.TextTransparency = 1;
 		const hint = text(panel, "點一下繼續", UDim2.fromScale(0.3, 0.05), UDim2.fromScale(0.35, 0.9));
 		hint.TextTransparency = 1;
-		for (const label of [rankLabel, unlocked, hint]) {
+		for (const label of [rankLabel, unlocked, partList, hint]) {
 			TweenService.Create(label, new TweenInfo(1.5), { TextTransparency: 0 }).Play();
 		}
 		sparkle(panel, 10);
@@ -1714,7 +1759,7 @@ export function createStoryUi(remotes: Remotes, hud: MatchHooks): { showMainMenu
 			nextBtn.Visible = r.won && r.stageId < LAST_STAGE_ID;
 			retryBtn.Visible = true;
 			mapBtn.Visible = true;
-			if (r.rankUp !== undefined) showPromotion(resultScreen, r.rankUp.to);
+			if (r.rankUp !== undefined) showPromotion(resultScreen, r.rankUp.from, r.rankUp.to);
 		});
 	};
 
@@ -1774,6 +1819,7 @@ export function createStoryUi(remotes: Remotes, hud: MatchHooks): { showMainMenu
 		refreshLordLabel();
 		if (pendingClass && classChoice !== undefined && updated.lordClass === classChoice) afterClass();
 		if (campScreen.Visible) renderCamp();
+		if (lookScreen.Visible) renderLook();
 		if (loadoutScreen.Visible) renderLoadout();
 		if (pendingStarter && updated.starter !== undefined) goToTutorialAfterStarter();
 	});

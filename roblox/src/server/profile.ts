@@ -3,6 +3,7 @@ import { defaultProfile, getProfileRemotes, parseLordWeapon, PROFILE_VERSION, ty
 import { isSpecialId, isWeaponId, parseLordClass, settleLoadout } from "shared/loadout";
 import { RAW_CHARACTERS } from "shared/game/data";
 import { LORD_MAX_LEVEL } from "shared/rank";
+import { cosmeticDef, SLOTS, type CosmeticsSave } from "shared/cosmetics";
 
 const DataStoreService = game.GetService("DataStoreService");
 const Players = game.GetService("Players");
@@ -39,6 +40,7 @@ function copyProfile(p: Profile): Profile {
 		cleared: [...p.cleared],
 		owned: { weapons: [...p.owned.weapons], specials: [...p.owned.specials] },
 		loadout: { ...p.loadout },
+		cosmetics: p.cosmetics === undefined ? undefined : { auto: p.cosmetics.auto, picks: { ...p.cosmetics.picks } },
 	};
 }
 
@@ -66,6 +68,24 @@ function asItemIds(v: unknown, valid: (id: string) => boolean): string[] {
 	const out: string[] = [];
 	for (const id of asStringArray(v)) {
 		if (valid(id) && !out.includes(id)) out.push(id);
+	}
+	return out;
+}
+
+/** Cosmetic save: auto (default on) and the hand picks that name a real part of their slot (or "none"). */
+function sanitizeCosmetics(raw: unknown): CosmeticsSave {
+	const out: CosmeticsSave = { auto: true, picks: {} };
+	if (!typeIs(raw, "table")) return out;
+	const r = raw as { [key: string]: unknown };
+	const auto = r.auto;
+	if (typeIs(auto, "boolean")) out.auto = auto;
+	const picks = r.picks;
+	if (typeIs(picks, "table")) {
+		const pk = picks as { [key: string]: unknown };
+		for (const slot of SLOTS) {
+			const id = pk[slot];
+			if (typeIs(id, "string") && (id === "none" || cosmeticDef(id)?.slot === slot)) out.picks[slot] = id;
+		}
 	}
 	return out;
 }
@@ -98,6 +118,7 @@ function sanitizeProfile(raw: unknown): Profile {
 			special: typeIs(loadout.special, "string") && isSpecialId(loadout.special) ? loadout.special : undefined,
 		},
 		lordWeapon: parseLordWeapon(r.lordWeapon),
+		cosmetics: sanitizeCosmetics(r.cosmetics),
 	};
 	settleLoadout(p);
 	return p;

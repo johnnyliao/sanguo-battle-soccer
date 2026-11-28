@@ -1,9 +1,10 @@
-// Lord gear by rank (R3b-1, 階級外觀): headwear, shoulder guards, chest plate, cape, back flags and glow, built from plain
-// Parts and welded to the lord model's R15 parts. Client only. Part sizes are taken from the model's own Head and
-// UpperTorso, so applyRankGear must run after makeAvatar has scaled the model. Every gear part is named "RankGear_…",
-// massless and non-colliding; a repeat call removes the old gear first. Placeholder look until R3b-2 (3D art).
+// Lord cosmetic gear (R3b-2, 外觀部件拼裝): builds the parts a look picks (shared/cosmetics.ts) from plain Parts welded to
+// the lord model's R15 parts. Client only. Part sizes are taken from the model's own Head and UpperTorso, so applyLook
+// must run after makeAvatar has scaled the model. Every gear part is named "RankGear_…", massless and non-colliding; a
+// repeat call removes the old gear first. Placeholder look until R3b-4 (3D art). The effect slots (beast, trail, orbit,
+// entrance, goal) are R3b-3 and are not built here.
 import type { LordClass } from "shared/game/data";
-import { rankByTier, type CapeKind, type HeadwearKind, type MetalKind } from "shared/rank";
+import type { LookMap, Slot } from "shared/cosmetics";
 
 const PREFIX = "RankGear_";
 /** Length of PREFIX (9). */
@@ -15,14 +16,12 @@ const CLASS_MAIN: Record<LordClass, Color3> = {
 	junshi: Color3.fromRGB(40, 130, 70),
 	tiebi: Color3.fromRGB(50, 90, 170),
 };
-const METAL_COLOUR: Record<MetalKind, Color3> = {
-	cloth: Color3.fromRGB(138, 138, 138),
-	leather: Color3.fromRGB(110, 72, 40),
-	iron: Color3.fromRGB(78, 82, 90),
-	silver: Color3.fromRGB(214, 218, 226),
-	gold: Color3.fromRGB(230, 180, 60),
-};
+const METAL_LEATHER = Color3.fromRGB(110, 72, 40);
+const METAL_IRON = Color3.fromRGB(78, 82, 90);
+const METAL_SILVER = Color3.fromRGB(214, 218, 226);
+const METAL_GOLD = Color3.fromRGB(230, 180, 60);
 const GOLD_TRIM = Color3.fromRGB(255, 200, 60);
+const EYE_GLOW = Color3.fromRGB(255, 240, 140);
 const PLUME_RED = Color3.fromRGB(198, 40, 40);
 const FLAG_POLE = Color3.fromRGB(90, 60, 30);
 const CAPE_BROWN = Color3.fromRGB(110, 68, 35);
@@ -40,6 +39,12 @@ function clearGear(model: Model): void {
 	for (const d of model.GetDescendants()) {
 		if (string.sub(d.Name, 1, PREFIX_LEN) === PREFIX) d.Destroy();
 	}
+}
+
+/** The part worn in a slot, or undefined when the slot is empty or set to "none". */
+function wornIn(look: LookMap, slot: Slot): string | undefined {
+	const id = look[slot];
+	return id === undefined || id === "none" ? undefined : id;
 }
 
 /** One gear part welded to `anchor` at `offset` (a CFrame in the anchor's local space). Returns the part. */
@@ -66,7 +71,7 @@ function addGear(anchor: BasePart, name: string, shape: Enum.PartType, size: Vec
 }
 
 /** Headwear on the Head: cloth = flat round headband, the others = a helmet (metal) with its extra piece. */
-function addHeadwear(head: BasePart, kind: HeadwearKind, metal: Color3, main: Color3): void {
+function addHeadwear(head: BasePart, kind: string, metal: Color3, main: Color3): void {
 	const s = head.Size;
 	const w = s.X;
 	const h = s.Y;
@@ -80,6 +85,10 @@ function addHeadwear(head: BasePart, kind: HeadwearKind, metal: Color3, main: Co
 	addGear(head, "Helmet", Enum.PartType.Ball, new Vector3(w * 1.18, h * 0.8, d * 1.18), new CFrame(0, h * 0.45, 0), metal);
 	if (kind === "plume") {
 		addGear(head, "Plume", Enum.PartType.Block, new Vector3(w * 0.12, h * 0.45, d * 0.9), new CFrame(0, h * 1.02, 0), PLUME_RED);
+	} else if (kind === "eyeglow") {
+		// A glowing slit across the eye opening on the front (-Z).
+		const eye = addGear(head, "EyeGlow", Enum.PartType.Block, new Vector3(w * 0.85, h * 0.12, d * 0.06), new CFrame(0, h * 0.45, -d * 0.62), EYE_GLOW);
+		eye.Material = Enum.Material.Neon;
 	} else if (kind === "phoenix") {
 		// Two wing flakes on the helmet sides, leaning outward.
 		for (const sign of [-1, 1]) {
@@ -95,31 +104,91 @@ function addHeadwear(head: BasePart, kind: HeadwearKind, metal: Color3, main: Co
 	}
 }
 
-/** Shoulder guards (two balls on the torso's upper corners) and the chest plate on the front (-Z). */
-function addArmour(torso: BasePart, metal: Color3, showShoulders: boolean): void {
-	const s = torso.Size;
-	const w = s.X;
-	const h = s.Y;
-	const d = s.Z;
-	if (showShoulders) {
-		for (const sign of [-1, 1]) {
-			const shoulder = new CFrame(sign * w * 0.5, h * 0.38, 0);
-			addGear(torso, sign < 0 ? "ShoulderL" : "ShoulderR", Enum.PartType.Ball, new Vector3(w * 0.5, h * 0.4, d * 0.7), shoulder, metal);
-		}
-	}
-	const plate = new CFrame(0, 0, -d * 0.56);
-	addGear(torso, "ChestPlate", Enum.PartType.Block, new Vector3(w * 0.92, h * 0.82, d * 0.12), plate, metal);
+/** Helmet part ids → the headwear kind and metal colour. */
+function addHelmet(head: BasePart, id: string, main: Color3): void {
+	if (id === "helmet_cloth") addHeadwear(head, "cloth", main, main);
+	else if (id === "helmet_leather") addHeadwear(head, "leather", METAL_LEATHER, main);
+	else if (id === "helmet_iron_plume") addHeadwear(head, "plume", METAL_IRON, main);
+	else if (id === "helmet_eyeglow") addHeadwear(head, "eyeglow", METAL_IRON, main);
+	else if (id === "helmet_phoenix") addHeadwear(head, "phoenix", METAL_GOLD, main);
+	else if (id === "helmet_dragon") addHeadwear(head, "dragon", METAL_GOLD, main);
 }
 
-/** Cape hanging from the back of the torso: short ends at the waist, the others reach the calf. */
-function addCape(torso: BasePart, kind: CapeKind): void {
+/** Chest plate on the front (-Z) of the torso. Cloth rags are a soft class-coloured panel. */
+function addChest(torso: BasePart, id: string, main: Color3): void {
+	const w = torso.Size.X;
+	const h = torso.Size.Y;
+	const d = torso.Size.Z;
+	if (id === "chest_rags") {
+		const rags = addGear(torso, "ChestRags", Enum.PartType.Block, new Vector3(w * 0.92, h * 0.6, d * 0.12), new CFrame(0, -h * 0.1, -d * 0.56), main);
+		rags.Material = Enum.Material.Fabric;
+		return;
+	}
+	let metal = METAL_GOLD;
+	if (id === "chest_leather") metal = METAL_LEATHER;
+	else if (id === "chest_iron") metal = METAL_IRON;
+	else if (id === "chest_silver_shiny" || id === "chest_silver_gold") metal = METAL_SILVER;
+	const plate = addGear(torso, "ChestPlate", Enum.PartType.Block, new Vector3(w * 0.92, h * 0.82, d * 0.12), new CFrame(0, 0, -d * 0.56), metal);
+	if (id === "chest_silver_shiny") {
+		plate.Material = Enum.Material.Metal;
+		plate.Reflectance = 0.3;
+	} else if (id === "chest_silver_gold") {
+		// Gold trim down both sides of the silver plate.
+		for (const sign of [-1, 1]) {
+			addGear(torso, sign < 0 ? "TrimL" : "TrimR", Enum.PartType.Block, new Vector3(w * 0.07, h * 0.82, d * 0.14), new CFrame(sign * w * 0.46, 0, -d * 0.56), GOLD_TRIM);
+		}
+	} else if (id === "chest_gold_thunder") {
+		plate.Material = Enum.Material.Metal;
+		plate.Reflectance = 0.2;
+		// A glowing thunder stripe slanting across the plate.
+		const bolt = addGear(torso, "Thunder", Enum.PartType.Block, new Vector3(w * 0.08, h * 0.7, d * 0.04), new CFrame(0, 0, -d * 0.63).mul(CFrame.Angles(0, 0, 0.35)), EYE_GLOW);
+		bolt.Material = Enum.Material.Neon;
+	} else if (id === "chest_dragon") {
+		// Gold trim along the bottom edge of the dragon plate.
+		addGear(torso, "DragonTrim", Enum.PartType.Block, new Vector3(w * 0.92, h * 0.1, d * 0.14), new CFrame(0, -h * 0.36, -d * 0.56), GOLD_TRIM);
+	}
+}
+
+/** Shoulder guards: two balls on the torso's upper corners, in leather, silver or gold. */
+function addShoulders(torso: BasePart, id: string): void {
+	const w = torso.Size.X;
+	const h = torso.Size.Y;
+	const d = torso.Size.Z;
+	let metal = METAL_GOLD;
+	if (id === "shoulder_leather") metal = METAL_LEATHER;
+	else if (id === "shoulder_silver") metal = METAL_SILVER;
+	const size = id === "shoulder_dragon" ? h * 0.5 : h * 0.4;
+	for (const sign of [-1, 1]) {
+		const shoulder = addGear(torso, sign < 0 ? "ShoulderL" : "ShoulderR", Enum.PartType.Ball, new Vector3(w * 0.5, size, d * 0.7), new CFrame(sign * w * 0.5, h * 0.38, 0), metal);
+		if (id === "shoulder_lion" && sign > 0) {
+			// Lion shoulder puffs steam (one emitter is enough).
+			const steam = new Instance("ParticleEmitter");
+			steam.Texture = "rbxasset://textures/particles/smoke_main.dds";
+			steam.Color = new ColorSequence(Color3.fromRGB(255, 255, 255));
+			steam.Size = new NumberSequence(0.6);
+			steam.Transparency = new NumberSequence(0.5);
+			steam.Lifetime = new NumberRange(0.6, 1);
+			steam.Rate = 4;
+			steam.Speed = new NumberRange(1, 2);
+			steam.SpreadAngle = new Vector2(20, 20);
+			steam.Parent = shoulder;
+		}
+	}
+}
+
+/**
+ * Cape hanging from the back of the torso: short ends at the waist, the others reach the calf. kind: short = brown,
+ * long = red, gold = red with gold trim, dragon = gold cloth. flame adds a class-coloured fire along the bottom edge.
+ */
+function addCape(torso: BasePart, kind: string, main: Color3, flame: boolean): void {
 	const s = torso.Size;
 	const w = s.X;
 	const h = s.Y;
 	const d = s.Z;
-	const length = kind === "short" ? h * 1.2 : h * 3.2;
+	const short = kind === "short";
+	const length = short ? h * 1.2 : h * 3.2;
 	const top = h * 0.45;
-	const cloth = kind === "short" ? CAPE_BROWN : kind === "dragon" ? CAPE_GOLD : CAPE_RED;
+	const cloth = short ? CAPE_BROWN : kind === "dragon" ? CAPE_GOLD : CAPE_RED;
 	const centre = new CFrame(0, top - length / 2, d * 0.5 + d * 0.04);
 	addGear(torso, "Cape", Enum.PartType.Block, new Vector3(w * 0.85, length, d * 0.06), centre, cloth);
 	if (kind === "gold") {
@@ -130,6 +199,22 @@ function addCape(torso: BasePart, kind: CapeKind): void {
 			const edge = new CFrame(sign * w * 0.425, top - length / 2, d * 0.5 + d * 0.04);
 			addGear(torso, sign < 0 ? "CapeTrimL" : "CapeTrimR", Enum.PartType.Block, new Vector3(w * 0.05, length, d * 0.08), edge, GOLD_TRIM);
 		}
+	}
+	if (flame) {
+		// An invisible anchor on the bottom edge carries the fire emitter.
+		const anchor = addGear(torso, "CapeFlame", Enum.PartType.Block, new Vector3(w * 0.85, h * 0.1, d * 0.1), new CFrame(0, top - length, d * 0.5 + d * 0.04), main);
+		anchor.Transparency = 1;
+		const fire = new Instance("ParticleEmitter");
+		fire.Texture = "rbxasset://textures/particles/fire_main.dds";
+		fire.Color = new ColorSequence(main);
+		fire.Size = new NumberSequence(0.6);
+		fire.Lifetime = new NumberRange(0.5, 0.9);
+		fire.Rate = 20;
+		fire.Speed = new NumberRange(0.5, 1.5);
+		fire.SpreadAngle = new Vector2(25, 25);
+		fire.LightEmission = 0.6;
+		fire.EmissionDirection = Enum.NormalId.Bottom;
+		fire.Parent = anchor;
 	}
 }
 
@@ -151,41 +236,50 @@ function addFlags(torso: BasePart, count: number, main: Color3): void {
 	}
 }
 
-/** Gold light and a few gold sparkles around the torso. */
-function addGlow(torso: BasePart): void {
-	const glow = addGear(torso, "Glow", Enum.PartType.Block, new Vector3(0.2, 0.2, 0.2), new CFrame(0, 0, 0), GOLD_TRIM);
-	glow.Transparency = 1;
-	const light = new Instance("PointLight");
-	light.Color = GOLD_TRIM;
-	light.Brightness = 1;
-	light.Range = torso.Size.Y * 4;
-	light.Parent = glow;
-	const sparks = new Instance("ParticleEmitter");
-	sparks.Texture = "rbxasset://textures/particles/sparkles_main.dds";
-	sparks.Color = new ColorSequence(GOLD_TRIM);
-	sparks.Size = new NumberSequence(0.4);
-	sparks.Transparency = new NumberSequence(0.2);
-	sparks.Lifetime = new NumberRange(0.8, 1.4);
-	sparks.Rate = 5;
-	sparks.Speed = new NumberRange(0.5, 1.5);
-	sparks.SpreadAngle = new Vector2(180, 180);
-	sparks.LightEmission = 1;
-	sparks.Parent = glow;
+/** Wings: two thin neon sheets on the back, opening out to each side. */
+function addWings(torso: BasePart, colour: Color3, transparency: number): void {
+	const w = torso.Size.X;
+	const h = torso.Size.Y;
+	const d = torso.Size.Z;
+	const backZ = d * 0.5 + d * 0.2;
+	for (const sign of [-1, 1]) {
+		const wing = addGear(
+			torso,
+			sign < 0 ? "WingBackL" : "WingBackR",
+			Enum.PartType.Block,
+			new Vector3(w * 1.1, h * 1.5, d * 0.04),
+			new CFrame(sign * w * 0.75, h * 0.3, backZ).mul(CFrame.Angles(0, sign * 0.6, 0)),
+			colour,
+		);
+		wing.Material = Enum.Material.Neon;
+		wing.Transparency = transparency;
+	}
 }
 
-/** Puts the gear for a rank tier on a lord model (R15 rig: Head and UpperTorso must exist). */
-export function applyRankGear(model: Model, tier: number, lordClass: LordClass): void {
+/** Puts the look's gear on a lord model (R15 rig: Head and UpperTorso must exist). Empty slots and "none" add nothing. */
+export function applyLook(model: Model, look: LookMap, lordClass: LordClass): void {
 	clearGear(model);
-	const rank = rankByTier(tier);
 	const head = model.FindFirstChild("Head") as BasePart | undefined;
 	const torso = model.FindFirstChild("UpperTorso") as BasePart | undefined;
 	if (head === undefined || torso === undefined) return;
 	const main = CLASS_MAIN[lordClass];
-	const metal = METAL_COLOUR[rank.metal];
 
-	addHeadwear(head, rank.headwear, metal, main);
-	addArmour(torso, metal, rank.metal !== "cloth");
-	if (rank.cape !== "none") addCape(torso, rank.cape);
-	if (rank.backFlags > 0) addFlags(torso, rank.backFlags, main);
-	if (rank.glow) addGlow(torso);
+	const helmet = wornIn(look, "helmet");
+	if (helmet !== undefined) addHelmet(head, helmet, main);
+	const chest = wornIn(look, "chest");
+	if (chest !== undefined) addChest(torso, chest, main);
+	const shoulder = wornIn(look, "shoulder");
+	if (shoulder !== undefined) addShoulders(torso, shoulder);
+	const cape = wornIn(look, "cape");
+	if (cape === "cape_brown") addCape(torso, "short", main, false);
+	else if (cape === "cape_red") addCape(torso, "long", main, false);
+	else if (cape === "cape_flame") addCape(torso, "long", main, true);
+	else if (cape === "cape_gold") addCape(torso, "gold", main, false);
+	else if (cape === "cape_dragon") addCape(torso, "dragon", main, false);
+	const back = wornIn(look, "back");
+	if (back === "back_pennant") addFlags(torso, 1, main);
+	else if (back === "back_flags2") addFlags(torso, 2, main);
+	else if (back === "back_flags4") addFlags(torso, 4, main);
+	else if (back === "back_wings_aura") addWings(torso, main, 0.35);
+	else if (back === "back_wings_gold") addWings(torso, GOLD_TRIM, 0.2);
 }

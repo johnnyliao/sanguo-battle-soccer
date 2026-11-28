@@ -17,6 +17,7 @@ import {
 } from "shared/story";
 import { parseLordWeapon } from "shared/profileTypes";
 import { LORD_MAX_LEVEL, rankFor, xpToNext } from "shared/rank";
+import { cosmeticDef, isCosmeticUnlocked, isSlot, resolveLook, type Slot } from "shared/cosmetics";
 import {
 	chooseClassGear,
 	classPool,
@@ -169,6 +170,7 @@ function startStory(player: Player, raw: unknown): void {
 		lordSetup.lordLevel = profile.lordLevel;
 		lordSetup.rankTier = rankFor(profile.lordLevel).tier;
 		lordSetup.lordClass = lordClass;
+		lordSetup.look = resolveLook(profile);
 	}
 	const inst = new MatchInstance(player, state, seed, humanIdx, setup, (done: MatchInstance) => {
 		task.spawn(finishStory, done, stage);
@@ -315,6 +317,41 @@ function chooseWeapon(player: Player, rawWeapon: unknown): void {
 	print(`[profile] weapon chosen ${player.Name} ${id}`);
 }
 
+/** Picks a cosmetic part for one slot: an unlocked part of that slot, or "none". Outside stories. */
+function cosmetic(player: Player, rawSlot: unknown, rawId: unknown): void {
+	if (!isSlot(rawSlot) || !typeIs(rawId, "string")) {
+		warn(`[profile] cosmetic rejected from ${player.Name}`);
+		return;
+	}
+	const slot: Slot = rawSlot;
+	const id: string = rawId;
+	if (storyRunning(player)) {
+		warn(`[profile] cosmetic ignored, story match running: ${player.Name}`);
+		return;
+	}
+	const p = loadProfile(player);
+	const tier = rankFor(p.lordLevel).tier;
+	if (id !== "none" && (cosmeticDef(id)?.slot !== slot || !isCosmeticUnlocked(id, tier))) {
+		warn(`[profile] cosmetic rejected ${player.Name} ${slot} ${id}`);
+		return;
+	}
+	updateProfile(player, (q) => {
+		if (q.cosmetics === undefined) q.cosmetics = { auto: true, picks: {} };
+		q.cosmetics.picks[slot] = id;
+	});
+}
+
+/** "自動穿最新": auto on and every hand pick cleared. Outside stories. */
+function cosmeticAuto(player: Player): void {
+	if (storyRunning(player)) {
+		warn(`[profile] cosmeticAuto ignored, story match running: ${player.Name}`);
+		return;
+	}
+	updateProfile(player, (q) => {
+		q.cosmetics = { auto: true, picks: {} };
+	});
+}
+
 function chooseStarter(player: Player, rawCountry: unknown, rawStarter: unknown): void {
 	const country = parseCountry(rawCountry);
 	if (country === undefined || !typeIs(rawStarter, "string") || !isStarterFor(country, rawStarter)) {
@@ -366,6 +403,10 @@ remotes.Command.OnServerEvent.Connect((player, raw) => {
 		chooseClass(player, r.lordClass);
 	} else if (r.cmd === "equip") {
 		equip(player, r.slot, r.id);
+	} else if (r.cmd === "cosmetic") {
+		cosmetic(player, r.slot, r.id);
+	} else if (r.cmd === "cosmeticAuto") {
+		cosmeticAuto(player);
 	}
 });
 

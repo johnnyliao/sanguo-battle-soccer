@@ -1,6 +1,7 @@
 // Persistent player profile (save data) shared shape and remotes. Server owns the data; clients read it via GetProfile.
 import type { LordClass } from "shared/game/data";
 import type { LordWeapon } from "shared/net";
+import type { CosmeticsSave } from "shared/cosmetics";
 const ReplicatedStorage = game.GetService("ReplicatedStorage");
 const RunService = game.GetService("RunService");
 
@@ -34,6 +35,8 @@ export interface Profile {
 	lordClass?: LordClass;
 	owned: OwnedItems;
 	loadout: Loadout;
+	/** Lord cosmetic parts (R3b-2): per-slot picks and the auto flag. Undefined in old saves (read as auto with no picks). */
+	cosmetics?: CosmeticsSave;
 	/** Old save field (version 1). Read only by the migration; nothing writes it any more. */
 	lordWeapon?: LordWeapon;
 }
@@ -54,6 +57,7 @@ export function defaultProfile(): Profile {
 		cleared: [],
 			owned: { weapons: [], specials: [] },
 			loadout: {},
+		cosmetics: { auto: true, picks: {} },
 	};
 }
 

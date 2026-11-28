@@ -2,6 +2,7 @@
 // The server is authoritative: it runs shared/game/sim at 60Hz; clients only send raw buttons
 // and render the snapshots they receive.
 import type { LordClass } from "shared/game/data";
+import type { LookMap, Slot } from "shared/cosmetics";
 const ReplicatedStorage = game.GetService("ReplicatedStorage");
 const RunService = game.GetService("RunService");
 
@@ -54,7 +55,11 @@ export type Command =
 	 *  new class's pool. */
 	| { cmd: "chooseClass"; lordClass: LordClass }
 	/** Equips an owned item: slot weapon (a lord weapon id) or special (a special id in the class pool). Outside story matches. */
-	| { cmd: "equip"; slot: "weapon" | "special"; id: string };
+	| { cmd: "equip"; slot: "weapon" | "special"; id: string }
+	/** Picks a cosmetic part for one slot (id "none" = wear nothing there). Refused during a story match. */
+	| { cmd: "cosmetic"; slot: Slot; id: string }
+	/** Turns auto on and clears every hand pick ("自動穿最新"). Refused during a story match. */
+	| { cmd: "cosmeticAuto" };
 
 /** The lord's weapon (matches the sim's CharacterDef.weapon). */
 export type LordWeapon = "sword" | "spear" | "fan";
@@ -76,6 +81,7 @@ export interface SetupPlayer {
 	lordLevel?: number; // only on the lord (story): level, for the title over his head
 	rankTier?: number; // only on the lord (story): rank tier 1..11 (shared/rank.ts), drives the gear look and title
 	lordClass?: string; // only on the lord (story): class (流派), drives the gear colours
+	look?: LookMap; // only on the lord (story): the cosmetic parts worn (shared/cosmetics.ts resolveLook)
 }
 
 /** Sent once when a match starts. */
