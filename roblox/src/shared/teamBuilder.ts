@@ -90,7 +90,8 @@ export function lordDef(userId: number, displayName: string, country: Country, p
 	const cls = profile.lordClass;
 	if (cls === undefined) error("teamBuilder: lord has no class");
 	const equipWeapon = effectiveWeapon(cls, profile.loadout.weapon);
-	const specialId = effectiveSpecial(cls, profile.loadout.special);
+	const specialId = effectiveSpecial(cls, profile.loadout.special, profile.owned.specials);
+	const general = RAW_CHARACTERS.find((d) => d.id === specialId);
 	return {
 		id: `lord_${userId}`,
 		name: displayName,
@@ -100,12 +101,16 @@ export function lordDef(userId: number, displayName: string, country: Country, p
 		stats: lordStatsFor(cls, profile.lordLevel, equipWeapon),
 		weapon: attackFor(equipWeapon, cls),
 		lordClass: cls,
-		special: {
-			name: lordSpecialName(specialId) ?? specialId,
-			kind: "straight",
-			mode: specialId as CharacterDef["special"]["mode"],
-			noBall: true,
-		},
+		// A general's special is copied whole (kind, mode, noBall, bumpPct, name); a lord special keeps the straight shot.
+		special:
+			general !== undefined
+				? { ...general.special }
+				: {
+						name: lordSpecialName(specialId) ?? specialId,
+						kind: "straight",
+						mode: specialId as CharacterDef["special"]["mode"],
+						noBall: true,
+					},
 	};
 }
 

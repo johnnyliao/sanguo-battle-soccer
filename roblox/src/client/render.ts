@@ -79,6 +79,8 @@ interface PlayerView {
 	trailsOn: boolean;
 	trailUntil: number;
 	charId: string;
+	/** Sim mode of the special in use (see SetupPlayer.specialMode). */
+	specialMode: string;
 	team: number;
 }
 
@@ -258,6 +260,7 @@ export class Renderer {
 				return v.foot.add(new Vector3(v.fx * 1.5, 5.5, v.fz * 1.5));
 			},
 			charOf: (i) => this.players[i]?.charId ?? "",
+			specialOf: (i) => this.players[i]?.specialMode ?? "",
 			teamOf: (i) => this.players[i]?.team ?? -1,
 			actOf: (i) => this.players[i]?.act ?? "normal",
 			stunned: (i) => this.players[i]?.stunned ?? false,
@@ -682,6 +685,7 @@ export class Renderer {
 			trailsOn: false,
 			trailUntil: 0,
 			charId: p.charId,
+			specialMode: p.specialMode ?? "",
 			team: p.team,
 		};
 	}

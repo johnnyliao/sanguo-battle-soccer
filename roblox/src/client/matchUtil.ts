@@ -17,6 +17,8 @@ export interface MatchCtx {
 	model: (idx: number) => Model | undefined;
 	hand: (idx: number) => Vector3;
 	charOf: (idx: number) => string;
+	/** Sim mode of the player's special in use ("" when none). */
+	specialOf: (idx: number) => string;
 	teamOf: (idx: number) => number;
 	actOf: (idx: number) => string;
 	stunned: (idx: number) => boolean;

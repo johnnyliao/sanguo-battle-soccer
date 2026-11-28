@@ -152,9 +152,16 @@ export function isEquippableWeapon(id: string): boolean {
 	return LORD_WEAPON_IDS.includes(id);
 }
 
-/** Specials that can be equipped now (general specials come in phase P3). */
+/** Specials that can be equipped now: the lord specials and any general's own special. The class pool and ownership are
+ *  checked by isLegalSpecial. */
 export function isEquippableSpecial(id: string): boolean {
-	return LORD_SPECIAL_IDS.includes(id);
+	return LORD_SPECIAL_IDS.includes(id) || isGeneralId(id);
+}
+
+/** A special may be in use: equippable now, in the class pool, and owned (the lord specials count as owned). */
+export function isLegalSpecial(cls: LordClass, id: string, owned: string[]): boolean {
+	if (!isEquippableSpecial(id) || !classPool(cls).includes(id)) return false;
+	return LORD_SPECIAL_IDS.includes(id) || owned.includes(id);
 }
 
 /** Basic attack type of a lord weapon id, or undefined for anything else. */
@@ -162,9 +169,12 @@ export function lordWeaponAttack(id: string): LordWeapon | undefined {
 	return LORD_WEAPON_ATTACK[id];
 }
 
-/** Special name of a lord special id, or undefined for anything else. */
+/** Special name of a lord special id or of a general's special (the general's own name), or undefined for anything else. */
 export function lordSpecialName(id: string): string | undefined {
-	return LORD_SPECIAL_NAMES[id];
+	const lordName = LORD_SPECIAL_NAMES[id];
+	if (lordName !== undefined) return lordName;
+	const def: CharacterDef | undefined = RAW_CHARACTERS.find((d) => d.id === id);
+	return def === undefined ? undefined : def.special.name;
 }
 
 /** artIds SKILL_ICON key of each lord special: the icon of its weapon. */
@@ -176,11 +186,17 @@ const LORD_SPECIAL_ICON: Record<string, string> = {
 
 /**
  * artIds SKILL_ICON key of the special in use. A lord's special is keyed by its weapon icon (whirl -> lord_sword, ...); a
- * general's own special by the general's charId. mode is the special's sim mode (for a lord, the lord special id).
+ * lord using a general's special is keyed by that general's charId (found by the special's sim mode, unique per general);
+ * a general's own special by the general's charId. mode is the special's sim mode.
  * undefined for soldiers and anything without an icon.
  */
 export function specialIconKey(charId: string, mode: string): string | undefined {
-	if (charId.sub(1, 5) === "lord_") return LORD_SPECIAL_ICON[mode];
+	if (charId.sub(1, 5) === "lord_") {
+		const weaponIcon = LORD_SPECIAL_ICON[mode];
+		if (weaponIcon !== undefined) return weaponIcon;
+		const owner: CharacterDef | undefined = RAW_CHARACTERS.find((d) => d.special.mode === mode);
+		return owner === undefined ? undefined : owner.id;
+	}
 	return isGeneralId(charId) ? charId : undefined;
 }
 
@@ -304,9 +320,10 @@ export function effectiveWeapon(cls: LordClass, weaponId: string | undefined): s
 	return weaponId !== undefined && isEquippableWeapon(weaponId) ? weaponId : CLASS_INFO[cls].starterWeapon;
 }
 
-/** The special that is really in use: the equipped special when it can be equipped now, else the class starter special. */
-export function effectiveSpecial(cls: LordClass, specialId: string | undefined): string {
-	return specialId !== undefined && isEquippableSpecial(specialId) ? specialId : CLASS_INFO[cls].starterSpecial;
+/** The special that is really in use: the equipped special when it is legal for the class and owned (see isLegalSpecial),
+ *  else the class starter special. */
+export function effectiveSpecial(cls: LordClass, specialId: string | undefined, owned: string[]): string {
+	return specialId !== undefined && isLegalSpecial(cls, specialId, owned) ? specialId : CLASS_INFO[cls].starterSpecial;
 }
 
 /** Lord weapon attack type of the weapon in use (see effectiveWeapon). */

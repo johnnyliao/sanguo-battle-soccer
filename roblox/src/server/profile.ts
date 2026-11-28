@@ -1,9 +1,11 @@
 // Server-side save data for player profiles. DataStore with in-memory fallback (Studio / unpublished place).
 import { defaultProfile, getProfileRemotes, parseLordWeapon, PROFILE_VERSION, type Country, type Profile } from "shared/profileTypes";
 import { isSpecialId, isWeaponId, parseLordClass, settleLoadout } from "shared/loadout";
+import { RAW_CHARACTERS } from "shared/game/data";
 
 const DataStoreService = game.GetService("DataStoreService");
 const Players = game.GetService("Players");
+const RunService = game.GetService("RunService");
 
 const STORE_NAME = "SanguoProfile_v1";
 const ATTEMPTS = 3;
@@ -163,10 +165,29 @@ function fetchProfile(key: string): { profile: Profile; failed: boolean } {
 	return { profile: m !== undefined ? sanitizeProfile(m) : defaultProfile(), failed: false };
 }
 
+/**
+ * Studio only: a Player with attribute DebugGrantAll = true gets every general's charId in owned.specials and owned.weapons.
+ * The attribute is cleared, then the change is marked dirty and pushed to the client like any other change.
+ */
+function applyDebugGrant(player: Player, p: Profile): void {
+	if (!RunService.IsStudio() || player.GetAttribute("DebugGrantAll") !== true) return;
+	player.SetAttribute("DebugGrantAll", undefined);
+	for (const d of RAW_CHARACTERS) {
+		if (!p.owned.specials.includes(d.id)) p.owned.specials.push(d.id);
+		if (!p.owned.weapons.includes(d.id)) p.owned.weapons.push(d.id);
+	}
+	dirty.add(player);
+	remotes.ProfileChanged.FireClient(player, p);
+	print(`[profile] debug grant all ${player.Name}`);
+}
+
 /** Loads (or returns the cached) profile for a player. Yields while loading. */
 export function loadProfile(player: Player): Profile {
 	const cached = cache.get(player);
-	if (cached !== undefined) return cached;
+	if (cached !== undefined) {
+		applyDebugGrant(player, cached);
+		return cached;
+	}
 	while (loading.has(player)) task.wait(0.1);
 	const again = cache.get(player);
 	if (again !== undefined) return again;
@@ -178,6 +199,7 @@ export function loadProfile(player: Player): Profile {
 	// Player left while loading: hand back the data but do not cache it (nothing would release it).
 	if (player.Parent === undefined) return fetched.profile;
 	cache.set(player, fetched.profile);
+	applyDebugGrant(player, fetched.profile);
 	return fetched.profile;
 }
 

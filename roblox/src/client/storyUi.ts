@@ -419,7 +419,7 @@ function campOptions(p: Profile, cls: LordClass, slot: CampSlot): CampOption[] {
 			name: specialItemName(id),
 			detail: "可裝備",
 			icon: specialIcon(id),
-			selected: effectiveSpecial(cls, p.loadout.special) === id,
+			selected: effectiveSpecial(cls, p.loadout.special, p.owned.specials) === id,
 			locked,
 		});
 	}
@@ -1138,7 +1138,7 @@ export function createStoryUi(remotes: Remotes, hud: MatchHooks): { showMainMenu
 		});
 
 		const weaponNow = effectiveWeapon(cls, p.loadout.weapon);
-		const specialNow = effectiveSpecial(cls, p.loadout.special);
+		const specialNow = effectiveSpecial(cls, p.loadout.special, p.owned.specials);
 		if (campSlot === undefined) {
 			const rows: { key: CampSlot; label: string; value: string; icon: string | undefined }[] = [
 				{ key: "class", label: "流派", value: `${info.name}・${info.position}`, icon: CLASS_EMBLEM[cls] },
@@ -1494,7 +1494,7 @@ export function createStoryUi(remotes: Remotes, hud: MatchHooks): { showMainMenu
 		});
 
 		const weaponNow = effectiveWeapon(cls, p.loadout.weapon);
-		const specialNow = effectiveSpecial(cls, p.loadout.special);
+		const specialNow = effectiveSpecial(cls, p.loadout.special, p.owned.specials);
 		const picks: { key: CampSlot; label: string; value: string; icon: string | undefined }[] = [
 			{ key: "weapon", label: "武器", value: weaponItemName(weaponNow), icon: weaponArt(weaponNow) },
 			{ key: "special", label: "大招", value: specialItemName(specialNow), icon: specialIcon(specialNow) },

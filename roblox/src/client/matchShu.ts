@@ -66,8 +66,8 @@ export class ShuFx implements SpecialModule {
 	}
 
 	/** Special activation: Zhang Fei inhales (energy rings pulled in) just before the roar rings. */
-	special(idx: number, charId: string): void {
-		if (charId !== "zhangfei") return;
+	special(idx: number, _charId: string): void {
+		if (this.c.specialOf(idx) !== "roar") return;
 		const me = this.c.foot(idx);
 		fx.ring(higher(me, 0.5), 9, 1.5, 0.3, ORANGE, 0.8, 0.5);
 		sheet("zhangfei.charge", higher(me, 5), 9, 0.5, ORANGE);
@@ -338,7 +338,7 @@ export class ShuFx implements SpecialModule {
 	}
 
 	mount(idx: number, foot: Vector3, facing: Vector3, sp: string): Mount | undefined {
-		const riding = sp === "ride" && this.c.charOf(idx) === "guanyu";
+		const riding = sp === "ride" && this.c.specialOf(idx) === "ride";
 		let bike = this.bikes.get(idx);
 		if (!riding) {
 			if (bike !== undefined) {

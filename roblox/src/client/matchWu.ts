@@ -512,7 +512,7 @@ export class WuFx implements SpecialModule {
 	}
 
 	mount(idx: number, foot: Vector3, facing: Vector3, sp: string): Mount | undefined {
-		const sailing = sp === "sail" && this.c.charOf(idx) === "sunce";
+		const sailing = sp === "sail" && this.c.specialOf(idx) === "sail";
 		let boat = this.boats.get(idx);
 		if (sailing) {
 			if (boat === undefined) {

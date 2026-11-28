@@ -72,6 +72,7 @@ export interface SetupPlayer {
 	weapon?: LordWeapon; // only on the lord
 	specialName?: string; // name of the special in use (the lord's equipped special, or a general's own)
 	specialIcon?: string; // artIds SKILL_ICON key of that special (lord specials map to their weapon icon; general = charId)
+	specialMode?: string; // sim mode of the special in use (e.g. "roar" for Zhang Fei, also when a lord equips it)
 }
 
 /** Sent once when a match starts. */

@@ -86,6 +86,7 @@ function buildSetup(
 			weapon: p.weapon,
 			specialName: p.specialName,
 			specialIcon: specialIconKey(p.charId, p.specialMode),
+			specialMode: p.specialMode,
 		}),
 	);
 	return {
@@ -171,7 +172,7 @@ function startStory(player: Player, raw: unknown): void {
 	print(`[story] start ${player.Name} stage ${stage.id} teamSize ${stage.teamSize}`);
 	print(
 		`[story] lord loadout ${lordClass} ${effectiveWeapon(lordClass, profile.loadout.weapon)} ` +
-			`${effectiveSpecial(lordClass, profile.loadout.special)}`,
+			`${effectiveSpecial(lordClass, profile.loadout.special, profile.owned.specials)}`,
 	);
 }
 
