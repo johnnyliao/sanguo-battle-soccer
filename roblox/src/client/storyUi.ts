@@ -32,6 +32,7 @@ import {
 	type StageDef,
 } from "shared/story";
 import { lineupFor, type LineupSlot } from "shared/teamBuilder";
+import { nextRank, rankByTier, rankFor, xpToNext } from "shared/rank";
 import { setBgm } from "./bgm";
 import { ART, ART4, portraitFor, skillIconFor, SKILL_ICON, WEAPON_ICON } from "./artIds";
 import { artButton, artCard, CARD_ASPECT, picture, type ArtSkin } from "./artUi";
@@ -256,24 +257,20 @@ function breathe(scale: UIScale): void {
 	});
 }
 
-function needFor(level: number): number {
-	return 100 * level;
-}
-
 /** Share of the level bar filled by carry-over xp (full at the level cap). */
 function xpFraction(level: number, xp: number): number {
 	if (level >= LORD_MAX_LEVEL) return 1;
-	return math.clamp(xp / needFor(level), 0, 1);
+	return math.clamp(xp / xpToNext(level), 0, 1);
 }
 
 /** Carry-over xp shown at a level: always 0..need of that level (never negative, never above the bar). */
 function carriedXp(level: number, xp: number): number {
-	return math.clamp(xp, 0, needFor(level));
+	return math.clamp(xp, 0, xpToNext(level));
 }
 
 /** Result / header caption under the xp bar: level and xp into the level, e.g. "Lv 2 → 經驗 30/200". */
 function barCaption(level: number, xp: number): string {
-	return level >= LORD_MAX_LEVEL ? `Lv ${level} → 已滿級` : `Lv ${level} → 經驗 ${carriedXp(level, xp)}/${needFor(level)}`;
+	return level >= LORD_MAX_LEVEL ? `Lv ${level} → 已滿級` : `Lv ${level} → 經驗 ${carriedXp(level, xp)}/${xpToNext(level)}`;
 }
 
 /**
@@ -284,8 +281,8 @@ function carryAfter(r: StoryResult, startXp: number, p: Profile | undefined): nu
 	if (p !== undefined && p.lordLevel === r.levelAfter) return carriedXp(r.levelAfter, p.lordXp);
 	let rest = startXp + r.xp;
 	let lv = r.levelBefore;
-	while (lv < r.levelAfter && rest >= needFor(lv)) {
-		rest -= needFor(lv);
+	while (lv < r.levelAfter && rest >= xpToNext(lv)) {
+		rest -= xpToNext(lv);
 		lv++;
 	}
 	return carriedXp(lv, rest);
@@ -1140,13 +1137,29 @@ export function createStoryUi(remotes: Remotes, hud: MatchHooks): { showMainMenu
 		const weaponNow = effectiveWeapon(cls, p.loadout.weapon);
 		const specialNow = effectiveSpecial(cls, p.loadout.special, p.owned.specials);
 		if (campSlot === undefined) {
+			// Rank strip (階級): the current rank and level, the next rank, and the xp bar to the next level.
+			const rankBox = frame(body, UDim2.fromScale(0.58, 0.14), UDim2.fromScale(0.4, 0.01), PANEL, 0.1);
+			rounded(rankBox, 0.08);
+			const rankNow = rankFor(p.lordLevel);
+			const upper = nextRank(p.lordLevel);
+			const rankName = text(rankBox, `${rankNow.name}　Lv ${p.lordLevel}`, UDim2.fromScale(0.94, 0.3), UDim2.fromScale(0.03, 0.04));
+			rankName.TextXAlignment = Enum.TextXAlignment.Left;
+			rankName.TextColor3 = GOLD;
+			const upperLine = upper === undefined ? "已是最高階" : `下一階：${upper.name}（Lv.${upper.minLevel}）`;
+			const upperText = text(rankBox, upperLine, UDim2.fromScale(0.94, 0.24), UDim2.fromScale(0.03, 0.36));
+			upperText.TextXAlignment = Enum.TextXAlignment.Left;
+			const rankXp = xpBar(rankBox, UDim2.fromScale(0.3, 0.2), UDim2.fromScale(0.03, 0.66));
+			rankXp.fill.Size = UDim2.fromScale(xpFraction(p.lordLevel, p.lordXp), 1);
+			const xpLine = p.lordLevel >= LORD_MAX_LEVEL ? "已滿級" : `經驗 ${carriedXp(p.lordLevel, p.lordXp)} / ${xpToNext(p.lordLevel)}`;
+			const xpText = text(rankBox, xpLine, UDim2.fromScale(0.6, 0.24), UDim2.fromScale(0.37, 0.7));
+			xpText.TextXAlignment = Enum.TextXAlignment.Left;
 			const rows: { key: CampSlot; label: string; value: string; icon: string | undefined }[] = [
 				{ key: "class", label: "流派", value: `${info.name}・${info.position}`, icon: CLASS_EMBLEM[cls] },
 				{ key: "weapon", label: "武器", value: weaponItemName(weaponNow), icon: weaponArt(weaponNow) },
 				{ key: "special", label: "大招", value: specialItemName(specialNow), icon: specialIcon(specialNow) },
 			];
 			rows.forEach((row, i) => {
-				const slot = bigButton(body, "", UDim2.fromScale(0.58, 0.18), UDim2.fromScale(0.4, 0.13 + i * 0.2), PANEL);
+				const slot = bigButton(body, "", UDim2.fromScale(0.58, 0.16), UDim2.fromScale(0.4, 0.17 + i * 0.18), PANEL);
 				const slotLabel = text(slot, row.label, UDim2.fromScale(0.16, 0.3), UDim2.fromScale(0.25, 0.08));
 				slotLabel.TextColor3 = GOLD;
 				slotIcon(slot, row.icon, UDim2.fromScale(0.2, 0.8), UDim2.fromScale(0.03, 0.1));
@@ -1251,7 +1264,7 @@ export function createStoryUi(remotes: Remotes, hud: MatchHooks): { showMainMenu
 		text(lvPanel, lordTitle(p), UDim2.fromScale(0.42, 0.4), UDim2.fromScale(mapCls === undefined ? 0.02 : 0.1, 0.06));
 		text(
 			lvPanel,
-			p.lordLevel >= LORD_MAX_LEVEL ? "已滿級" : `經驗 ${carriedXp(p.lordLevel, p.lordXp)} / ${needFor(p.lordLevel)}`,
+			p.lordLevel >= LORD_MAX_LEVEL ? "已滿級" : `經驗 ${carriedXp(p.lordLevel, p.lordXp)} / ${xpToNext(p.lordLevel)}`,
 			UDim2.fromScale(0.44, 0.4),
 			UDim2.fromScale(0.54, 0.06),
 		);
@@ -1606,6 +1619,37 @@ export function createStoryUi(remotes: Remotes, hud: MatchHooks): { showMainMenu
 		show(bannerScreen);
 	};
 
+	/** Rank-up panel over the result: gold 「晉升！」, the new rank and the unlocked look. Grows and fades in over 1.5 s; a tap closes it. */
+	const showPromotion = (parent: Instance, toTier: number): void => {
+		const rank = rankByTier(toTier);
+		const panel = frame(parent, UDim2.fromScale(1, 1), UDim2.fromScale(0, 0), BLACK, 1);
+		panel.Name = "Promotion";
+		panel.ZIndex = 10;
+		TweenService.Create(panel, new TweenInfo(1.5), { BackgroundTransparency: 0.35 }).Play();
+		const title = text(panel, "晉升！", UDim2.fromScale(0.8, 0.22), UDim2.fromScale(0.1, 0.2));
+		title.TextScaled = true;
+		title.TextColor3 = GOLD;
+		title.TextTransparency = 1;
+		const scale = new Instance("UIScale");
+		scale.Scale = 0.3;
+		scale.Parent = title;
+		TweenService.Create(scale, new TweenInfo(1.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale: 1 }).Play();
+		TweenService.Create(title, new TweenInfo(1.5), { TextTransparency: 0 }).Play();
+		const rankLabel = text(panel, rank.name, UDim2.fromScale(0.6, 0.12), UDim2.fromScale(0.2, 0.46));
+		rankLabel.TextScaled = true;
+		rankLabel.TextColor3 = GOLD;
+		rankLabel.TextTransparency = 1;
+		const unlocked = text(panel, "新外觀已解鎖", UDim2.fromScale(0.5, 0.07), UDim2.fromScale(0.25, 0.6));
+		unlocked.TextTransparency = 1;
+		const hint = text(panel, "點一下繼續", UDim2.fromScale(0.3, 0.05), UDim2.fromScale(0.35, 0.9));
+		hint.TextTransparency = 1;
+		for (const label of [rankLabel, unlocked, hint]) {
+			TweenService.Create(label, new TweenInfo(1.5), { TextTransparency: 0 }).Play();
+		}
+		sparkle(panel, 10);
+		tapLayer(panel, () => panel.Destroy());
+	};
+
 	const showResult = (r: StoryResult): void => {
 		resultToken++;
 		const token = resultToken;
@@ -1670,6 +1714,7 @@ export function createStoryUi(remotes: Remotes, hud: MatchHooks): { showMainMenu
 			nextBtn.Visible = r.won && r.stageId < LAST_STAGE_ID;
 			retryBtn.Visible = true;
 			mapBtn.Visible = true;
+			if (r.rankUp !== undefined) showPromotion(resultScreen, r.rankUp.to);
 		});
 	};
 

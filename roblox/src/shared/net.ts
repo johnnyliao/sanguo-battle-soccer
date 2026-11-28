@@ -73,6 +73,9 @@ export interface SetupPlayer {
 	specialName?: string; // name of the special in use (the lord's equipped special, or a general's own)
 	specialIcon?: string; // artIds SKILL_ICON key of that special (lord specials map to their weapon icon; general = charId)
 	specialMode?: string; // sim mode of the special in use (e.g. "roar" for Zhang Fei, also when a lord equips it)
+	lordLevel?: number; // only on the lord (story): level, for the title over his head
+	rankTier?: number; // only on the lord (story): rank tier 1..11 (shared/rank.ts), drives the gear look and title
+	lordClass?: string; // only on the lord (story): class (流派), drives the gear colours
 }
 
 /** Sent once when a match starts. */
@@ -100,6 +103,7 @@ export interface StoryResult {
 	levelAfter: number;
 	recruited?: string; // charId, only when newly recruited by this result
 	chapterClear: boolean;
+	rankUp?: { from: number; to: number }; // rank tiers (shared/rank.ts), only when this result crosses a rank
 }
 
 export interface SnapPlayer {

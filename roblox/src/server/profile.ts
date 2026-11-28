@@ -2,6 +2,7 @@
 import { defaultProfile, getProfileRemotes, parseLordWeapon, PROFILE_VERSION, type Country, type Profile } from "shared/profileTypes";
 import { isSpecialId, isWeaponId, parseLordClass, settleLoadout } from "shared/loadout";
 import { RAW_CHARACTERS } from "shared/game/data";
+import { LORD_MAX_LEVEL } from "shared/rank";
 
 const DataStoreService = game.GetService("DataStoreService");
 const Players = game.GetService("Players");
@@ -181,11 +182,28 @@ function applyDebugGrant(player: Player, p: Profile): void {
 	print(`[profile] debug grant all ${player.Name}`);
 }
 
+/**
+ * Studio only: a Player with attribute DebugLordLevel = n (number) gets lordLevel n (clamped to 1..30) and lordXp 0.
+ * The attribute is cleared, then the change is marked dirty and pushed to the client.
+ */
+function applyDebugLordLevel(player: Player, p: Profile): void {
+	if (!RunService.IsStudio()) return;
+	const raw = player.GetAttribute("DebugLordLevel");
+	if (!typeIs(raw, "number")) return;
+	player.SetAttribute("DebugLordLevel", undefined);
+	p.lordLevel = math.clamp(math.floor(raw), 1, LORD_MAX_LEVEL);
+	p.lordXp = 0;
+	dirty.add(player);
+	remotes.ProfileChanged.FireClient(player, p);
+	print(`[profile] debug lord level ${player.Name} -> ${p.lordLevel}`);
+}
+
 /** Loads (or returns the cached) profile for a player. Yields while loading. */
 export function loadProfile(player: Player): Profile {
 	const cached = cache.get(player);
 	if (cached !== undefined) {
 		applyDebugGrant(player, cached);
+		applyDebugLordLevel(player, cached);
 		return cached;
 	}
 	while (loading.has(player)) task.wait(0.1);
@@ -200,6 +218,7 @@ export function loadProfile(player: Player): Profile {
 	if (player.Parent === undefined) return fetched.profile;
 	cache.set(player, fetched.profile);
 	applyDebugGrant(player, fetched.profile);
+	applyDebugLordLevel(player, fetched.profile);
 	return fetched.profile;
 }
 

@@ -16,6 +16,7 @@ import {
 	type StageDef,
 } from "shared/story";
 import { parseLordWeapon } from "shared/profileTypes";
+import { LORD_MAX_LEVEL, rankFor, xpToNext } from "shared/rank";
 import {
 	chooseClassGear,
 	classPool,
@@ -40,8 +41,6 @@ const WIN_XP = 100;
 const WIN_COINS = 50;
 const LOSE_XP = 30;
 const LOSE_COINS = 10;
-const XP_PER_LEVEL_STEP = 100;
-const MAX_LORD_LEVEL = 30;
 
 const remotes = getRemotes();
 Players.CharacterAutoLoads = false;
@@ -164,6 +163,13 @@ function startStory(player: Player, raw: unknown): void {
 	const awayLabel = isRivalStage(stage) ? COUNTRY_INFO[RIVAL[country]].name : "黃巾軍";
 	const setup = buildSetup(state, country, RIVAL[country], humanIdx, "story", stage.id, awayLabel);
 	if (stage.goalTarget !== undefined) setup.goalTarget = stage.goalTarget;
+	// The lord's rank look and title (client): his SetupPlayer carries the level, rank tier and class.
+	const lordSetup = setup.players.find((sp) => sp.idx === humanIdx);
+	if (lordSetup !== undefined) {
+		lordSetup.lordLevel = profile.lordLevel;
+		lordSetup.rankTier = rankFor(profile.lordLevel).tier;
+		lordSetup.lordClass = lordClass;
+	}
 	const inst = new MatchInstance(player, state, seed, humanIdx, setup, (done: MatchInstance) => {
 		task.spawn(finishStory, done, stage);
 	});
@@ -197,8 +203,8 @@ function finishStory(inst: MatchInstance, stage: StageDef): void {
 	const after = updateProfile(player, (p) => {
 		p.lordXp += xp;
 		p.coins += coins;
-		while (p.lordLevel < MAX_LORD_LEVEL && p.lordXp >= XP_PER_LEVEL_STEP * p.lordLevel) {
-			p.lordXp -= XP_PER_LEVEL_STEP * p.lordLevel;
+		while (p.lordLevel < LORD_MAX_LEVEL && p.lordXp >= xpToNext(p.lordLevel)) {
+			p.lordXp -= xpToNext(p.lordLevel);
 			p.lordLevel += 1;
 		}
 		if (won) {
@@ -208,6 +214,8 @@ function finishStory(inst: MatchInstance, stage: StageDef): void {
 		}
 	});
 
+	const tierBefore = rankFor(levelBefore).tier;
+	const tierAfter = rankFor(after.lordLevel).tier;
 	const result: StoryResult = {
 		stageId: stage.id,
 		won,
@@ -218,6 +226,7 @@ function finishStory(inst: MatchInstance, stage: StageDef): void {
 		recruited: newRecruit,
 		chapterClear: won && stage.id === LAST_STAGE_ID,
 	};
+	if (tierAfter > tierBefore) result.rankUp = { from: tierBefore, to: tierAfter };
 	remotes.StoryResult.FireClient(player, result);
 	print(
 		`[story] result ${player.Name} stage ${stage.id} ${won ? "win" : "loss"} score ${sc[0]}-${sc[1]} ` +

@@ -11,6 +11,9 @@ import { cheer } from "./worldCrowd";
 import type { MatchCtx } from "./matchUtil";
 import { initMatchWeapon, setMatchTrails, swingMatchWeapon } from "./matchWeapons";
 import { makeStaminaBar, StaminaBar } from "./staminaBar";
+import { applyRankGear } from "./rankGear";
+import { parseLordClass } from "shared/loadout";
+import { rankByTier } from "shared/rank";
 import { createOffscreenArrow, OffscreenArrow } from "./offscreenArrow";
 
 /** Render this many ticks (100 ms at 60 Hz) behind the newest snapshot. */
@@ -612,6 +615,9 @@ export class Renderer {
 		const template = getAvatarTemplate(p.charId);
 		if (template !== undefined) {
 			avatar = makeAvatar(template, model, height, p.charId, colourOf(hex), p.weapon);
+			// The lord's rank gear (applied after makeAvatar scaled the model, so the parts are sized to the body).
+			const gearClass = p.lordClass !== undefined ? parseLordClass(p.lordClass) : undefined;
+			if (p.rankTier !== undefined && gearClass !== undefined) applyRankGear(avatar.model, p.rankTier, gearClass);
 			body.Transparency = 1;
 			head.Transparency = 1;
 			ring.Color = colourOf(human ? HUMAN_RING_COLOUR : hex);
@@ -639,9 +645,11 @@ export class Renderer {
 		glow.Adornee = model;
 		glow.Parent = model;
 
+		// The lord (story) shows his rank and level over the head, with his player name in small type underneath.
+		const rank = p.rankTier !== undefined ? rankByTier(p.rankTier) : undefined;
 		const tag = new Instance("BillboardGui");
 		tag.Name = "Tag";
-		tag.Size = UDim2.fromOffset(130, 40);
+		tag.Size = UDim2.fromOffset(130, rank !== undefined ? 52 : 40);
 		tag.StudsOffset = new Vector3(0, 1.4, 0);
 		tag.AlwaysOnTop = true;
 		tag.Adornee = head;
@@ -650,16 +658,36 @@ export class Renderer {
 		const name = new Instance("TextLabel");
 		name.Size = UDim2.fromOffset(130, 18);
 		name.BackgroundTransparency = 1;
-		name.Text = p.name;
-		name.TextColor3 = colourOf(0xffffff);
-		name.TextStrokeTransparency = 0;
-		name.TextStrokeColor3 = colourOf(hex, 0.3);
 		name.Font = Enum.Font.GothamBlack;
 		name.TextSize = 14;
+		name.TextStrokeTransparency = 0;
+		if (rank !== undefined) {
+			name.Text = `${rank.name} Lv.${p.lordLevel ?? 1}`;
+			name.TextColor3 = colourOf(0xffd700);
+			name.TextStrokeColor3 = colourOf(0x000000);
+		} else {
+			name.Text = p.name;
+			name.TextColor3 = colourOf(0xffffff);
+			name.TextStrokeColor3 = colourOf(hex, 0.3);
+		}
 		name.Parent = tag;
+		if (rank !== undefined) {
+			const sub = new Instance("TextLabel");
+			sub.Size = UDim2.fromOffset(130, 12);
+			sub.Position = UDim2.fromOffset(0, 18);
+			sub.BackgroundTransparency = 1;
+			sub.Text = p.name;
+			sub.TextColor3 = colourOf(0xffffff);
+			sub.TextStrokeTransparency = 0;
+			sub.TextStrokeColor3 = colourOf(0x000000);
+			sub.Font = Enum.Font.GothamBold;
+			sub.TextSize = 10;
+			sub.Parent = tag;
+		}
 
 		const bar = makeStaminaBar(tag, colourOf(hex));
 		bar.root.Visible = p.team === 0;
+		if (rank !== undefined) bar.root.Position = new UDim2(0.5, 0, 0, 32);
 
 		model.PrimaryPart = body;
 		model.Parent = this.actors;
