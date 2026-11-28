@@ -26,6 +26,8 @@ const CAM_BEHIND_LOOK_Y = 2; // behind mode: look point height (studs)
 const CAM_BEHIND_LOOK_BLEND = 0.25; // behind mode: look point this fraction of the way from the lord toward the ball
 /** Quantising a screen-to-world move: a component counts only above this magnitude (keeps 8 directions). */
 const MOVE_AXIS_THRESHOLD = 0.38;
+/** Lord close-up (focusLord): camera distance factor while it runs (the lord fills more of the screen). */
+const CAM_FOCUS_ZOOM = 0.55;
 
 /**
  * Screen shake for the match camera (main.client adds fx.shakeOffset every frame). intensity is the offset in studs at the
@@ -38,6 +40,13 @@ export function shake(intensity: number, duration: number): void {
 let mode: CamMode = "side";
 /** True while the behind view is really in use (mode is behind and the local lord is on the pitch). */
 let behindActive = false;
+/** Seconds left of a lord close-up (focusLord); 0 = normal follow. */
+let lordFocusLeft = 0;
+
+/** Pulls the match camera in on the local lord for `seconds` (kickoff entrance), then it follows the normal way again. */
+export function focusLord(seconds: number): void {
+	lordFocusLeft = seconds;
+}
 
 /** Switches the match camera between the side and behind views. */
 export function toggleCamMode(): void {
@@ -136,7 +145,14 @@ export class FollowCamera {
 		const dir = attackDir < 0 ? -1 : 1;
 		let desiredEye: Vector3;
 		let desiredLook: Vector3;
-		if (mode === "behind" && playerX !== undefined && playerZ !== undefined) {
+		if (lordFocusLeft > 0 && playerX !== undefined && playerZ !== undefined) {
+			lordFocusLeft -= dt;
+			const look = new Vector3(clampX(playerX), CAM_TARGET_Y, playerZ);
+			const pitch = math.rad(CAM_PITCH_DEG);
+			const dist = bounds.distance * CAM_FOCUS_ZOOM;
+			desiredLook = look;
+			desiredEye = look.add(new Vector3(0, math.sin(pitch) * dist, math.cos(pitch) * dist));
+		} else if (mode === "behind" && playerX !== undefined && playerZ !== undefined) {
 			behindActive = true;
 			const lx = clampX(playerX + (ballX - playerX) * CAM_BEHIND_LOOK_BLEND);
 			const lz = clampZ(playerZ + (ballZ - playerZ) * CAM_BEHIND_LOOK_BLEND);

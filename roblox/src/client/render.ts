@@ -2,7 +2,7 @@
 // about 100 ms behind the newest snapshot, interpolated by tick. Call update(dt) from RenderStepped.
 import { Country, SetupPlayer, Setup, SimEventLite, SnapBall, SnapPlayer, Snapshot, STUDS_PER_PX, TICK_RATE, simToWorld } from "shared/net";
 import { buildPitchLayer, colourOf } from "./world";
-import { setCameraPitch } from "./camera";
+import { focusLord, setCameraPitch } from "./camera";
 import { SPRITES, SpriteSheet, animFor } from "./sprites";
 import { AvatarView, drawAvatar, getAvatarTemplate, makeAvatar, triggerAttack, triggerSpecial } from "./avatars";
 import { MatchFx } from "./matchFx";
@@ -12,6 +12,7 @@ import type { MatchCtx } from "./matchUtil";
 import { initMatchWeapon, setMatchTrails, swingMatchWeapon } from "./matchWeapons";
 import { makeStaminaBar, StaminaBar } from "./staminaBar";
 import { applyLook } from "./rankGear";
+import { createLookFx, type LookFx } from "./lookFx";
 import { lookForTier } from "shared/cosmetics";
 import { parseLordClass } from "shared/loadout";
 import { rankByTier } from "shared/rank";
@@ -54,6 +55,8 @@ const STUN_STARS_AFTER = 0.45;
 const PUNCH_SWING = 0.15;
 const TACKLE_SWING = 0.21;
 const SPECIAL_SWING = 0.45;
+/** Kickoff entrance: the camera pulls in on the lord for this many seconds. */
+const ENTRANCE_FOCUS_SEC = 1.2;
 const PATCH_OFFSETS: Vector3[] = [new Vector3(0.74, 0, 0), new Vector3(0, 0.74, 0), new Vector3(-0.3, -0.25, 0.66)];
 
 const Workspace = game.GetService("Workspace");
@@ -86,6 +89,8 @@ interface PlayerView {
 	/** Sim mode of the special in use (see SetupPlayer.specialMode). */
 	specialMode: string;
 	team: number;
+	/** Look effects (beast, orbit, foot, entrance, goal). Set only for a story lord with a look. */
+	look: LookFx | undefined;
 }
 
 interface SpriteView {
@@ -231,6 +236,8 @@ export class Renderer {
 	private ballSpin = 0;
 	private lastBallPos = new Vector3(0, 0, 0);
 	private arrow: OffscreenArrow | undefined;
+	/** The kickoff entrance plays once per match (the first kickoff whistle). */
+	private entranceDone = false;
 
 	constructor() {
 		sfx.preload();
@@ -291,6 +298,7 @@ export class Renderer {
 		this.arrow = createOffscreenArrow();
 		this.setup = s;
 		this.swapped = false;
+		this.entranceDone = false;
 		this.buffer = [];
 		this.clockReady = false;
 		this.players = [];
@@ -403,6 +411,12 @@ export class Renderer {
 		const idx = (e["playerIdx"] as number | undefined) ?? -1;
 		const pv = idx >= 0 ? this.players[idx] : undefined;
 		const av = pv?.avatar;
+		if (t === "special") pv?.look?.special();
+		if (t === "whistle" && e["reason"] === "kickoff" && !this.entranceDone) {
+			this.entranceDone = true;
+			this.startEntrance();
+		}
+		if (t === "goal") this.lordGoal(e);
 		if (pv !== undefined && av !== undefined) {
 			if (t === "attack" || t === "slashSwing") {
 				const tackle = t === "attack" && (e["kind"] as string | undefined) === "tackle";
@@ -417,6 +431,25 @@ export class Renderer {
 			}
 		}
 		this.mfx.onEvent(e);
+	}
+
+	/** Kickoff entrance of the local lord: the camera pulls in on him and his entrance parts play. */
+	private startEntrance(): void {
+		const hv = this.players[this.setup?.humanIdx ?? -1];
+		if (hv?.look === undefined) return;
+		focusLord(ENTRANCE_FOCUS_SEC);
+		hv.look.entrance();
+	}
+
+	/** A goal by the local lord's team: the lord's goal effects. The dragon flies from his end of the pitch to the other. */
+	private lordGoal(e: SimEventLite): void {
+		const s = this.setup;
+		const hv = this.players[s?.humanIdx ?? -1];
+		if (s === undefined || hv?.look === undefined || e["team"] !== hv.team) return;
+		const dir = this.getAttackDirX();
+		const fromX = dir > 0 ? 0 : s.field.w;
+		const toX = dir > 0 ? s.field.w : 0;
+		hv.look.goal(simToWorld(fromX, s.field.d / 2, 0), simToWorld(toX, s.field.d / 2, 0));
 	}
 
 	/** Local player's drawn foot position (world studs), or undefined when he has no character on the pitch. */
@@ -511,6 +544,7 @@ export class Renderer {
 			const av = v.avatar;
 			v.foot = foot;
 			v.act = act;
+			v.look?.frame(dt, foot, new Vector3(v.fx, 0, v.fz));
 			if (act === "hitstun") {
 				if (v.hitSince < 0) v.hitSince = now;
 			} else {
@@ -613,14 +647,18 @@ export class Renderer {
 		const ring = makePart(model, "Ring", Enum.PartType.Cylinder, new Vector3(0.12, 3.6, 3.6), colourOf(HUMAN_RING_COLOUR), human ? 0.3 : 1);
 
 		let avatar: AvatarView | undefined;
+		let look: LookFx | undefined;
 		const template = getAvatarTemplate(p.charId);
 		if (template !== undefined) {
 			avatar = makeAvatar(template, model, height, p.charId, colourOf(hex), p.weapon);
 			// The lord's cosmetic gear (applied after makeAvatar scaled the model, so the parts are sized to the body). Without
 			// a look (older server) the rank tier's latest parts are worn.
 			const gearClass = p.lordClass !== undefined ? parseLordClass(p.lordClass) : undefined;
-			const look = p.look ?? (p.rankTier !== undefined ? lookForTier(p.rankTier) : undefined);
-			if (look !== undefined && gearClass !== undefined) applyLook(avatar.model, look, gearClass);
+			const wear = p.look ?? (p.rankTier !== undefined ? lookForTier(p.rankTier) : undefined);
+			if (wear !== undefined && gearClass !== undefined) {
+				applyLook(avatar.model, wear, gearClass);
+				look = createLookFx(avatar.model, wear, gearClass, human, p.name, height);
+			}
 			body.Transparency = 1;
 			head.Transparency = 1;
 			ring.Color = colourOf(human ? HUMAN_RING_COLOUR : hex);
@@ -718,6 +756,7 @@ export class Renderer {
 			charId: p.charId,
 			specialMode: p.specialMode ?? "",
 			team: p.team,
+			look,
 		};
 	}
 
