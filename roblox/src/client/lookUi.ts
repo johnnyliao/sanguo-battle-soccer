@@ -5,7 +5,7 @@
 import type { Profile } from "shared/profileTypes";
 import { COSMETICS, cosmeticsOf, resolveLook, SLOTS, SLOT_NAME, type Slot } from "shared/cosmetics";
 import { rankByTier, rankFor } from "shared/rank";
-import { ART4 } from "./artIds";
+import { ART4, PART_ICON } from "./artIds";
 import { artButton, picture } from "./artUi";
 import { BLACK, frame, GOLD, text, WHITE } from "./hud";
 
@@ -42,6 +42,17 @@ function wrapped(parent: Instance, content: string, size: UDim2, pos: UDim2): Te
 	const t = text(parent, content, size, pos);
 	t.TextWrapped = true;
 	return t;
+}
+
+/** Part icon: a square in the upper half of the cell. A locked part's icon is dimmed to grey. */
+function partIcon(parent: Instance, icon: string, locked: boolean): void {
+	const img = picture(parent, icon, UDim2.fromScale(0.5, 0.5), UDim2.fromScale(0.5, 0.03));
+	img.AnchorPoint = new Vector2(0.5, 0);
+	const ratio = new Instance("UIAspectRatioConstraint");
+	ratio.AspectRatio = 1;
+	ratio.DominantAxis = Enum.DominantAxis.Height;
+	ratio.Parent = img;
+	if (locked) img.ImageColor3 = Color3.fromRGB(90, 90, 90);
 }
 
 /** Gold outline on a cell (the part worn in its slot). */
@@ -101,19 +112,31 @@ export function renderLookPage(page: Frame, p: Profile, selected: Slot, top: num
 		const pos = UDim2.fromScale(0.36 + (i % 3) * 0.21, 0.01 + math.floor(i / 3) * 0.33);
 		const size = UDim2.fromScale(0.2, 0.3);
 		const isWorn = o.id === "none" ? wornNow === undefined || wornNow === "none" : wornNow === o.id;
+		const icon: string | undefined = PART_ICON[o.id];
 		if (o.unlockTier <= tier) {
 			const cell = artButton(body, "blue", size, pos);
-			const swatch = frame(cell, UDim2.fromScale(0.22, 0.6), UDim2.fromScale(0.05, 0.2), SLOT_COLOUR[selected], 0);
-			swatch.ZIndex = cell.ZIndex + 1;
-			wrapped(cell, o.name, UDim2.fromScale(0.66, 0.8), UDim2.fromScale(0.3, 0.1)).TextColor3 = WHITE;
+			if (icon !== undefined) {
+				partIcon(cell, icon, false);
+				wrapped(cell, o.name, UDim2.fromScale(0.9, 0.36), UDim2.fromScale(0.05, 0.56)).TextColor3 = WHITE;
+			} else {
+				const swatch = frame(cell, UDim2.fromScale(0.22, 0.6), UDim2.fromScale(0.05, 0.2), SLOT_COLOUR[selected], 0);
+				swatch.ZIndex = cell.ZIndex + 1;
+				wrapped(cell, o.name, UDim2.fromScale(0.66, 0.8), UDim2.fromScale(0.3, 0.1)).TextColor3 = WHITE;
+			}
 			if (isWorn) wornStroke(cell, 4);
 			cell.Activated.Connect(() => actions.onPick(selected, o.id));
 		} else {
 			const cell = frame(body, size, pos, LOCKED_BG, 0.1);
-			const swatch = frame(cell, UDim2.fromScale(0.22, 0.6), UDim2.fromScale(0.05, 0.2), LOCKED_BG, 0);
-			swatch.ZIndex = cell.ZIndex + 1;
 			const lv = rankByTier(o.unlockTier).minLevel;
-			wrapped(cell, `${o.name}（Lv.${lv}）解鎖`, UDim2.fromScale(0.66, 0.8), UDim2.fromScale(0.3, 0.1)).TextColor3 = LOCKED_TEXT;
+			const note = `${o.name}（Lv.${lv}）解鎖`;
+			if (icon !== undefined) {
+				partIcon(cell, icon, true);
+				wrapped(cell, note, UDim2.fromScale(0.9, 0.36), UDim2.fromScale(0.05, 0.56)).TextColor3 = LOCKED_TEXT;
+			} else {
+				const swatch = frame(cell, UDim2.fromScale(0.22, 0.6), UDim2.fromScale(0.05, 0.2), LOCKED_BG, 0);
+				swatch.ZIndex = cell.ZIndex + 1;
+				wrapped(cell, note, UDim2.fromScale(0.66, 0.8), UDim2.fromScale(0.3, 0.1)).TextColor3 = LOCKED_TEXT;
+			}
 		}
 	});
 	if (EFFECT_SLOTS.includes(selected)) {

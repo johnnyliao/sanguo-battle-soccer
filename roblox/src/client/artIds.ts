@@ -124,6 +124,46 @@ export const ART4: Record<string, string> = {
 	weapon_type_polearm: "rbxassetid://74368815073852",
 	weapon_type_fan: "rbxassetid://123053922784775",
 	weapon_type_heavy: "rbxassetid://139979883963780",
+	// batch 6: appearance upgrades (forge)
+	aura_bronze: "rbxassetid://130920687505365",
+	aura_silver: "rbxassetid://78530779654025",
+	aura_gold: "rbxassetid://126155043053416",
+	aura_rainbow: "rbxassetid://94284973095363",
+	badge_plus: "rbxassetid://74188109666498",
+	banner_ultimate: "rbxassetid://80561150885991",
+	btn_forge: "rbxassetid://87224568307352",
+	btn_forge_pressed: "rbxassetid://131347275418669",
+	forge_bg: "rbxassetid://112941857730172",
+	fx_flame: "rbxassetid://78337100495206",
+	fx_lightning: "rbxassetid://81144395424817",
+	res_bingshu: "rbxassetid://131242888168611",
+	res_jingtie: "rbxassetid://103021756520601",
+	star_off: "rbxassetid://117111278107299",
+	star_on: "rbxassetid://103145719846750",
+	trail_slash: "rbxassetid://76754800122479",
+	// batch 7: lord ranks and look parts (rank_01..11 = rank tiers 1..11)
+	beast_chihu: "rbxassetid://88966794394977",
+	beast_jinlong: "rbxassetid://96668193302861",
+	beast_qingluan: "rbxassetid://105271255417631",
+	beast_xuangui: "rbxassetid://83811445437326",
+	fx_dragonscale: "rbxassetid://138160829653549",
+	fx_vortex: "rbxassetid://110011939123647",
+	halo: "rbxassetid://133668242910563",
+	rank_01: "rbxassetid://134720432113730",
+	rank_02: "rbxassetid://105058619697076",
+	rank_03: "rbxassetid://110057856366233",
+	rank_04: "rbxassetid://100250588911536",
+	rank_05: "rbxassetid://111679583601712",
+	rank_06: "rbxassetid://108712527138113",
+	rank_07: "rbxassetid://113192109176900",
+	rank_08: "rbxassetid://136661098930002",
+	rank_09: "rbxassetid://131514334531439",
+	rank_10: "rbxassetid://126643733031431",
+	rank_11: "rbxassetid://111731813475727",
+	title_entrance: "rbxassetid://77656110332747",
+	title_rankup: "rbxassetid://109336802097927",
+	wings_aura: "rbxassetid://76805715949291",
+	wings_gold: "rbxassetid://125067017605866",
 };
 
 /** Weapon icons by item id: general charId → that general's weapon; lord_* → the batch-2 weapon art. */
@@ -146,4 +186,41 @@ export const WEAPON_ICON: Record<string, string> = {
 	lord_sword: "rbxassetid://121031573485001",
 	lord_spear: "rbxassetid://112709855091812",
 	lord_fan: "rbxassetid://98227528437994",
+};
+
+/** Look-part icons by cosmetic id (cosmetics.ts). Batch-7 icons are named by pinyin (icon_part_<slot>_<pinyin>.png); beasts use
+ * their full art. Parts without an entry (trails, orbit, entrance, goal) have no icon yet. */
+export const PART_ICON: Record<string, string> = {
+	helmet_cloth: "rbxassetid://131384450730133", // icon_part_helmet_butoujin
+	helmet_leather: "rbxassetid://79235726752515", // icon_part_helmet_pikui
+	helmet_iron_plume: "rbxassetid://118467046876325", // icon_part_helmet_tiefeng
+	helmet_eyeglow: "rbxassetid://135581221819213", // icon_part_helmet_yanfeng
+	helmet_phoenix: "rbxassetid://139192114505783", // icon_part_helmet_fengchi
+	helmet_dragon: "rbxassetid://106885803970658", // icon_part_helmet_longshou
+	chest_rags: "rbxassetid://118967997433310", // icon_part_chest_pobuyi
+	chest_leather: "rbxassetid://112265445852897", // icon_part_chest_pijia
+	chest_iron: "rbxassetid://102242303872713", // icon_part_chest_tiejia
+	chest_silver_shiny: "rbxassetid://75501178287888", // icon_part_chest_liangyin
+	chest_silver_gold: "rbxassetid://127914660134699", // icon_part_chest_yinjiajinbian
+	chest_gold: "rbxassetid://98839112234117", // icon_part_chest_jinjia
+	chest_gold_thunder: "rbxassetid://89089657916887", // icon_part_chest_leiwen
+	chest_dragon: "rbxassetid://89818668756619", // icon_part_chest_jinlong
+	shoulder_leather: "rbxassetid://106192348100321", // icon_part_shoulder_pihujian
+	shoulder_silver: "rbxassetid://75004966318318", // icon_part_shoulder_liangyin
+	shoulder_lion: "rbxassetid://92509704659295", // icon_part_shoulder_shitou
+	shoulder_dragon: "rbxassetid://106940478802559", // icon_part_shoulder_jinlong
+	cape_brown: "rbxassetid://136846098019253", // icon_part_cape_hedapeng
+	cape_red: "rbxassetid://95997975931682", // icon_part_cape_hongdapeng
+	cape_flame: "rbxassetid://84241437279620", // icon_part_cape_huoyan
+	cape_gold: "rbxassetid://87513805491599", // icon_part_cape_jinwen
+	cape_dragon: "rbxassetid://132818113963098", // icon_part_cape_jinlong
+	back_pennant: "rbxassetid://104084381522515", // icon_part_back_sanjiaoqi
+	back_flags2: "rbxassetid://86810883414675", // icon_part_back_shuangqi
+	back_flags4: "rbxassetid://101820429955404", // icon_part_back_siqi
+	back_wings_aura: "rbxassetid://89036964933879", // icon_part_back_zhanqi
+	back_wings_gold: "rbxassetid://130584149551842", // icon_part_back_guangyi
+	beast_chihu: "rbxassetid://88966794394977",
+	beast_qingluan: "rbxassetid://105271255417631",
+	beast_xuangui: "rbxassetid://83811445437326",
+	beast_jinlong: "rbxassetid://96668193302861",
 };

@@ -1149,7 +1149,9 @@ export function createStoryUi(remotes: Remotes, hud: MatchHooks): { showMainMenu
 			rounded(rankBox, 0.08);
 			const rankNow = rankFor(p.lordLevel);
 			const upper = nextRank(p.lordLevel);
-			const rankName = text(rankBox, `${rankNow.name}　Lv ${p.lordLevel}`, UDim2.fromScale(0.94, 0.3), UDim2.fromScale(0.03, 0.04));
+			// Rank badge (rank_01..11) left of the name; the name shifts right to make room.
+			picture(rankBox, ART4[`rank_${string.format("%02d", rankNow.tier)}`], UDim2.fromScale(0.1, 0.3), UDim2.fromScale(0.03, 0.04));
+			const rankName = text(rankBox, `${rankNow.name}　Lv ${p.lordLevel}`, UDim2.fromScale(0.82, 0.3), UDim2.fromScale(0.15, 0.04));
 			rankName.TextXAlignment = Enum.TextXAlignment.Left;
 			rankName.TextColor3 = GOLD;
 			const upperLine = upper === undefined ? "已是最高階" : `下一階：${upper.name}（Lv.${upper.minLevel}）`;
@@ -1663,7 +1665,11 @@ export function createStoryUi(remotes: Remotes, hud: MatchHooks): { showMainMenu
 		panel.Name = "Promotion";
 		panel.ZIndex = 10;
 		TweenService.Create(panel, new TweenInfo(1.5), { BackgroundTransparency: 0.35 }).Play();
-		const title = text(panel, "晉升！", UDim2.fromScale(0.8, 0.22), UDim2.fromScale(0.1, 0.2));
+		// Title art at the top, then the text title, then the new rank's badge (bigger than the strip badge).
+		const titlePic = picture(panel, ART4.title_rankup, UDim2.fromScale(0.7, 0.14), UDim2.fromScale(0.15, 0.02));
+		titlePic.ImageTransparency = 1;
+		TweenService.Create(titlePic, new TweenInfo(1.5), { ImageTransparency: 0 }).Play();
+		const title = text(panel, "晉升！", UDim2.fromScale(0.4, 0.08), UDim2.fromScale(0.3, 0.17));
 		title.TextScaled = true;
 		title.TextColor3 = GOLD;
 		title.TextTransparency = 1;
@@ -1672,18 +1678,21 @@ export function createStoryUi(remotes: Remotes, hud: MatchHooks): { showMainMenu
 		scale.Parent = title;
 		TweenService.Create(scale, new TweenInfo(1.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale: 1 }).Play();
 		TweenService.Create(title, new TweenInfo(1.5), { TextTransparency: 0 }).Play();
-		const rankLabel = text(panel, rank.name, UDim2.fromScale(0.6, 0.12), UDim2.fromScale(0.2, 0.46));
+		const badge = picture(panel, ART4[`rank_${string.format("%02d", rank.tier)}`], UDim2.fromScale(0.2, 0.25), UDim2.fromScale(0.4, 0.26));
+		badge.ImageTransparency = 1;
+		TweenService.Create(badge, new TweenInfo(1.5), { ImageTransparency: 0 }).Play();
+		const rankLabel = text(panel, rank.name, UDim2.fromScale(0.6, 0.1), UDim2.fromScale(0.2, 0.53));
 		rankLabel.TextScaled = true;
 		rankLabel.TextColor3 = GOLD;
 		rankLabel.TextTransparency = 1;
-		const unlocked = text(panel, "新外觀已解鎖", UDim2.fromScale(0.5, 0.07), UDim2.fromScale(0.25, 0.6));
+		const unlocked = text(panel, "新外觀已解鎖", UDim2.fromScale(0.5, 0.06), UDim2.fromScale(0.25, 0.64));
 		unlocked.TextTransparency = 1;
 		// Parts this rank unlocks: up to six names, then the count of the rest.
 		const gained = unlockedBetween(fromTier, toTier);
 		let names = "";
 		for (let i = 0; i < gained.size() && i < 6; i++) names += (i > 0 ? "、" : "") + gained[i].name;
 		const total = gained.size();
-		const partList = text(panel, total > 6 ? `${names} 等 ${total} 件` : names, UDim2.fromScale(0.8, 0.12), UDim2.fromScale(0.1, 0.68));
+		const partList = text(panel, total > 6 ? `${names} 等 ${total} 件` : names, UDim2.fromScale(0.8, 0.12), UDim2.fromScale(0.1, 0.71));
 		partList.TextWrapped = true;
 		partList.TextTransparency = 1;
 		const hint = text(panel, "點一下繼續", UDim2.fromScale(0.3, 0.05), UDim2.fromScale(0.35, 0.9));

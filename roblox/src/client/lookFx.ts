@@ -1,15 +1,18 @@
-// Lord look effects (R3b-3, 外觀特效): the beast (floating silhouette, or the gold coil around the body), the orbit (two
+// Lord look effects (R3b-3, 外觀特效): the beast (floating art sprite), the orbit (two
 // swords, the halo), the foot effects (dust, sparks, trails, the vortex disc) and the kickoff entrance and goal effects.
 // Client only, visual only. Every part is named "LookFx_…", anchored, massless and non-colliding, lives under the lord's
 // avatar model (so a model removal clears it) and is placed by CFrame every frame (no welds). Only the local player's own
 // lord (full) gets the particles, trails and the entrance / goal effects; other lords get the beast and the orbit only.
-// The beast shape is built in buildBeast(); a later BillboardGui sprite replaces only the shape builders, not the rig.
+// The beast, halo, vortex and trail are 2D art sprites (BillboardGui / SurfaceGui / Trail texture) built in buildBeast() and
+// the sprite helpers; their art ids are in artIds.ts (ART4). Sprite sizes follow the lord's height.
 import type { LordClass } from "shared/game/data";
 import { SLOTS, type LookMap } from "shared/cosmetics";
 import * as fx from "./fx";
+import { ART4 } from "./artIds";
 
 const Debris = game.GetService("Debris");
 const Players = game.GetService("Players");
+const Workspace = game.GetService("Workspace");
 
 const PREFIX = "LookFx_";
 const SMOKE_TEXTURE = "rbxasset://textures/particles/smoke_main.dds";
@@ -27,10 +30,12 @@ const BEAST_TRANSPARENCY = 0.45;
 /** Big-roar swell: the beast grows to BEAST_BIG times its size and back within BEAST_BIG_DUR seconds. */
 const BEAST_BIG = 1.4;
 const BEAST_BIG_DUR = 0.6;
-/** Gold coil (beast_jinlong): link count, the coil radius around the body (studs), the spin rate (rad/s). */
-const COIL_LINKS = 7;
-const COIL_RADIUS = 2.4;
-const COIL_SPIN = 2.2;
+/** Art size reference: the studs of a sprite are given for this lord height and scale with height / REF_HEIGHT. */
+const REF_HEIGHT = 8.8;
+/** Beast art side (studs at REF_HEIGHT). Halo and vortex disc diameters (studs at REF_HEIGHT). */
+const BEAST_SIZE = 5.5;
+const HALO_SIZE = 3.4;
+const VORTEX_SIZE = 6.5;
 /** Orbit: sword radius (studs), spin rate (rad/s), halo spin (rad/s), vortex disc spin (rad/s). */
 const ORBIT_R = 2.8;
 const ORBIT_SPIN = 2.5;
@@ -67,24 +72,7 @@ const CLASS_GLOW: Record<LordClass, Color3> = {
 const AXIS_TO_UP = CFrame.Angles(0, 0, math.pi / 2);
 const BEASTS = ["beast_chihu", "beast_qingluan", "beast_xuangui", "beast_jinlong"];
 
-/** One placed part of a beast silhouette: its base size, and its offset from the beast root (scaled on the swell). */
-interface Piece {
-	part: Part;
-	size: Vector3;
-	pos: Vector3;
-	rot: CFrame;
-}
-
-/** Shape definition of one silhouette part (forward is -Z, up is +Y). */
-interface PieceDef {
-	name: string;
-	shape: Enum.PartType;
-	size: Vector3;
-	pos: Vector3;
-	rot: CFrame;
-}
-
-/** A beast shape: place() puts every part for this frame. */
+/** A beast sprite: place() puts it for this frame (foot, lord facing, time, swell scale). */
 interface BeastRig {
 	place: (foot: Vector3, facing: Vector3, t: number, scale: number) => void;
 }
@@ -96,10 +84,6 @@ interface Sword {
 
 function v3(x: number, y: number, z: number): Vector3 {
 	return new Vector3(x, y, z);
-}
-
-function scaleV(v: Vector3, s: number): Vector3 {
-	return new Vector3(v.X * s, v.Y * s, v.Z * s);
 }
 
 function makePart(parent: Instance, name: string, shape: Enum.PartType, size: Vector3, colour: Color3, neon: boolean, transparency: number): Part {
@@ -128,106 +112,82 @@ function beastRoot(foot: Vector3, facing: Vector3, height: number, t: number): C
 	return CFrame.lookAt(centre, ahead).mul(CFrame.Angles(0, math.sin(t * 0.5) * 0.25, 0));
 }
 
-/** A silhouette rig: the pieces move as one body under beastRoot and swell with scale. */
-function silhouetteRig(model: Model, colour: Color3, height: number, defs: PieceDef[]): BeastRig {
-	const pieces: Piece[] = [];
-	for (const d of defs) {
-		const part = makePart(model, `Beast_${d.name}`, d.shape, d.size, colour, true, BEAST_TRANSPARENCY);
-		pieces.push({ part, size: d.size, pos: d.pos, rot: d.rot });
+/** Pixels per stud at a world point, from the camera's vertical FOV, so a sprite keeps its world size on screen. */
+function pixelsPerStud(at: Vector3): number {
+	const cam = game.Workspace.CurrentCamera;
+	if (cam === undefined) return 40;
+	const dist = math.max(0.1, cam.CFrame.Position.sub(at).Magnitude);
+	return cam.ViewportSize.Y / (2 * dist * math.tan(math.rad(cam.FieldOfView) / 2));
+}
+
+/** A transparent image label that fills its parent (a BillboardGui or SurfaceGui). */
+function artLabel(parent: Instance, image: string, transparency: number): ImageLabel {
+	const label = new Instance("ImageLabel");
+	label.Name = `${PREFIX}Art`;
+	label.BackgroundTransparency = 1;
+	label.Size = UDim2.fromScale(1, 1);
+	label.Image = image;
+	label.ImageTransparency = transparency;
+	label.ScaleType = Enum.ScaleType.Fit;
+	label.Parent = parent;
+	return label;
+}
+
+/** A flat art plate: a transparent Part with one SurfaceGui per listed face, each showing the art. */
+function artPlate(model: Model, name: string, image: string, size: Vector3, faces: Enum.NormalId[], transparency: number): Part {
+	const part = makePart(model, name, Enum.PartType.Block, size, WHITE, false, 1);
+	for (const face of faces) {
+		const gui = new Instance("SurfaceGui");
+		gui.Name = `${PREFIX}${name}Gui`;
+		gui.Face = face;
+		gui.AlwaysOnTop = false;
+		gui.LightInfluence = 0;
+		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud;
+		gui.PixelsPerStud = 100;
+		gui.Parent = part;
+		artLabel(gui, image, transparency);
 	}
+	return part;
+}
+
+/**
+ * A beast sprite: a transparent anchor under the model with a BillboardGui that always faces the camera. Its pixel size is
+ * the art's world size (BEAST_SIZE scaled to the lord's height, times the swell) converted at the anchor's distance.
+ */
+function beastRig(model: Model, image: string, glow: Color3, height: number): BeastRig {
+	const size = (BEAST_SIZE * height) / REF_HEIGHT;
+	const anchor = makePart(model, "Beast", Enum.PartType.Block, v3(0.2, 0.2, 0.2), glow, false, 1);
 	const light = new Instance("PointLight");
-	light.Color = colour;
+	light.Color = glow;
 	light.Range = 10;
 	light.Brightness = 0.7;
-	light.Parent = pieces[0].part;
+	light.Parent = anchor;
+	const gui = new Instance("BillboardGui");
+	gui.Name = `${PREFIX}BeastGui`;
+	gui.Adornee = anchor;
+	gui.AlwaysOnTop = false;
+	gui.LightInfluence = 0;
+	gui.Parent = anchor;
+	artLabel(gui, image, BEAST_TRANSPARENCY);
 	return {
 		place: (foot, facing, t, scale) => {
 			const root = beastRoot(foot, facing, height, t);
-			for (const p of pieces) {
-				p.part.Size = scaleV(p.size, scale);
-				p.part.CFrame = root.mul(new CFrame(scaleV(p.pos, scale))).mul(p.rot);
-			}
-		},
-	};
-}
-
-/** Red tiger (赤虎): long body, head with ears, four legs, a tail. */
-function chihuDefs(): PieceDef[] {
-	const d: PieceDef[] = [
-		{ name: "Body", shape: Enum.PartType.Block, size: v3(1.6, 1.2, 3.2), pos: v3(0, 0, 0), rot: CFrame.Angles(0, 0, 0) },
-		{ name: "Head", shape: Enum.PartType.Ball, size: v3(1.6, 1.6, 1.6), pos: v3(0, 0.5, -2), rot: CFrame.Angles(0, 0, 0) },
-		{ name: "Tail", shape: Enum.PartType.Block, size: v3(0.3, 0.3, 2), pos: v3(0, 0.4, 2.2), rot: CFrame.Angles(0.5, 0, 0) },
-	];
-	for (const sx of [-1, 1]) {
-		d.push({ name: sx < 0 ? "EarL" : "EarR", shape: Enum.PartType.Block, size: v3(0.4, 0.6, 0.4), pos: v3(sx * 0.5, 1.4, -2), rot: CFrame.Angles(0, 0, 0) });
-		for (const sz of [-1, 1]) {
-			d.push({ name: `Leg${sx}${sz}`, shape: Enum.PartType.Block, size: v3(0.4, 1.2, 0.4), pos: v3(sx * 0.6, -1, sz * 1.1), rot: CFrame.Angles(0, 0, 0) });
-		}
-	}
-	return d;
-}
-
-/** Green luan bird (青鸞): body, head, two spread wings, a tail. */
-function qingluanDefs(): PieceDef[] {
-	const d: PieceDef[] = [
-		{ name: "Body", shape: Enum.PartType.Block, size: v3(1, 0.8, 2.6), pos: v3(0, 0, 0), rot: CFrame.Angles(0, 0, 0) },
-		{ name: "Head", shape: Enum.PartType.Ball, size: v3(1, 1, 1), pos: v3(0, 0.4, -1.7), rot: CFrame.Angles(0, 0, 0) },
-		{ name: "Tail", shape: Enum.PartType.Block, size: v3(1, 0.15, 2.2), pos: v3(0, 0.1, 2.4), rot: CFrame.Angles(0, 0, 0) },
-	];
-	for (const sx of [-1, 1]) {
-		d.push({ name: sx < 0 ? "WingL" : "WingR", shape: Enum.PartType.Block, size: v3(3.6, 0.1, 1.4), pos: v3(sx * 2, 0.5, 0), rot: CFrame.Angles(0, 0, sx * -0.3) });
-	}
-	return d;
-}
-
-/** Blue tortoise (玄龜): a flat shell disc, head, four legs, a tail. */
-function xuanguiDefs(): PieceDef[] {
-	const d: PieceDef[] = [
-		{ name: "Shell", shape: Enum.PartType.Cylinder, size: v3(0.8, 2.8, 2.8), pos: v3(0, 0.4, 0), rot: AXIS_TO_UP },
-		{ name: "Head", shape: Enum.PartType.Ball, size: v3(0.9, 0.9, 0.9), pos: v3(0, 0.2, -1.9), rot: CFrame.Angles(0, 0, 0) },
-		{ name: "Tail", shape: Enum.PartType.Block, size: v3(0.25, 0.25, 1.2), pos: v3(0, -0.1, 1.9), rot: CFrame.Angles(0, 0, 0) },
-	];
-	for (const sx of [-1, 1]) {
-		for (const sz of [-1, 1]) {
-			d.push({ name: `Leg${sx}${sz}`, shape: Enum.PartType.Block, size: v3(0.4, 0.6, 0.4), pos: v3(sx * 1.1, -0.5, sz * 0.9), rot: CFrame.Angles(0, 0, 0) });
-		}
-	}
-	return d;
-}
-
-/** Gold dragon (金龍盤繞): a chain of gold balls spiralling round the lord's body. */
-function coilRig(model: Model, height: number): BeastRig {
-	const links: Part[] = [];
-	for (let i = 0; i < COIL_LINKS; i++) {
-		links.push(makePart(model, `Beast_Coil${i}`, Enum.PartType.Ball, v3(1.1, 1.1, 1.1), GOLD, true, 0.1));
-	}
-	const light = new Instance("PointLight");
-	light.Color = GOLD;
-	light.Range = 10;
-	light.Brightness = 0.7;
-	light.Parent = links[0];
-	return {
-		place: (foot, _facing, t, scale) => {
-			for (let i = 0; i < links.size(); i++) {
-				const a = t * COIL_SPIN - i * 0.7;
-				const y = height * 0.3 + i * height * 0.09 + math.sin(t * 2 + i) * 0.2;
-				const r = COIL_RADIUS * scale;
-				links[i].Size = v3(1.1 * scale, 1.1 * scale, 1.1 * scale);
-				links[i].CFrame = new CFrame(foot.X + math.cos(a) * r, foot.Y + y, foot.Z + math.sin(a) * r);
-			}
+			const px = size * scale * pixelsPerStud(root.Position);
+			anchor.CFrame = root;
+			gui.Size = UDim2.fromOffset(px, px);
 		},
 	};
 }
 
 /**
- * Builds the beast of a beast part id (beast_chihu / beast_qingluan / beast_xuangui / beast_jinlong). This is the only
- * function to replace when the beasts get their BillboardGui art (R3b-4); the rig place() contract stays.
+ * Builds the beast of a beast part id (beast_chihu / beast_qingluan / beast_xuangui / beast_jinlong) as its ART4 sprite.
+ * Each beast hovers above and behind the lord with the same bob and swell.
  */
 function buildBeast(model: Model, id: string, height: number): BeastRig | undefined {
-	if (id === "beast_chihu") return silhouetteRig(model, Color3.fromRGB(255, 60, 50), height, chihuDefs());
-	if (id === "beast_qingluan") return silhouetteRig(model, Color3.fromRGB(80, 255, 120), height, qingluanDefs());
-	if (id === "beast_xuangui") return silhouetteRig(model, Color3.fromRGB(60, 140, 255), height, xuanguiDefs());
-	if (id === "beast_jinlong") return coilRig(model, height);
+	if (id === "beast_chihu") return beastRig(model, ART4.beast_chihu, Color3.fromRGB(255, 60, 50), height);
+	if (id === "beast_qingluan") return beastRig(model, ART4.beast_qingluan, Color3.fromRGB(80, 255, 120), height);
+	if (id === "beast_xuangui") return beastRig(model, ART4.beast_xuangui, Color3.fromRGB(60, 140, 255), height);
+	if (id === "beast_jinlong") return beastRig(model, ART4.beast_jinlong, GOLD, height);
 	return undefined;
 }
 
@@ -392,7 +352,8 @@ export class LookFx {
 			}
 		}
 		if (this.worn.has("orbit_halo")) {
-			this.halo = makePart(model, "Halo", Enum.PartType.Cylinder, v3(0.25, 3.4, 3.4), GOLD, true, 0.1);
+			const d = (HALO_SIZE * height) / REF_HEIGHT;
+			this.halo = artPlate(model, "Halo", ART4.halo, v3(d, 0.1, d), [Enum.NormalId.Top, Enum.NormalId.Bottom], 0.1);
 		}
 		if (!full) return;
 
@@ -407,14 +368,18 @@ export class LookFx {
 			}
 			if (this.worn.has("trail_dragonscale")) {
 				this.footEmitters.push(sparkEmitter(foot, "GoldDust", GOLD, 0.6, new NumberRange(1, 2), new NumberRange(0.6, 1)));
-				this.footTrails.push(fx.makeTrail(foot, v3(-1.2, 0, 0), v3(1.2, 0, 0), GOLD));
+				const scaleTrail = fx.makeTrail(foot, v3(-1.2, 0, 0), v3(1.2, 0, 0), GOLD);
+				scaleTrail.Texture = ART4.fx_dragonscale;
+				scaleTrail.TextureMode = Enum.TextureMode.Stretch;
+				this.footTrails.push(scaleTrail);
 			}
 			if (this.worn.has("trail_light")) {
 				this.footTrails.push(fx.makeTrail(foot, v3(-1.2, 0, 0), v3(1.2, 0, 0), glow));
 			}
 		}
 		if (this.worn.has("trail_vortex")) {
-			this.vortex = makePart(model, "Vortex", Enum.PartType.Cylinder, v3(0.2, 6.5, 6.5), glow, true, 0.5);
+			const d = (VORTEX_SIZE * height) / REF_HEIGHT;
+			this.vortex = artPlate(model, "Vortex", ART4.fx_vortex, v3(d, 0.1, d), [Enum.NormalId.Top], 0.5);
 		}
 	}
 
@@ -442,10 +407,10 @@ export class LookFx {
 			this.swords[i].guard.CFrame = base.mul(new CFrame(0, -1.6, 0));
 		}
 		if (this.halo !== undefined) {
-			this.halo.CFrame = new CFrame(foot.X, foot.Y + this.height + 2.8, foot.Z).mul(CFrame.Angles(0, t * HALO_SPIN, 0)).mul(AXIS_TO_UP);
+			this.halo.CFrame = new CFrame(foot.X, foot.Y + this.height + 0.7, foot.Z).mul(CFrame.Angles(0, t * HALO_SPIN, 0));
 		}
 		if (this.vortex !== undefined) {
-			this.vortex.CFrame = new CFrame(foot.X, foot.Y + 0.2, foot.Z).mul(CFrame.Angles(0, t * VORTEX_SPIN, 0)).mul(AXIS_TO_UP);
+			this.vortex.CFrame = new CFrame(foot.X, foot.Y + 0.2, foot.Z).mul(CFrame.Angles(0, t * VORTEX_SPIN, 0));
 		}
 		if (this.footPart !== undefined) {
 			this.footPart.CFrame = new CFrame(foot.X, foot.Y + 0.3, foot.Z);

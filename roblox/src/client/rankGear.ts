@@ -5,6 +5,7 @@
 // entrance, goal) are R3b-3 and are not built here.
 import type { LordClass } from "shared/game/data";
 import type { LookMap, Slot } from "shared/cosmetics";
+import { ART4 } from "./artIds";
 
 const PREFIX = "RankGear_";
 /** Length of PREFIX (9). */
@@ -21,6 +22,7 @@ const METAL_IRON = Color3.fromRGB(78, 82, 90);
 const METAL_SILVER = Color3.fromRGB(214, 218, 226);
 const METAL_GOLD = Color3.fromRGB(230, 180, 60);
 const GOLD_TRIM = Color3.fromRGB(255, 200, 60);
+const WHITE = Color3.fromRGB(255, 255, 255);
 const EYE_GLOW = Color3.fromRGB(255, 240, 140);
 const PLUME_RED = Color3.fromRGB(198, 40, 40);
 const FLAG_POLE = Color3.fromRGB(90, 60, 30);
@@ -236,23 +238,35 @@ function addFlags(torso: BasePart, count: number, main: Color3): void {
 	}
 }
 
-/** Wings: two thin neon sheets on the back, opening out to each side. */
-function addWings(torso: BasePart, colour: Color3, transparency: number): void {
+/**
+ * Wings: one transparent sheet on the back, wide enough for both wings, with the wing art on both faces (Front faces
+ * the torso, Back faces out). The art label fits the sheet.
+ */
+function addWings(torso: BasePart, image: string, transparency: number): void {
 	const w = torso.Size.X;
 	const h = torso.Size.Y;
 	const d = torso.Size.Z;
 	const backZ = d * 0.5 + d * 0.2;
-	for (const sign of [-1, 1]) {
-		const wing = addGear(
-			torso,
-			sign < 0 ? "WingBackL" : "WingBackR",
-			Enum.PartType.Block,
-			new Vector3(w * 1.1, h * 1.5, d * 0.04),
-			new CFrame(sign * w * 0.75, h * 0.3, backZ).mul(CFrame.Angles(0, sign * 0.6, 0)),
-			colour,
-		);
-		wing.Material = Enum.Material.Neon;
-		wing.Transparency = transparency;
+	const wings = addGear(torso, "WingsArt", Enum.PartType.Block, new Vector3(w * 4.4, w * 2.2, d * 0.04), new CFrame(0, h * 0.45, backZ), WHITE);
+	wings.Transparency = 1;
+	for (const face of [Enum.NormalId.Front, Enum.NormalId.Back]) {
+		const gui = new Instance("SurfaceGui");
+		gui.Name = "RankGear_WingsGui";
+		gui.Face = face;
+		gui.AlwaysOnTop = false;
+		gui.LightInfluence = 0;
+		// Canvas follows the face size, so the 2:1 wing art fills the 2:1 sheet without stretching.
+		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud;
+		gui.PixelsPerStud = 100;
+		gui.Parent = wings;
+		const label = new Instance("ImageLabel");
+		label.Name = "RankGear_WingsArt";
+		label.BackgroundTransparency = 1;
+		label.Size = UDim2.fromScale(1, 1);
+		label.Image = image;
+		label.ImageTransparency = transparency;
+		label.ScaleType = Enum.ScaleType.Fit;
+		label.Parent = gui;
 	}
 }
 
@@ -280,6 +294,6 @@ export function applyLook(model: Model, look: LookMap, lordClass: LordClass): vo
 	if (back === "back_pennant") addFlags(torso, 1, main);
 	else if (back === "back_flags2") addFlags(torso, 2, main);
 	else if (back === "back_flags4") addFlags(torso, 4, main);
-	else if (back === "back_wings_aura") addWings(torso, main, 0.35);
-	else if (back === "back_wings_gold") addWings(torso, GOLD_TRIM, 0.2);
+	else if (back === "back_wings_aura") addWings(torso, ART4.wings_aura, 0.35);
+	else if (back === "back_wings_gold") addWings(torso, ART4.wings_gold, 0.2);
 }
