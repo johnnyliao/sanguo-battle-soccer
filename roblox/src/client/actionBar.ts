@@ -462,7 +462,7 @@ function buildCamButton(screen: ScreenGui): void {
 	const btn = new Instance("TextButton");
 	btn.Name = "CamModeButton";
 	btn.AnchorPoint = new Vector2(1, 0);
-	btn.Position = new UDim2(1, -MARGIN, 0.3, 0); // right edge, below the top-right tutorial panel, above the action buttons
+	btn.Position = new UDim2(1, -MARGIN, 0.45, 0); // right edge, below the top-right tutorial panel, above the action buttons
 	btn.Size = UDim2.fromOffset(CAM_BTN_D, CAM_BTN_D);
 	btn.BackgroundColor3 = BLACK;
 	btn.BackgroundTransparency = 0.35;

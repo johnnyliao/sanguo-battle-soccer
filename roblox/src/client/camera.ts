@@ -10,15 +10,15 @@ import * as fx from "./fx";
 // Both modes track World X and Z with exponential smoothing; switching modes glides instead of jumping.
 export type CamMode = "side" | "behind";
 
-const CAM_PITCH_DEG = 38; // angle below horizontal (side mode)
-const CAM_DISTANCE = 25.5; // studs from look-at point to camera (side mode; 0.85 x the old 30)
+const CAM_PITCH_DEG = 52; // angle below horizontal (side mode; steep so the field below the lord stays in view)
+const CAM_DISTANCE = 32; // studs from look-at point to camera (side mode)
 const CAM_FOV = 50; // vertical field of view (degrees)
-const CAM_TARGET_Y = 3; // look-at height above the ground (studs, side mode)
-const CAM_FOLLOW_RATE = 4; // smoothing rate per second (higher = snappier)
-const CAM_MARGIN_X = 12; // look-at point stays this far inside the pitch edge on X (studs)
-const CAM_MARGIN_Z = 14; // and on Z (studs)
+const CAM_TARGET_Y = 4; // look-at height above the ground (studs, side mode)
+const CAM_FOLLOW_RATE = 6; // smoothing rate per second (higher = snappier)
+const CAM_MARGIN_X = 4; // look-at point stays this far inside the pitch edge on X (studs)
+const CAM_MARGIN_Z = 0; // and on Z (studs)
 const CAM_SMALL_ZOOM = 0.85; // distance factor for 1v1 / 2v2 (small pitch)
-const CAM_SIDE_LOOK_BLEND = 0.3; // side mode: look point this fraction of the way from the lord toward the ball
+const CAM_SIDE_LOOK_BLEND = 0.12; // side mode: look point this fraction of the way from the lord toward the ball
 const CAM_BEHIND_BACK = 22; // behind mode: camera this far behind the lord (studs)
 const CAM_BEHIND_HEIGHT = 14; // behind mode: camera height (studs)
 const CAM_BEHIND_AHEAD = 8; // behind mode: look point this far ahead of the lord, toward the attack (studs)
@@ -145,8 +145,9 @@ export class FollowCamera {
 		} else {
 			behindActive = false;
 			const fx0 = playerX === undefined ? ballX : playerX + (ballX - playerX) * CAM_SIDE_LOOK_BLEND;
-			const fz0 = playerZ === undefined ? ballZ : playerZ + (ballZ - playerZ) * CAM_SIDE_LOOK_BLEND;
-			const look = new Vector3(clampX(fx0), CAM_TARGET_Y, clampZ(fz0));
+			// The lord stays centred on screen: no depth blend toward the ball, and no depth clamp (near-edge play stays centred).
+			const fz0 = playerZ === undefined ? clampZ(ballZ) : playerZ;
+			const look = new Vector3(clampX(fx0), CAM_TARGET_Y, fz0);
 			const pitch = math.rad(CAM_PITCH_DEG);
 			desiredLook = look;
 			desiredEye = look.add(new Vector3(0, math.sin(pitch) * bounds.distance, math.cos(pitch) * bounds.distance));

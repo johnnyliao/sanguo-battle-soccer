@@ -122,6 +122,11 @@ export function artCard(
 		shade.Parent = win;
 		win.Parent = b;
 	}
+	// The menus' ScreenGuis use global ZIndex: anything callers add to the card (labels, portraits) is lifted above the
+	// frame art (2) and the colour window (1); a ZIndex of 0 or less would fall behind the dark screen background.
+	b.DescendantAdded.Connect((child) => {
+		if (child.IsA("GuiObject") && child.Name !== "CardColor" && child.Name !== "CardFrame" && child.ZIndex < 3) child.ZIndex = 3;
+	});
 	b.Parent = parent;
 	const ratio = new Instance("UIAspectRatioConstraint");
 	ratio.AspectRatio = aspect;

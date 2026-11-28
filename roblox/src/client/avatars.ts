@@ -158,6 +158,9 @@ function preloadAnimations(): void {
 const LORD_TEMPLATE_WAIT = 5;
 /** Generic template cloned for lord_ and xiaobing_ charIds whose own model is missing (the caller tints it by team). */
 const GENERIC_TEMPLATE = "zhaoyun";
+/** Lord body height as a fraction of the normal character height (accessories come on top). */
+const LORD_HEIGHT_FACTOR = 0.72;
+
 /** Lord width limit: bbox width may be at most this fraction of its height (wider models are scaled down uniformly). */
 const LORD_MAX_WIDTH_RATIO = 0.7;
 /** charIds that already had their one-time wait for a missing lord template. */
@@ -294,7 +297,9 @@ export function makeAvatar(template: Model, parent: Instance, height: number, ch
 	// Lords (real player avatars) are measured without accessories: unwelded hats/hair would skew the size.
 	const h0 = isLordId(charId) ? bodyExtents(model).Y : model.GetBoundingBox()[1].Y;
 	if (h0 > 0) {
-		model.ScaleTo(model.GetScale() * (height / h0));
+		// Lords are drawn a bit smaller: their hair / hats (not measured) add height above the body.
+		const target = isLordId(charId) ? height * LORD_HEIGHT_FACTOR : height;
+		model.ScaleTo(model.GetScale() * (target / h0));
 	}
 	if (isLordId(charId)) clampLordWidth(model);
 
